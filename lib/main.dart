@@ -1,9 +1,9 @@
 import 'package:flutter/material.dart';
 
-import 'login_page.dart';
-import 'home_page.dart';
-import 'cleaner_page.dart';
-import 'admin_page.dart';
+import 'pages/login_page.dart';
+import 'pages/home_page.dart';
+import 'pages/cleaner_page.dart';
+import 'pages/admin_page.dart';
 
 void main() {
   runApp(const MyApp());
