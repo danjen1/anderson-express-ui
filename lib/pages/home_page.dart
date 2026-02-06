@@ -13,6 +13,7 @@ class _HomePageState extends State<HomePage> {
   bool pythonOk = false;
   bool vaporOk = false;
   bool loading = true;
+  bool visible = false;
 
   DateTime? lastChecked;
 
@@ -40,6 +41,12 @@ class _HomePageState extends State<HomePage> {
       loading = false;
       lastChecked = DateTime.now();
     });
+
+    // Trigger entrance animation
+    await Future.delayed(const Duration(milliseconds: 100));
+    if (mounted) {
+      setState(() => visible = true);
+    }
   }
 
   String _timeAgo(DateTime time) {
@@ -56,9 +63,9 @@ class _HomePageState extends State<HomePage> {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
       decoration: BoxDecoration(
-        color: color.withOpacity(0.08),
+        color: color.withValues(alpha: 0.08),
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: color.withOpacity(0.4)),
+        border: Border.all(color: color.withValues(alpha: 0.4)),
       ),
       child: Row(
         children: [
@@ -97,100 +104,113 @@ class _HomePageState extends State<HomePage> {
             child: loading
                 ? const CircularProgressIndicator()
                 : AnimatedOpacity(
-                    opacity: 1,
-                    duration: const Duration(milliseconds: 400),
+                    opacity: visible ? 1 : 0,
+                    duration: const Duration(milliseconds: 600),
                     curve: Curves.easeOut,
-                    child: Card(
-                      elevation: 4,
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(16),
-                      ),
-                      child: Padding(
-                        padding: const EdgeInsets.all(32.0),
-                        child: Column(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            // Logo placeholder
-                            Container(
-                              width: 72,
-                              height: 72,
-                              decoration: BoxDecoration(
-                                color: Colors.blue.shade100,
-                                borderRadius: BorderRadius.circular(16),
-                              ),
-                              child: const Icon(
-                                Icons.local_shipping,
-                                size: 40,
-                                color: Colors.blue,
-                              ),
-                            ),
-                            const SizedBox(height: 20),
-
-                            const Text(
-                              'Services Online',
-                              style: TextStyle(
-                                fontSize: 26,
-                                fontWeight: FontWeight.bold,
-                              ),
-                            ),
-                            const SizedBox(height: 8),
-                            const Text(
-                              'Live system health overview',
-                              style: TextStyle(color: Colors.grey),
-                            ),
-                            if (lastChecked != null) ...[
-                              const SizedBox(height: 6),
-                              Text(
-                                'Last checked: ${_timeAgo(lastChecked!)}',
-                                style: const TextStyle(
-                                  fontSize: 13,
-                                  color: Colors.grey,
+                    child: AnimatedScale(
+                      scale: visible ? 1 : 0.96,
+                      duration: const Duration(milliseconds: 600),
+                      curve: Curves.easeOut,
+                      child: Card(
+                        elevation: 4,
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(16),
+                        ),
+                        child: Padding(
+                          padding: const EdgeInsets.all(32.0),
+                          child: Column(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              // Animated logo placeholder
+                              AnimatedScale(
+                                scale: visible ? 1 : 0.85,
+                                duration: const Duration(seconds: 1),
+                                curve: Curves.easeOutBack,
+                                child: Container(
+                                  width: 72,
+                                  height: 72,
+                                  decoration: BoxDecoration(
+                                    color: Colors.blue.shade100,
+                                    borderRadius: BorderRadius.circular(16),
+                                  ),
+                                  child: const Icon(
+                                    Icons.local_shipping,
+                                    size: 40,
+                                    color: Colors.blue,
+                                  ),
                                 ),
                               ),
-                            ],
 
-                            const SizedBox(height: 32),
+                              const SizedBox(height: 20),
 
-                            _statusCard('Rust API', rustOk),
-                            const SizedBox(height: 12),
-                            _statusCard('Python API', pythonOk),
-                            const SizedBox(height: 12),
-                            _statusCard('Vapor API', vaporOk),
-
-                            const SizedBox(height: 32),
-                            const Divider(),
-                            const SizedBox(height: 20),
-
-                            const Text(
-                              'Enter Demo As',
-                              style: TextStyle(
-                                fontSize: 20,
-                                fontWeight: FontWeight.w600,
-                              ),
-                            ),
-                            const SizedBox(height: 16),
-
-                            Row(
-                              mainAxisAlignment: MainAxisAlignment.center,
-                              children: [
-                                ElevatedButton.icon(
-                                  onPressed: () {
-                                    Navigator.pushNamed(context, '/cleaner');
-                                  },
-                                  icon: const Icon(Icons.cleaning_services),
-                                  label: const Text('Cleaner'),
+                              const Text(
+                                'Services Online',
+                                style: TextStyle(
+                                  fontSize: 26,
+                                  fontWeight: FontWeight.bold,
                                 ),
-                                const SizedBox(width: 16),
-                                ElevatedButton.icon(
-                                  onPressed: () {
-                                    Navigator.pushNamed(context, '/admin');
-                                  },
-                                  icon: const Icon(Icons.admin_panel_settings),
-                                  label: const Text('Admin'),
+                              ),
+                              const SizedBox(height: 8),
+                              const Text(
+                                'Live system health overview',
+                                style: TextStyle(color: Colors.grey),
+                              ),
+                              if (lastChecked != null) ...[
+                                const SizedBox(height: 6),
+                                Text(
+                                  'Last checked: ${_timeAgo(lastChecked!)}',
+                                  style: const TextStyle(
+                                    fontSize: 13,
+                                    color: Colors.grey,
+                                  ),
                                 ),
                               ],
-                            ),
-                          ],
+
+                              const SizedBox(height: 32),
+
+                              _statusCard('Rust API', rustOk),
+                              const SizedBox(height: 12),
+                              _statusCard('Python API', pythonOk),
+                              const SizedBox(height: 12),
+                              _statusCard('Vapor API', vaporOk),
+
+                              const SizedBox(height: 32),
+                              const Divider(),
+                              const SizedBox(height: 20),
+
+                              const Text(
+                                'Enter Demo As',
+                                style: TextStyle(
+                                  fontSize: 20,
+                                  fontWeight: FontWeight.w600,
+                                ),
+                              ),
+                              const SizedBox(height: 16),
+
+                              Row(
+                                mainAxisAlignment: MainAxisAlignment.center,
+                                children: [
+                                  ElevatedButton.icon(
+                                    onPressed: () {
+                                      Navigator.pushNamed(context, '/cleaner');
+                                    },
+                                    icon: const Icon(Icons.cleaning_services),
+                                    label: const Text('Cleaner'),
+                                  ),
+                                  const SizedBox(width: 16),
+                                  ElevatedButton.icon(
+                                    onPressed: () {
+                                      Navigator.pushNamed(context, '/admin');
+                                    },
+                                    icon: const Icon(
+                                      Icons.admin_panel_settings,
+                                    ),
+                                    label: const Text('Admin'),
+                                  ),
+                                ],
+                              ),
+                            ],
+                          ),
                         ),
                       ),
                     ),
