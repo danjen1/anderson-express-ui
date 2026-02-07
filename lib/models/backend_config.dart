@@ -19,6 +19,23 @@ class BackendConfig {
     BackendKind.vapor => 'Vapor',
   };
 
+  static BackendConfig forKind(
+    BackendKind kind, {
+    String host = 'localhost',
+    String scheme = 'http',
+    String overrideUrl = '',
+  }) {
+    final baseUrl = overrideUrl.isNotEmpty
+        ? overrideUrl
+        : '$scheme://$host:${_portForKind(kind)}';
+    return BackendConfig(
+      kind: kind,
+      baseUrl: baseUrl,
+      healthPath: '/healthz',
+      employeesPath: '/api/v1/employees',
+    );
+  }
+
   static BackendConfig fromEnvironment() {
     const backendValue = String.fromEnvironment(
       'BACKEND',
@@ -28,6 +45,10 @@ class BackendConfig {
       'API_BASE_URL',
       defaultValue: '',
     );
+    const hostOverride = String.fromEnvironment(
+      'BACKEND_HOST',
+      defaultValue: '',
+    );
 
     final kind = switch (backendValue.toLowerCase()) {
       'python' => BackendKind.python,
@@ -35,25 +56,17 @@ class BackendConfig {
       _ => BackendKind.rust,
     };
 
-    return switch (kind) {
-      BackendKind.rust => BackendConfig(
-        kind: kind,
-        baseUrl: overrideUrl.isNotEmpty ? overrideUrl : 'http://localhost:9000',
-        healthPath: '/api/v1/healthz',
-        employeesPath: '/api/v1/employees',
-      ),
-      BackendKind.python => BackendConfig(
-        kind: kind,
-        baseUrl: overrideUrl.isNotEmpty ? overrideUrl : 'http://localhost:8000',
-        healthPath: '/api/v1/healthz',
-        employeesPath: '/api/v1/employees',
-      ),
-      BackendKind.vapor => BackendConfig(
-        kind: kind,
-        baseUrl: overrideUrl.isNotEmpty ? overrideUrl : 'http://localhost:9001',
-        healthPath: '/api/v1/healthz',
-        employeesPath: '/api/v1/employees',
-      ),
-    };
+    return forKind(
+      kind,
+      host: hostOverride.isNotEmpty ? hostOverride : 'localhost',
+      scheme: 'http',
+      overrideUrl: overrideUrl,
+    );
   }
+
+  static int _portForKind(BackendKind kind) => switch (kind) {
+    BackendKind.rust => 9000,
+    BackendKind.python => 8000,
+    BackendKind.vapor => 9001,
+  };
 }

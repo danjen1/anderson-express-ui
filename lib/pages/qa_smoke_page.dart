@@ -18,7 +18,7 @@ class _QaSmokePageState extends State<QaSmokePage> {
   final _emailController = TextEditingController(
     text: 'admin@andersonexpress.com',
   );
-  final _passwordController = TextEditingController(text: 'admin123');
+  final _passwordController = TextEditingController(text: 'dev-password');
 
   bool _running = false;
   String? _token;

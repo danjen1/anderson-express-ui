@@ -1,35 +1,36 @@
 import 'package:flutter/material.dart';
 
 import '../models/backend_config.dart';
-import '../models/employee.dart';
+import '../models/location.dart';
 import '../services/api_service.dart';
 import '../services/backend_runtime.dart';
 
-class AdminPage extends StatefulWidget {
-  const AdminPage({super.key});
+class LocationsPage extends StatefulWidget {
+  const LocationsPage({super.key});
 
   @override
-  State<AdminPage> createState() => _AdminPageState();
+  State<LocationsPage> createState() => _LocationsPageState();
 }
 
-class _AdminPageState extends State<AdminPage> {
+class _LocationsPageState extends State<LocationsPage> {
   final _emailController = TextEditingController(
     text: 'admin@andersonexpress.com',
   );
   final _passwordController = TextEditingController(text: 'dev-password');
   final _tokenController = TextEditingController();
+  final _clientFilterController = TextEditingController();
   final _api = ApiService();
 
   BackendConfig get _backend => BackendRuntime.config;
 
   bool _loading = true;
   String? _error;
-  List<Employee> _employees = const [];
+  List<Location> _locations = const [];
 
   @override
   void initState() {
     super.initState();
-    _loadEmployees();
+    _loadLocations();
   }
 
   @override
@@ -37,6 +38,7 @@ class _AdminPageState extends State<AdminPage> {
     _emailController.dispose();
     _passwordController.dispose();
     _tokenController.dispose();
+    _clientFilterController.dispose();
     super.dispose();
   }
 
@@ -50,7 +52,7 @@ class _AdminPageState extends State<AdminPage> {
       setState(() {
         _tokenController.text = token;
       });
-      await _loadEmployees();
+      await _loadLocations();
       if (!mounted) return;
       ScaffoldMessenger.of(
         context,
@@ -63,19 +65,21 @@ class _AdminPageState extends State<AdminPage> {
     }
   }
 
-  Future<void> _loadEmployees() async {
+  Future<void> _loadLocations() async {
     setState(() {
       _loading = true;
       _error = null;
     });
 
     try {
-      final employees = await _api.listEmployees(
+      final filterClientId = int.tryParse(_clientFilterController.text.trim());
+      final locations = await _api.listLocations(
+        clientId: filterClientId,
         bearerToken: _tokenController.text,
       );
       if (!mounted) return;
       setState(() {
-        _employees = employees;
+        _locations = locations;
       });
     } catch (error) {
       if (!mounted) return;
@@ -92,20 +96,20 @@ class _AdminPageState extends State<AdminPage> {
   }
 
   Future<void> _showCreateDialog() async {
-    final result = await showDialog<EmployeeCreateInput>(
+    final result = await showDialog<LocationCreateInput>(
       context: context,
-      builder: (context) => const _EmployeeEditorDialog(),
+      builder: (context) => const _LocationEditorDialog(),
     );
 
     if (result == null) return;
 
     try {
-      await _api.createEmployee(result, bearerToken: _tokenController.text);
-      await _loadEmployees();
+      await _api.createLocation(result, bearerToken: _tokenController.text);
+      await _loadLocations();
       if (!mounted) return;
       ScaffoldMessenger.of(
         context,
-      ).showSnackBar(const SnackBar(content: Text('Employee created')));
+      ).showSnackBar(const SnackBar(content: Text('Location created')));
     } catch (error) {
       if (!mounted) return;
       ScaffoldMessenger.of(
@@ -114,17 +118,15 @@ class _AdminPageState extends State<AdminPage> {
     }
   }
 
-  Future<void> _showEditDialog(Employee employee) async {
-    final result = await showDialog<EmployeeUpdateInput>(
+  Future<void> _showEditDialog(Location location) async {
+    final result = await showDialog<LocationUpdateInput>(
       context: context,
-      builder: (context) => _EmployeeEditorDialog(
-        name: employee.name,
-        email: employee.email ?? '',
-        phoneNumber: employee.phoneNumber ?? '',
-        address: employee.address ?? '',
-        city: employee.city ?? '',
-        state: employee.state ?? '',
-        zipCode: employee.zipCode ?? '',
+      builder: (context) => _LocationEditorDialog(
+        type: location.type,
+        address: location.address ?? '',
+        city: location.city ?? '',
+        state: location.state ?? '',
+        zipCode: location.zipCode ?? '',
         isCreate: false,
       ),
     );
@@ -132,16 +134,16 @@ class _AdminPageState extends State<AdminPage> {
     if (result == null) return;
 
     try {
-      await _api.updateEmployee(
-        employee.id,
+      await _api.updateLocation(
+        location.id,
         result,
         bearerToken: _tokenController.text,
       );
-      await _loadEmployees();
+      await _loadLocations();
       if (!mounted) return;
       ScaffoldMessenger.of(
         context,
-      ).showSnackBar(const SnackBar(content: Text('Employee updated')));
+      ).showSnackBar(const SnackBar(content: Text('Location updated')));
     } catch (error) {
       if (!mounted) return;
       ScaffoldMessenger.of(
@@ -150,12 +152,14 @@ class _AdminPageState extends State<AdminPage> {
     }
   }
 
-  Future<void> _delete(Employee employee) async {
+  Future<void> _delete(Location location) async {
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
-        title: const Text('Delete employee'),
-        content: Text('Delete ${employee.employeeNumber} - ${employee.name}?'),
+        title: const Text('Delete location'),
+        content: Text(
+          'Delete ${location.locationNumber} (client ${location.clientId})?',
+        ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context, false),
@@ -172,11 +176,11 @@ class _AdminPageState extends State<AdminPage> {
     if (confirmed != true) return;
 
     try {
-      final message = await _api.deleteEmployee(
-        employee.id,
+      final message = await _api.deleteLocation(
+        location.id,
         bearerToken: _tokenController.text,
       );
-      await _loadEmployees();
+      await _loadLocations();
       if (!mounted) return;
       ScaffoldMessenger.of(
         context,
@@ -193,18 +197,18 @@ class _AdminPageState extends State<AdminPage> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Admin - Employees'),
+        title: const Text('Admin - Locations'),
         actions: [
           IconButton(
-            onPressed: _loading ? null : _loadEmployees,
+            onPressed: _loading ? null : _loadLocations,
             icon: const Icon(Icons.refresh),
           ),
         ],
       ),
       floatingActionButton: FloatingActionButton.extended(
         onPressed: _showCreateDialog,
-        icon: const Icon(Icons.person_add),
-        label: const Text('Add Employee'),
+        icon: const Icon(Icons.add_location_alt),
+        label: const Text('Add Location'),
       ),
       body: Padding(
         padding: const EdgeInsets.all(16),
@@ -247,8 +251,21 @@ class _AdminPageState extends State<AdminPage> {
                 labelText: 'Bearer Token (required for Rust/Python/Vapor)',
                 border: const OutlineInputBorder(),
                 suffixIcon: IconButton(
-                  onPressed: _loadEmployees,
+                  onPressed: _loadLocations,
                   icon: const Icon(Icons.login),
+                ),
+              ),
+            ),
+            const SizedBox(height: 12),
+            TextField(
+              controller: _clientFilterController,
+              keyboardType: TextInputType.number,
+              decoration: InputDecoration(
+                labelText: 'Client ID Filter (optional)',
+                border: const OutlineInputBorder(),
+                suffixIcon: IconButton(
+                  onPressed: _loadLocations,
+                  icon: const Icon(Icons.filter_alt),
                 ),
               ),
             ),
@@ -270,28 +287,29 @@ class _AdminPageState extends State<AdminPage> {
             Expanded(
               child: _loading
                   ? const Center(child: CircularProgressIndicator())
-                  : _employees.isEmpty
-                  ? const Center(child: Text('No employees found'))
+                  : _locations.isEmpty
+                  ? const Center(child: Text('No locations found'))
                   : ListView.separated(
-                      itemCount: _employees.length,
+                      itemCount: _locations.length,
                       separatorBuilder: (_, _) => const SizedBox(height: 8),
                       itemBuilder: (context, index) {
-                        final employee = _employees[index];
+                        final location = _locations[index];
                         return Card(
                           child: ListTile(
-                            title: Text(employee.name),
+                            leading: const Icon(Icons.location_on),
+                            title: Text(location.locationNumber),
                             subtitle: Text(
-                              '${employee.employeeNumber} • ${employee.status}${employee.email != null ? ' • ${employee.email}' : ''}',
+                              'Client ${location.clientId} • ${location.type} • ${location.status}${location.address != null ? ' • ${location.address}' : ''}',
                             ),
                             trailing: Wrap(
                               spacing: 8,
                               children: [
                                 IconButton(
-                                  onPressed: () => _showEditDialog(employee),
+                                  onPressed: () => _showEditDialog(location),
                                   icon: const Icon(Icons.edit),
                                 ),
                                 IconButton(
-                                  onPressed: () => _delete(employee),
+                                  onPressed: () => _delete(location),
                                   icon: const Icon(Icons.delete),
                                 ),
                               ],
@@ -308,11 +326,9 @@ class _AdminPageState extends State<AdminPage> {
   }
 }
 
-class _EmployeeEditorDialog extends StatefulWidget {
-  const _EmployeeEditorDialog({
-    this.name = '',
-    this.email = '',
-    this.phoneNumber = '',
+class _LocationEditorDialog extends StatefulWidget {
+  const _LocationEditorDialog({
+    this.type = 'residential',
     this.address = '',
     this.city = '',
     this.state = '',
@@ -320,9 +336,7 @@ class _EmployeeEditorDialog extends StatefulWidget {
     this.isCreate = true,
   });
 
-  final String name;
-  final String email;
-  final String phoneNumber;
+  final String type;
   final String address;
   final String city;
   final String state;
@@ -330,24 +344,26 @@ class _EmployeeEditorDialog extends StatefulWidget {
   final bool isCreate;
 
   @override
-  State<_EmployeeEditorDialog> createState() => _EmployeeEditorDialogState();
+  State<_LocationEditorDialog> createState() => _LocationEditorDialogState();
 }
 
-class _EmployeeEditorDialogState extends State<_EmployeeEditorDialog> {
-  late final TextEditingController _name;
-  late final TextEditingController _email;
-  late final TextEditingController _phone;
+class _LocationEditorDialogState extends State<_LocationEditorDialog> {
+  static const _types = ['residential', 'commercial'];
+
+  late final TextEditingController _clientId;
   late final TextEditingController _address;
   late final TextEditingController _city;
   late final TextEditingController _state;
   late final TextEditingController _zipCode;
+  late String _type;
 
   @override
   void initState() {
     super.initState();
-    _name = TextEditingController(text: widget.name);
-    _email = TextEditingController(text: widget.email);
-    _phone = TextEditingController(text: widget.phoneNumber);
+    _type = _types.contains(widget.type.toLowerCase())
+        ? widget.type.toLowerCase()
+        : _types.first;
+    _clientId = TextEditingController();
     _address = TextEditingController(text: widget.address);
     _city = TextEditingController(text: widget.city);
     _state = TextEditingController(text: widget.state);
@@ -356,9 +372,7 @@ class _EmployeeEditorDialogState extends State<_EmployeeEditorDialog> {
 
   @override
   void dispose() {
-    _name.dispose();
-    _email.dispose();
-    _phone.dispose();
+    _clientId.dispose();
     _address.dispose();
     _city.dispose();
     _state.dispose();
@@ -369,18 +383,41 @@ class _EmployeeEditorDialogState extends State<_EmployeeEditorDialog> {
   @override
   Widget build(BuildContext context) {
     return AlertDialog(
-      title: Text(widget.isCreate ? 'Create Employee' : 'Edit Employee'),
+      title: Text(widget.isCreate ? 'Create Location' : 'Edit Location'),
       content: SizedBox(
         width: 480,
         child: SingleChildScrollView(
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              _field(_name, 'Name'),
-              const SizedBox(height: 10),
-              _field(_email, 'Email'),
-              const SizedBox(height: 10),
-              _field(_phone, 'Phone'),
+              DropdownButtonFormField<String>(
+                initialValue: _type,
+                items: _types
+                    .map(
+                      (value) =>
+                          DropdownMenuItem(value: value, child: Text(value)),
+                    )
+                    .toList(),
+                onChanged: (value) {
+                  if (value == null) return;
+                  setState(() => _type = value);
+                },
+                decoration: const InputDecoration(
+                  labelText: 'Type',
+                  border: OutlineInputBorder(),
+                ),
+              ),
+              if (widget.isCreate) ...[
+                const SizedBox(height: 10),
+                TextField(
+                  controller: _clientId,
+                  keyboardType: TextInputType.number,
+                  decoration: const InputDecoration(
+                    labelText: 'Client ID',
+                    border: OutlineInputBorder(),
+                  ),
+                ),
+              ],
               const SizedBox(height: 10),
               _field(_address, 'Address'),
               const SizedBox(height: 10),
@@ -401,15 +438,16 @@ class _EmployeeEditorDialogState extends State<_EmployeeEditorDialog> {
         FilledButton(
           onPressed: () {
             if (widget.isCreate) {
-              if (_name.text.trim().isEmpty || _email.text.trim().isEmpty) {
+              final parsedClientId = int.tryParse(_clientId.text.trim());
+              if (parsedClientId == null || parsedClientId <= 0) {
                 return;
               }
+
               Navigator.pop(
                 context,
-                EmployeeCreateInput(
-                  name: _name.text.trim(),
-                  email: _email.text.trim(),
-                  phoneNumber: _nullable(_phone.text),
+                LocationCreateInput(
+                  type: _type,
+                  clientId: parsedClientId,
                   address: _nullable(_address.text),
                   city: _nullable(_city.text),
                   state: _nullable(_state.text),
@@ -419,10 +457,8 @@ class _EmployeeEditorDialogState extends State<_EmployeeEditorDialog> {
             } else {
               Navigator.pop(
                 context,
-                EmployeeUpdateInput(
-                  name: _nullable(_name.text),
-                  email: _nullable(_email.text),
-                  phoneNumber: _nullable(_phone.text),
+                LocationUpdateInput(
+                  type: _type,
                   address: _nullable(_address.text),
                   city: _nullable(_city.text),
                   state: _nullable(_state.text),

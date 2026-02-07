@@ -5,32 +5,31 @@ import 'package:http/http.dart' as http;
 import '../models/backend_config.dart';
 import '../models/client.dart';
 import '../models/employee.dart';
+import '../models/location.dart';
+import 'backend_runtime.dart';
 
 class ApiService {
   ApiService({BackendConfig? backend})
-    : _backend = backend ?? BackendConfig.fromEnvironment();
+    : _backend = backend ?? BackendRuntime.config;
 
   final BackendConfig _backend;
 
-  static BackendConfig get rustConfig => const BackendConfig(
-    kind: BackendKind.rust,
-    baseUrl: 'http://localhost:9000',
-    healthPath: '/api/v1/healthz',
-    employeesPath: '/api/v1/employees',
+  static BackendConfig get rustConfig => BackendConfig.forKind(
+    BackendKind.rust,
+    host: BackendRuntime.host,
+    scheme: BackendRuntime.scheme,
   );
 
-  static BackendConfig get pythonConfig => const BackendConfig(
-    kind: BackendKind.python,
-    baseUrl: 'http://localhost:8000',
-    healthPath: '/api/v1/healthz',
-    employeesPath: '/api/v1/employees',
+  static BackendConfig get pythonConfig => BackendConfig.forKind(
+    BackendKind.python,
+    host: BackendRuntime.host,
+    scheme: BackendRuntime.scheme,
   );
 
-  static BackendConfig get vaporConfig => const BackendConfig(
-    kind: BackendKind.vapor,
-    baseUrl: 'http://localhost:9001',
-    healthPath: '/api/v1/healthz',
-    employeesPath: '/api/v1/employees',
+  static BackendConfig get vaporConfig => BackendConfig.forKind(
+    BackendKind.vapor,
+    host: BackendRuntime.host,
+    scheme: BackendRuntime.scheme,
   );
 
   BackendConfig get backend => _backend;
@@ -229,6 +228,88 @@ class ApiService {
       return data['message'].toString();
     }
     return 'Client deleted';
+  }
+
+  Future<List<Location>> listLocations({
+    int? clientId,
+    String? bearerToken,
+  }) async {
+    var uri = Uri.parse('${_backend.baseUrl}/api/v1/locations');
+    if (clientId != null) {
+      uri = uri.replace(queryParameters: {'client_id': clientId.toString()});
+    }
+
+    final response = await http
+        .get(uri, headers: _headers(bearerToken))
+        .timeout(const Duration(seconds: 8));
+
+    _throwIfError(response, fallbackMessage: 'Failed to list locations');
+    final data = jsonDecode(response.body) as List<dynamic>;
+    return data
+        .map((item) => Location.fromJson(item as Map<String, dynamic>))
+        .toList();
+  }
+
+  Future<Location> createLocation(
+    LocationCreateInput input, {
+    String? bearerToken,
+  }) async {
+    final response = await http
+        .post(
+          Uri.parse('${_backend.baseUrl}/api/v1/locations'),
+          headers: _headers(bearerToken),
+          body: jsonEncode(input.toJson()),
+        )
+        .timeout(const Duration(seconds: 8));
+
+    _throwIfError(response, fallbackMessage: 'Failed to create location');
+    final data = jsonDecode(response.body) as Map<String, dynamic>;
+    return Location.fromJson(data);
+  }
+
+  Future<Location> updateLocation(
+    String locationId,
+    LocationUpdateInput input, {
+    String? bearerToken,
+  }) async {
+    final payload = input.toJson();
+    if (payload.isEmpty) {
+      throw Exception('No update fields provided');
+    }
+
+    final response = await http
+        .patch(
+          Uri.parse('${_backend.baseUrl}/api/v1/locations/$locationId'),
+          headers: _headers(bearerToken),
+          body: jsonEncode(payload),
+        )
+        .timeout(const Duration(seconds: 8));
+
+    _throwIfError(response, fallbackMessage: 'Failed to update location');
+    final data = jsonDecode(response.body) as Map<String, dynamic>;
+    return Location.fromJson(data);
+  }
+
+  Future<String> deleteLocation(
+    String locationId, {
+    String? bearerToken,
+  }) async {
+    final response = await http
+        .delete(
+          Uri.parse('${_backend.baseUrl}/api/v1/locations/$locationId'),
+          headers: _headers(bearerToken),
+        )
+        .timeout(const Duration(seconds: 8));
+
+    _throwIfError(response, fallbackMessage: 'Failed to delete location');
+    if (response.body.isEmpty) {
+      return 'Location deleted';
+    }
+    final data = jsonDecode(response.body);
+    if (data is Map<String, dynamic> && data['message'] != null) {
+      return data['message'].toString();
+    }
+    return 'Location deleted';
   }
 
   Map<String, String> _headers(String? bearerToken) {

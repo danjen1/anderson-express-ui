@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../models/backend_config.dart';
 import '../services/api_service.dart';
+import '../services/backend_runtime.dart';
 
 class HomePage extends StatefulWidget {
   const HomePage({super.key});
@@ -20,19 +21,50 @@ class _HomePageState extends State<HomePage> {
   DateTime? lastChecked;
 
   final ApiService _api = ApiService();
-  final BackendConfig _activeBackend = BackendConfig.fromEnvironment();
+  late BackendKind _selectedBackend;
+  late final TextEditingController _hostController;
+
+  BackendConfig get _activeBackend => BackendRuntime.config;
+
+  BackendConfig _healthConfigFor(BackendKind kind) {
+    final uri = Uri.parse(_activeBackend.baseUrl);
+    final host = uri.host.isNotEmpty ? uri.host : 'localhost';
+    final scheme = uri.scheme.isNotEmpty ? uri.scheme : 'http';
+    final port = switch (kind) {
+      BackendKind.rust => 9000,
+      BackendKind.python => 8000,
+      BackendKind.vapor => 9001,
+    };
+    return BackendConfig(
+      kind: kind,
+      baseUrl: '$scheme://$host:$port',
+      healthPath: '/healthz',
+      employeesPath: '/api/v1/employees',
+    );
+  }
 
   @override
   void initState() {
     super.initState();
+    _selectedBackend = _activeBackend.kind;
+    _hostController = TextEditingController(text: BackendRuntime.host);
     _checkServices();
   }
 
+  @override
+  void dispose() {
+    _hostController.dispose();
+    super.dispose();
+  }
+
   Future<void> _checkServices() async {
+    setState(() {
+      loading = true;
+    });
     final results = await Future.wait([
-      _api.checkHealth(ApiService.rustConfig),
-      _api.checkHealth(ApiService.pythonConfig),
-      _api.checkHealth(ApiService.vaporConfig),
+      _api.checkHealth(_healthConfigFor(BackendKind.rust)),
+      _api.checkHealth(_healthConfigFor(BackendKind.python)),
+      _api.checkHealth(_healthConfigFor(BackendKind.vapor)),
     ]);
 
     if (!mounted) return;
@@ -50,6 +82,27 @@ class _HomePageState extends State<HomePage> {
     if (mounted) {
       setState(() => visible = true);
     }
+  }
+
+  Future<void> _applyBackendSelection() async {
+    final host = _hostController.text.trim().isEmpty
+        ? BackendRuntime.host
+        : _hostController.text.trim();
+    final next = BackendConfig.forKind(
+      _selectedBackend,
+      host: host,
+      scheme: BackendRuntime.scheme,
+    );
+    BackendRuntime.setConfig(next);
+    if (!mounted) return;
+    setState(() {});
+    await _checkServices();
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text('Active backend set to ${next.label} (${next.baseUrl})'),
+      ),
+    );
   }
 
   String _timeAgo(DateTime time) {
@@ -92,7 +145,17 @@ class _HomePageState extends State<HomePage> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('System Status'), elevation: 0),
+      appBar: AppBar(
+        title: const Text('System Status'),
+        elevation: 0,
+        actions: [
+          IconButton(
+            onPressed: _checkServices,
+            icon: const Icon(Icons.refresh),
+            tooltip: 'Refresh health checks',
+          ),
+        ],
+      ),
       body: Container(
         decoration: const BoxDecoration(
           gradient: LinearGradient(
@@ -159,12 +222,90 @@ class _HomePageState extends State<HomePage> {
                                 style: TextStyle(color: Colors.grey),
                               ),
                               const SizedBox(height: 6),
-                              Text(
-                                'Active backend: ${_activeBackend.label} (${_activeBackend.baseUrl})',
-                                style: const TextStyle(
-                                  fontSize: 13,
-                                  color: Colors.grey,
+                              Container(
+                                width: double.infinity,
+                                padding: const EdgeInsets.all(14),
+                                decoration: BoxDecoration(
+                                  color: Colors.blue.shade50,
+                                  borderRadius: BorderRadius.circular(12),
+                                  border: Border.all(
+                                    color: Colors.blue.shade200,
+                                  ),
                                 ),
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text(
+                                      'ACTIVE BACKEND',
+                                      style: TextStyle(
+                                        fontSize: 12,
+                                        fontWeight: FontWeight.w700,
+                                        color: Colors.blue.shade900,
+                                        letterSpacing: 0.8,
+                                      ),
+                                    ),
+                                    const SizedBox(height: 6),
+                                    Text(
+                                      _activeBackend.label,
+                                      style: const TextStyle(
+                                        fontSize: 24,
+                                        fontWeight: FontWeight.w800,
+                                      ),
+                                    ),
+                                    const SizedBox(height: 2),
+                                    Text(
+                                      _activeBackend.baseUrl,
+                                      style: TextStyle(
+                                        fontSize: 13,
+                                        color: Colors.blue.shade900,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                              const SizedBox(height: 12),
+                              Wrap(
+                                spacing: 8,
+                                runSpacing: 8,
+                                children: BackendKind.values
+                                    .map(
+                                      (kind) => ChoiceChip(
+                                        label: Text(switch (kind) {
+                                          BackendKind.rust => 'Rust',
+                                          BackendKind.python => 'Python',
+                                          BackendKind.vapor => 'Vapor',
+                                        }),
+                                        selected: _selectedBackend == kind,
+                                        onSelected: (_) {
+                                          setState(
+                                            () => _selectedBackend = kind,
+                                          );
+                                        },
+                                      ),
+                                    )
+                                    .toList(),
+                              ),
+                              const SizedBox(height: 8),
+                              Row(
+                                children: [
+                                  Expanded(
+                                    child: TextField(
+                                      controller: _hostController,
+                                      decoration: const InputDecoration(
+                                        labelText:
+                                            'Backend Host (e.g. archlinux)',
+                                        border: OutlineInputBorder(),
+                                        isDense: true,
+                                      ),
+                                    ),
+                                  ),
+                                  const SizedBox(width: 8),
+                                  FilledButton.icon(
+                                    onPressed: _applyBackendSelection,
+                                    icon: const Icon(Icons.check),
+                                    label: const Text('Apply'),
+                                  ),
+                                ],
                               ),
                               if (lastChecked != null) ...[
                                 const SizedBox(height: 6),
@@ -218,6 +359,16 @@ class _HomePageState extends State<HomePage> {
                                       Icons.admin_panel_settings,
                                     ),
                                     label: const Text('Admin'),
+                                  ),
+                                  ElevatedButton.icon(
+                                    onPressed: () {
+                                      Navigator.pushNamed(
+                                        context,
+                                        '/locations',
+                                      );
+                                    },
+                                    icon: const Icon(Icons.location_on),
+                                    label: const Text('Locations'),
                                   ),
                                   ElevatedButton.icon(
                                     onPressed: () {
