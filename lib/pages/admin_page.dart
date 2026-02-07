@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../models/backend_config.dart';
 import '../models/employee.dart';
 import '../services/api_service.dart';
+import '../services/auth_session.dart';
 import '../services/backend_runtime.dart';
 import '../widgets/backend_banner.dart';
 
@@ -35,6 +36,26 @@ class _AdminPageState extends State<AdminPage> {
     super.initState();
     _selectedBackend = _backend.kind;
     _hostController = TextEditingController(text: BackendRuntime.host);
+    final session = AuthSession.current;
+    if (session == null) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted) return;
+        Navigator.pushReplacementNamed(context, '/');
+      });
+      return;
+    }
+    _tokenController.text = session.token;
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
+      if (!mounted) return;
+      if (!session.user.isAdmin) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(const SnackBar(content: Text('Admin access required')));
+        Navigator.pushReplacementNamed(context, '/home');
+        return;
+      }
+      await _loadEmployees();
+    });
   }
 
   @override
@@ -126,6 +147,14 @@ class _AdminPageState extends State<AdminPage> {
   }
 
   Future<void> _showCreateDialog() async {
+    final session = AuthSession.current;
+    if (session == null || !session.user.isAdmin) {
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('Admin access required')));
+      return;
+    }
+
     final result = await showDialog<EmployeeCreateInput>(
       context: context,
       builder: (context) => const _EmployeeEditorDialog(),
@@ -140,52 +169,19 @@ class _AdminPageState extends State<AdminPage> {
       );
       await _loadEmployees();
       if (!mounted) return;
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(const SnackBar(content: Text('Employee created')));
-      final inviteEmail = created.email ?? result.email;
-      if (inviteEmail.trim().isNotEmpty) {
-        await _showInviteDialog(inviteEmail.trim(), 'employee');
-      }
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            'Employee created. Invitation email sent to ${created.email ?? result.email}.',
+          ),
+        ),
+      );
     } catch (error) {
       if (!mounted) return;
       ScaffoldMessenger.of(
         context,
       ).showSnackBar(SnackBar(content: Text(error.toString())));
     }
-  }
-
-  Future<void> _showInviteDialog(String email, String role) async {
-    await showDialog<void>(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Invite Ready'),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text('New $role added for: $email'),
-            const SizedBox(height: 10),
-            const Text(
-              'Next step: open Register Invite and complete password setup.',
-            ),
-          ],
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('Close'),
-          ),
-          FilledButton(
-            onPressed: () {
-              Navigator.pop(context);
-              Navigator.pushNamed(context, '/register', arguments: email);
-            },
-            child: const Text('Open Register Invite'),
-          ),
-        ],
-      ),
-    );
   }
 
   Future<void> _showEditDialog(Employee employee) async {

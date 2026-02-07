@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'package:http/http.dart' as http;
 
 import '../models/backend_config.dart';
+import '../models/auth_user.dart';
 import '../models/client.dart';
 import '../models/employee.dart';
 import '../models/job.dart';
@@ -63,6 +64,19 @@ class ApiService {
       throw Exception('Auth response missing access_token');
     }
     return token;
+  }
+
+  Future<AuthUser> whoAmI({required String bearerToken}) async {
+    final response = await http
+        .get(
+          Uri.parse('${_backend.baseUrl}/api/v1/auth/whoami'),
+          headers: _headers(bearerToken),
+        )
+        .timeout(const Duration(seconds: 8));
+
+    _throwIfError(response, fallbackMessage: 'Failed to fetch current user');
+    final data = jsonDecode(response.body) as Map<String, dynamic>;
+    return AuthUser.fromJson(data);
   }
 
   Future<void> registerUser({

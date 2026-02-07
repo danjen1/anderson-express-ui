@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../services/api_service.dart';
+import '../services/auth_session.dart';
 
 class LoginPage extends StatefulWidget {
   const LoginPage({super.key});
@@ -27,10 +28,12 @@ class _LoginPageState extends State<LoginPage> {
   Future<void> _login() async {
     setState(() => _loading = true);
     try {
-      await _api.fetchToken(
+      final token = await _api.fetchToken(
         email: _emailController.text.trim(),
         password: _passwordController.text,
       );
+      final user = await _api.whoAmI(bearerToken: token);
+      AuthSession.set(AuthSessionState(token: token, user: user));
       if (!mounted) return;
       Navigator.pushReplacementNamed(context, '/home');
     } catch (error) {
@@ -99,7 +102,7 @@ class _LoginPageState extends State<LoginPage> {
                 const SizedBox(height: 8),
                 TextButton(
                   onPressed: () {
-                    Navigator.pushReplacementNamed(context, '/home');
+                    _login();
                   },
                   child: const Text('Development Bypass'),
                 ),

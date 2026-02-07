@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../models/backend_config.dart';
 import '../services/api_service.dart';
+import '../services/auth_session.dart';
 import '../services/backend_runtime.dart';
 import '../widgets/backend_banner.dart';
 
@@ -26,6 +27,10 @@ class _HomePageState extends State<HomePage> {
   late final TextEditingController _hostController;
 
   BackendConfig get _activeBackend => BackendRuntime.config;
+  AuthSessionState? get _session => AuthSession.current;
+  bool get _isAdmin => _session?.user.isAdmin == true;
+  bool get _isEmployee => _session?.user.isEmployee == true;
+  bool get _isClient => _session?.user.isClient == true;
 
   BackendConfig _healthConfigFor(BackendKind kind) {
     final uri = Uri.parse(_activeBackend.baseUrl);
@@ -47,6 +52,13 @@ class _HomePageState extends State<HomePage> {
   @override
   void initState() {
     super.initState();
+    if (_session == null) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted) return;
+        Navigator.pushReplacementNamed(context, '/');
+      });
+      return;
+    }
     _selectedBackend = _activeBackend.kind;
     _hostController = TextEditingController(text: BackendRuntime.host);
     _checkServices();
@@ -151,6 +163,14 @@ class _HomePageState extends State<HomePage> {
         elevation: 0,
         bottom: const BackendBanner(),
         actions: [
+          IconButton(
+            onPressed: () {
+              AuthSession.clear();
+              Navigator.pushReplacementNamed(context, '/');
+            },
+            icon: const Icon(Icons.logout),
+            tooltip: 'Logout',
+          ),
           IconButton(
             onPressed: _checkServices,
             icon: const Icon(Icons.refresh),
@@ -348,52 +368,61 @@ class _HomePageState extends State<HomePage> {
                                   spacing: 12,
                                   runSpacing: 12,
                                   children: [
-                                    ElevatedButton.icon(
-                                      onPressed: () {
-                                        Navigator.pushNamed(
-                                          context,
-                                          '/cleaner',
-                                        );
-                                      },
-                                      icon: const Icon(Icons.cleaning_services),
-                                      label: const Text('Cleaner'),
-                                    ),
-                                    ElevatedButton.icon(
-                                      onPressed: () {
-                                        Navigator.pushNamed(context, '/admin');
-                                      },
-                                      icon: const Icon(
-                                        Icons.admin_panel_settings,
+                                    if (_isEmployee)
+                                      ElevatedButton.icon(
+                                        onPressed: () {
+                                          Navigator.pushNamed(
+                                            context,
+                                            '/cleaner',
+                                          );
+                                        },
+                                        icon: const Icon(
+                                          Icons.cleaning_services,
+                                        ),
+                                        label: const Text('Cleaner'),
                                       ),
-                                      label: const Text('Admin'),
-                                    ),
-                                    ElevatedButton.icon(
-                                      onPressed: () {
-                                        Navigator.pushNamed(
-                                          context,
-                                          '/clients',
-                                        );
-                                      },
-                                      icon: const Icon(Icons.business),
-                                      label: const Text('Clients'),
-                                    ),
-                                    ElevatedButton.icon(
-                                      onPressed: () {
-                                        Navigator.pushNamed(context, '/jobs');
-                                      },
-                                      icon: const Icon(Icons.work),
-                                      label: const Text('Jobs'),
-                                    ),
-                                    ElevatedButton.icon(
-                                      onPressed: () {
-                                        Navigator.pushNamed(
-                                          context,
-                                          '/locations',
-                                        );
-                                      },
-                                      icon: const Icon(Icons.location_on),
-                                      label: const Text('Locations'),
-                                    ),
+                                    if (_isAdmin) ...[
+                                      ElevatedButton.icon(
+                                        onPressed: () {
+                                          Navigator.pushNamed(
+                                            context,
+                                            '/admin',
+                                          );
+                                        },
+                                        icon: const Icon(
+                                          Icons.admin_panel_settings,
+                                        ),
+                                        label: const Text('Employees'),
+                                      ),
+                                      ElevatedButton.icon(
+                                        onPressed: () {
+                                          Navigator.pushNamed(
+                                            context,
+                                            '/clients',
+                                          );
+                                        },
+                                        icon: const Icon(Icons.business),
+                                        label: const Text('Clients'),
+                                      ),
+                                      ElevatedButton.icon(
+                                        onPressed: () {
+                                          Navigator.pushNamed(context, '/jobs');
+                                        },
+                                        icon: const Icon(Icons.work),
+                                        label: const Text('Jobs'),
+                                      ),
+                                    ],
+                                    if (_isAdmin || _isClient)
+                                      ElevatedButton.icon(
+                                        onPressed: () {
+                                          Navigator.pushNamed(
+                                            context,
+                                            '/locations',
+                                          );
+                                        },
+                                        icon: const Icon(Icons.location_on),
+                                        label: const Text('Locations'),
+                                      ),
                                     ElevatedButton.icon(
                                       onPressed: () {
                                         Navigator.pushNamed(
