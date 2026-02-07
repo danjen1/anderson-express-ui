@@ -34,6 +34,8 @@ In-app dashboards:
 Runtime host switch (no relaunch required):
 - Open `System Status`.
 - Set host (for example `archlinux`) and click `Apply`.
+- Hidden by default. Enable host override controls with:
+  - `--dart-define=DEBUG_BACKEND_OVERRIDE=true`
 
 If Flutter runs on a different machine than the backend:
 

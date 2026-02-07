@@ -2,6 +2,10 @@ import '../models/backend_config.dart';
 import 'package:flutter/foundation.dart';
 
 class BackendRuntime {
+  static const String _debugBackendOverride = String.fromEnvironment(
+    'DEBUG_BACKEND_OVERRIDE',
+    defaultValue: 'false',
+  );
   static BackendConfig _config = BackendConfig.fromEnvironment();
   static final ValueNotifier<BackendConfig> _configNotifier = ValueNotifier(
     _config,
@@ -9,6 +13,10 @@ class BackendRuntime {
 
   static BackendConfig get config => _config;
   static ValueListenable<BackendConfig> get listenable => _configNotifier;
+  static bool get allowBackendOverride {
+    final value = _debugBackendOverride.trim().toLowerCase();
+    return value == '1' || value == 'true' || value == 'yes' || value == 'on';
+  }
 
   static void setConfig(BackendConfig next) {
     _config = next;

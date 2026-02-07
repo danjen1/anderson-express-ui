@@ -4,6 +4,7 @@ import '../models/backend_config.dart';
 import '../services/api_service.dart';
 import '../services/auth_session.dart';
 import '../services/backend_runtime.dart';
+import '../widgets/backend_banner.dart';
 
 class LoginPage extends StatefulWidget {
   const LoginPage({super.key});
@@ -13,10 +14,8 @@ class LoginPage extends StatefulWidget {
 }
 
 class _LoginPageState extends State<LoginPage> {
-  final _emailController = TextEditingController(
-    text: 'admin@andersonexpress.com',
-  );
-  final _passwordController = TextEditingController(text: 'dev-password');
+  final _emailController = TextEditingController();
+  final _passwordController = TextEditingController();
   late final TextEditingController _hostController;
   bool _loading = false;
 
@@ -43,20 +42,21 @@ class _LoginPageState extends State<LoginPage> {
       host: normalizedHost,
       scheme: BackendRuntime.scheme,
       overrideUrl:
-          overrideUri != null && overrideUri.hasScheme && overrideUri.host.isNotEmpty
+          overrideUri != null &&
+              overrideUri.hasScheme &&
+              overrideUri.host.isNotEmpty
           ? raw
           : '',
     );
     BackendRuntime.setConfig(next);
     setState(() {
-      _hostController.text =
-          overrideUri != null && overrideUri.host.isNotEmpty
+      _hostController.text = overrideUri != null && overrideUri.host.isNotEmpty
           ? overrideUri.host
           : normalizedHost;
     });
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text('Backend set to ${next.baseUrl}')),
-    );
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(SnackBar(content: Text('Backend set to ${next.baseUrl}')));
   }
 
   Future<void> _developmentBypass() async {
@@ -97,6 +97,10 @@ class _LoginPageState extends State<LoginPage> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
+      appBar: AppBar(
+        title: const Text('Anderson Express'),
+        bottom: const BackendBanner(),
+      ),
       body: Center(
         child: ConstrainedBox(
           constraints: const BoxConstraints(maxWidth: 440),
@@ -105,38 +109,40 @@ class _LoginPageState extends State<LoginPage> {
             child: Column(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                const Text(
-                  'Anderson Express',
-                  style: TextStyle(fontSize: 32, fontWeight: FontWeight.bold),
-                ),
-                const SizedBox(height: 8),
-                const Text(
-                  'Demo Login',
-                  style: TextStyle(fontSize: 16, color: Colors.grey),
-                ),
-                const SizedBox(height: 32),
-                TextField(
-                  controller: _hostController,
-                  decoration: const InputDecoration(
-                    labelText: 'Backend Host or URL',
-                    hintText: 'archlinux or http://192.168.1.157:9000',
-                    border: OutlineInputBorder(),
-                  ),
+                Image.asset(
+                  'assets/images/main_logo.png',
+                  height: 88,
+                  fit: BoxFit.contain,
                 ),
                 const SizedBox(height: 10),
-                Align(
-                  alignment: Alignment.centerRight,
-                  child: OutlinedButton(
-                    onPressed: _loading ? null : _applyBackendHost,
-                    child: const Text('Apply Host'),
+                const Text(
+                  'Demo Login',
+                  style: TextStyle(
+                    fontSize: 22,
+                    fontWeight: FontWeight.w700,
+                    color: Color.fromRGBO(104, 88, 147, 1),
                   ),
                 ),
-                const SizedBox(height: 8),
-                Text(
-                  'Active backend: ${BackendRuntime.config.baseUrl}',
-                  style: const TextStyle(fontSize: 12, color: Colors.black54),
-                ),
-                const SizedBox(height: 16),
+                const SizedBox(height: 24),
+                if (BackendRuntime.allowBackendOverride) ...[
+                  TextField(
+                    controller: _hostController,
+                    decoration: const InputDecoration(
+                      labelText: 'Backend Host or URL',
+                      hintText: 'archlinux or http://192.168.1.157:9000',
+                      border: OutlineInputBorder(),
+                    ),
+                  ),
+                  const SizedBox(height: 10),
+                  Align(
+                    alignment: Alignment.centerRight,
+                    child: OutlinedButton(
+                      onPressed: _loading ? null : _applyBackendHost,
+                      child: const Text('Apply Host'),
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                ],
                 TextField(
                   controller: _emailController,
                   decoration: const InputDecoration(
@@ -161,11 +167,7 @@ class _LoginPageState extends State<LoginPage> {
                 const SizedBox(height: 10),
                 OutlinedButton(
                   onPressed: () {
-                    Navigator.pushNamed(
-                      context,
-                      '/register',
-                      arguments: _emailController.text.trim(),
-                    );
+                    Navigator.pushNamed(context, '/register');
                   },
                   child: const Text('Register Invite'),
                 ),

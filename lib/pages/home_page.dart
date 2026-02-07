@@ -1,11 +1,9 @@
 import 'package:flutter/material.dart';
 
-import '../models/backend_config.dart';
 import '../models/job.dart';
 import '../models/location.dart';
 import '../services/api_service.dart';
 import '../services/auth_session.dart';
-import '../services/backend_runtime.dart';
 import '../widgets/backend_banner.dart';
 
 class HomePage extends StatefulWidget {
@@ -16,42 +14,21 @@ class HomePage extends StatefulWidget {
 }
 
 class _HomePageState extends State<HomePage> {
-  bool rustOk = false;
   bool loading = true;
   String? error;
-  DateTime? lastChecked;
-
-  late BackendKind _selectedBackend;
-  late final TextEditingController _hostController;
   List<Job> _adminPendingJobs = const [];
   List<Job> _cleanerJobs = const [];
   List<Location> _clientLocations = const [];
   List<Job> _clientPendingJobs = const [];
 
-  BackendConfig get _activeBackend => BackendRuntime.config;
   AuthSessionState? get _session => AuthSession.current;
   bool get _isAdmin => _session?.user.isAdmin == true;
   bool get _isEmployee => _session?.user.isEmployee == true;
   bool get _isClient => _session?.user.isClient == true;
 
-  BackendConfig _healthConfigFor(BackendKind kind) {
-    final uri = Uri.parse(_activeBackend.baseUrl);
-    final host = uri.host.isNotEmpty ? uri.host : 'localhost';
-    final scheme = uri.scheme.isNotEmpty ? uri.scheme : 'http';
-    final port = switch (kind) { BackendKind.rust => 9000, _ => 9000 };
-    return BackendConfig(
-      kind: kind,
-      baseUrl: '$scheme://$host:$port',
-      healthPath: '/healthz',
-      employeesPath: '/api/v1/employees',
-    );
-  }
-
   @override
   void initState() {
     super.initState();
-    _selectedBackend = _activeBackend.kind;
-    _hostController = TextEditingController(text: BackendRuntime.host);
     if (_session == null) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (!mounted) return;
@@ -60,12 +37,6 @@ class _HomePageState extends State<HomePage> {
       return;
     }
     _bootstrap();
-  }
-
-  @override
-  void dispose() {
-    _hostController.dispose();
-    super.dispose();
   }
 
   Future<void> _bootstrap() async {
@@ -129,16 +100,6 @@ class _HomePageState extends State<HomePage> {
 
     try {
       final api = ApiService();
-      final results = await Future.wait([
-        api.checkHealth(_healthConfigFor(BackendKind.rust)),
-      ]);
-
-      if (!mounted) return;
-      setState(() {
-        rustOk = results[0];
-        lastChecked = DateTime.now();
-      });
-
       final token = _session?.token ?? '';
       List<Job> adminPending = const [];
       List<Job> cleanerJobs = const [];
@@ -179,53 +140,6 @@ class _HomePageState extends State<HomePage> {
         });
       }
     }
-  }
-
-  Future<void> _applyBackendSelection() async {
-    final host = BackendRuntime.normalizeHostInput(_hostController.text);
-    final next = BackendConfig.forKind(
-      _selectedBackend,
-      host: host,
-      scheme: BackendRuntime.scheme,
-    );
-    BackendRuntime.setConfig(next);
-    if (!mounted) return;
-    final stillValid = await _ensureSessionIsValid();
-    if (!mounted) return;
-    if (!stillValid) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text(
-            'Session is not valid on selected backend. Please sign in again.',
-          ),
-        ),
-      );
-      Navigator.pushReplacementNamed(context, '/');
-      return;
-    }
-    await _loadDashboard();
-  }
-
-  String _timeAgo(DateTime time) {
-    final seconds = DateTime.now().difference(time).inSeconds;
-    if (seconds < 5) return 'just now';
-    if (seconds < 60) return '$seconds seconds ago';
-    return '${seconds ~/ 60} minutes ago';
-  }
-
-  Widget _statusChip(String name, bool ok) {
-    final color = ok ? Colors.green : Colors.red;
-    return Chip(
-      avatar: Icon(
-        ok ? Icons.check_circle : Icons.error,
-        size: 18,
-        color: color,
-      ),
-      label: Text('$name: ${ok ? 'Online' : 'Offline'}'),
-      backgroundColor: color.withValues(alpha: 0.1),
-      side: BorderSide(color: color.withValues(alpha: 0.35)),
-      labelStyle: TextStyle(color: color, fontWeight: FontWeight.w700),
-    );
   }
 
   Widget _cardList({
@@ -382,7 +296,7 @@ class _HomePageState extends State<HomePage> {
           IconButton(
             onPressed: _loadDashboard,
             icon: const Icon(Icons.refresh),
-            tooltip: 'Refresh health checks',
+            tooltip: 'Refresh',
           ),
         ],
       ),
@@ -394,79 +308,6 @@ class _HomePageState extends State<HomePage> {
                 child: ListView(
                   padding: const EdgeInsets.all(16),
                   children: [
-                    Card(
-                      child: Padding(
-                        padding: const EdgeInsets.all(16),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            const Text(
-                              'Service Status',
-                              style: TextStyle(fontWeight: FontWeight.w700),
-                            ),
-                            const SizedBox(height: 10),
-                            Wrap(
-                              spacing: 8,
-                              runSpacing: 8,
-                              children: [
-                                _statusChip('Rust', rustOk),
-                              ],
-                            ),
-                            const SizedBox(height: 12),
-                            const Text(
-                              'Backend Host',
-                              style: TextStyle(fontWeight: FontWeight.w700),
-                            ),
-                            const SizedBox(height: 8),
-                            Wrap(
-                              spacing: 8,
-                              runSpacing: 8,
-                              children: [
-                                ...const [BackendKind.rust].map(
-                                  (kind) => ChoiceChip(
-                                    label: Text(switch (kind) {
-                                      BackendKind.rust => 'Rust',
-    _ => 'Rust',
-                                    }),
-                                    selected: _selectedBackend == kind,
-                                    onSelected: (_) =>
-                                        setState(() => _selectedBackend = kind),
-                                  ),
-                                ),
-                                SizedBox(
-                                  width: 240,
-                                  child: TextField(
-                                    controller: _hostController,
-                                    decoration: const InputDecoration(
-                                      labelText: 'Host',
-                                      hintText: 'archlinux or http://host',
-                                      border: OutlineInputBorder(),
-                                      isDense: true,
-                                    ),
-                                  ),
-                                ),
-                                FilledButton.icon(
-                                  onPressed: _applyBackendSelection,
-                                  icon: const Icon(Icons.check),
-                                  label: const Text('Apply'),
-                                ),
-                              ],
-                            ),
-                            if (lastChecked != null) ...[
-                              const SizedBox(height: 8),
-                              Text(
-                                'Last checked: ${_timeAgo(lastChecked!)}',
-                                style: const TextStyle(
-                                  fontSize: 12,
-                                  color: Colors.black54,
-                                ),
-                              ),
-                            ],
-                          ],
-                        ),
-                      ),
-                    ),
-                    const SizedBox(height: 12),
                     if (error != null)
                       Card(
                         color: Colors.red.shade50,

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../services/api_service.dart';
+import '../widgets/backend_banner.dart';
 
 class RegisterPage extends StatefulWidget {
   const RegisterPage({super.key, this.initialEmail});
@@ -13,38 +14,33 @@ class RegisterPage extends StatefulWidget {
 
 class _RegisterPageState extends State<RegisterPage> {
   final _emailController = TextEditingController();
-  final _passwordController = TextEditingController(text: 'dev-password');
+  final _passwordController = TextEditingController();
   final _api = ApiService();
   bool _loading = false;
+  bool _emailLocked = false;
+
+  void _setInviteEmail(String? value) {
+    final email = value?.trim() ?? '';
+    if (email.isEmpty) return;
+    _emailController.text = email;
+    _emailLocked = true;
+  }
 
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
-    if (_emailController.text.isEmpty &&
-        widget.initialEmail != null &&
-        widget.initialEmail!.isNotEmpty) {
-      _emailController.text = widget.initialEmail!;
-    }
+    _setInviteEmail(widget.initialEmail);
     final arg = ModalRoute.of(context)?.settings.arguments;
-    if (_emailController.text.isEmpty && arg is String && arg.isNotEmpty) {
-      _emailController.text = arg;
-    }
+    if (!_emailLocked && arg is String) _setInviteEmail(arg);
     final linkedEmail = Uri.base.queryParameters['email'];
-    if (_emailController.text.isEmpty &&
-        linkedEmail != null &&
-        linkedEmail.isNotEmpty) {
-      _emailController.text = linkedEmail;
-    }
-    if (_emailController.text.isEmpty) {
+    if (!_emailLocked) _setInviteEmail(linkedEmail);
+    if (!_emailLocked) {
       final fragment = Uri.base.fragment;
       final queryIndex = fragment.indexOf('?');
       if (queryIndex >= 0 && queryIndex < fragment.length - 1) {
         try {
           final query = fragment.substring(queryIndex + 1);
-          final queryEmail = Uri.splitQueryString(query)['email'];
-          if (queryEmail != null && queryEmail.isNotEmpty) {
-            _emailController.text = queryEmail;
-          }
+          _setInviteEmail(Uri.splitQueryString(query)['email']);
         } catch (_) {
           // Ignore malformed fragment query strings.
         }
@@ -85,8 +81,14 @@ class _RegisterPageState extends State<RegisterPage> {
 
   @override
   Widget build(BuildContext context) {
+    final canSubmit =
+        _emailController.text.trim().isNotEmpty &&
+        _passwordController.text.trim().isNotEmpty;
     return Scaffold(
-      appBar: AppBar(title: const Text('Register Invite')),
+      appBar: AppBar(
+        title: const Text('Register Invite'),
+        bottom: const BackendBanner(),
+      ),
       body: Center(
         child: ConstrainedBox(
           constraints: const BoxConstraints(maxWidth: 440),
@@ -95,17 +97,35 @@ class _RegisterPageState extends State<RegisterPage> {
             child: Column(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
+                Image.asset(
+                  'assets/images/sub_logo.png',
+                  height: 64,
+                  fit: BoxFit.contain,
+                ),
+                const SizedBox(height: 12),
                 TextField(
                   controller: _emailController,
+                  readOnly: true,
+                  onChanged: (_) => setState(() {}),
                   decoration: const InputDecoration(
                     labelText: 'Invited Email',
+                    helperText: 'Provided by your invitation link',
                     border: OutlineInputBorder(),
                   ),
                 ),
+                if (_emailController.text.trim().isEmpty)
+                  const Padding(
+                    padding: EdgeInsets.only(top: 8),
+                    child: Text(
+                      'Open this page from your invitation email link to prefill your invited address.',
+                      style: TextStyle(fontSize: 12, color: Colors.black54),
+                    ),
+                  ),
                 const SizedBox(height: 16),
                 TextField(
                   controller: _passwordController,
                   obscureText: true,
+                  onChanged: (_) => setState(() {}),
                   decoration: const InputDecoration(
                     labelText: 'Set Password',
                     border: OutlineInputBorder(),
@@ -113,7 +133,7 @@ class _RegisterPageState extends State<RegisterPage> {
                 ),
                 const SizedBox(height: 18),
                 FilledButton(
-                  onPressed: _loading ? null : _register,
+                  onPressed: _loading || !canSubmit ? null : _register,
                   child: Text(
                     _loading ? 'Registering...' : 'Complete Registration',
                   ),

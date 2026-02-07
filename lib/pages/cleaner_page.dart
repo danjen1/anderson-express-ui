@@ -167,54 +167,46 @@ class _CleanerPageState extends State<CleanerPage> {
               'Cleaner users only see jobs assigned to them, including each job\'s task list.',
               style: Theme.of(context).textTheme.bodySmall,
             ),
-            const SizedBox(height: 8),
-            Text(
-              'Backend: ${_backend.label} (${_backend.baseUrl})',
-              style: Theme.of(context).textTheme.bodySmall,
-            ),
-            const SizedBox(height: 12),
-            Wrap(
-              spacing: 8,
-              runSpacing: 8,
-              children: const [BackendKind.rust]
-                  .map(
-                    (kind) => ChoiceChip(
-                      label: Text(switch (kind) {
-                        BackendKind.rust => 'Rust',
-    _ => 'Rust',
-                      }),
-                      selected: _selectedBackend == kind,
-                      onSelected: (_) =>
-                          setState(() => _selectedBackend = kind),
-                    ),
-                  )
-                  .toList(),
-            ),
-            const SizedBox(height: 8),
-            Row(
-              children: [
-                Expanded(
-                  child: TextField(
-                    controller: _hostController,
-                    decoration: const InputDecoration(
-                      labelText: 'Backend Host',
-                      border: OutlineInputBorder(),
+            if (BackendRuntime.allowBackendOverride) ...[
+              const SizedBox(height: 12),
+              Wrap(
+                spacing: 8,
+                runSpacing: 8,
+                children: const [BackendKind.rust]
+                    .map(
+                      (kind) => ChoiceChip(
+                        label: Text(switch (kind) {
+                          BackendKind.rust => 'Rust',
+                          _ => 'Rust',
+                        }),
+                        selected: _selectedBackend == kind,
+                        onSelected: (_) =>
+                            setState(() => _selectedBackend = kind),
+                      ),
+                    )
+                    .toList(),
+              ),
+              const SizedBox(height: 8),
+              Row(
+                children: [
+                  Expanded(
+                    child: TextField(
+                      controller: _hostController,
+                      decoration: const InputDecoration(
+                        labelText: 'Backend Host',
+                        border: OutlineInputBorder(),
+                      ),
                     ),
                   ),
-                ),
-                const SizedBox(width: 8),
-                FilledButton.icon(
-                  onPressed: _applyBackendSelection,
-                  icon: const Icon(Icons.check),
-                  label: const Text('Apply'),
-                ),
-              ],
-            ),
-            const SizedBox(height: 12),
-            Text(
-              'Authenticated as cleaner session from login.',
-              style: Theme.of(context).textTheme.bodySmall,
-            ),
+                  const SizedBox(width: 8),
+                  FilledButton.icon(
+                    onPressed: _applyBackendSelection,
+                    icon: const Icon(Icons.check),
+                    label: const Text('Apply'),
+                  ),
+                ],
+              ),
+            ],
             if (_error != null) ...[
               const SizedBox(height: 10),
               Text(_error!, style: TextStyle(color: Colors.red.shade700)),

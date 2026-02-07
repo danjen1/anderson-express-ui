@@ -212,48 +212,45 @@ class _JobsPageState extends State<JobsPage> {
       body: ListView(
         padding: const EdgeInsets.all(16),
         children: [
-          Text('Backend: ${_backend.label} (${_backend.baseUrl})'),
-          const SizedBox(height: 12),
-          Wrap(
-            spacing: 8,
-            runSpacing: 8,
-            children: const [BackendKind.rust]
-                .map(
-                  (kind) => ChoiceChip(
-                    label: Text(switch (kind) {
-                      BackendKind.rust => 'Rust',
-    _ => 'Rust',
-                    }),
-                    selected: _selectedBackend == kind,
-                    onSelected: (_) => setState(() => _selectedBackend = kind),
-                  ),
-                )
-                .toList(),
-          ),
-          const SizedBox(height: 8),
-          Row(
-            children: [
-              Expanded(
-                child: TextField(
-                  controller: _hostController,
-                  decoration: const InputDecoration(
-                    labelText: 'Backend Host',
-                    border: OutlineInputBorder(),
+          if (BackendRuntime.allowBackendOverride) ...[
+            const SizedBox(height: 12),
+            Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              children: const [BackendKind.rust]
+                  .map(
+                    (kind) => ChoiceChip(
+                      label: Text(switch (kind) {
+                        BackendKind.rust => 'Rust',
+                        _ => 'Rust',
+                      }),
+                      selected: _selectedBackend == kind,
+                      onSelected: (_) =>
+                          setState(() => _selectedBackend = kind),
+                    ),
+                  )
+                  .toList(),
+            ),
+            const SizedBox(height: 8),
+            Row(
+              children: [
+                Expanded(
+                  child: TextField(
+                    controller: _hostController,
+                    decoration: const InputDecoration(
+                      labelText: 'Backend Host',
+                      border: OutlineInputBorder(),
+                    ),
                   ),
                 ),
-              ),
-              const SizedBox(width: 8),
-              FilledButton(
-                onPressed: _applyBackendSelection,
-                child: const Text('Apply'),
-              ),
-            ],
-          ),
-          const SizedBox(height: 12),
-          Text(
-            'Authenticated as admin session from login.',
-            style: Theme.of(context).textTheme.bodySmall,
-          ),
+                const SizedBox(width: 8),
+                FilledButton(
+                  onPressed: _applyBackendSelection,
+                  child: const Text('Apply'),
+                ),
+              ],
+            ),
+          ],
           const SizedBox(height: 12),
           const Text(
             'Create Job (admin only)',
