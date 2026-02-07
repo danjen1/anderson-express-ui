@@ -27,6 +27,7 @@ class _LocationsPageState extends State<LocationsPage> {
   ApiService get _api => ApiService();
 
   bool _loading = false;
+  bool _hideToken = true;
   String? _error;
   List<Location> _locations = const [];
 
@@ -314,12 +315,19 @@ class _LocationsPageState extends State<LocationsPage> {
             const SizedBox(height: 12),
             TextField(
               controller: _tokenController,
+              obscureText: _hideToken,
+              maxLines: 1,
               decoration: InputDecoration(
-                labelText: 'Bearer Token (required for Rust/Python/Vapor)',
+                labelText: 'Bearer Token',
                 border: const OutlineInputBorder(),
+                isDense: true,
                 suffixIcon: IconButton(
-                  onPressed: _loadLocations,
-                  icon: const Icon(Icons.login),
+                  onPressed: () {
+                    setState(() => _hideToken = !_hideToken);
+                  },
+                  icon: Icon(
+                    _hideToken ? Icons.visibility : Icons.visibility_off,
+                  ),
                 ),
               ),
             ),

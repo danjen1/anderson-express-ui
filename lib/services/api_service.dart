@@ -65,6 +65,27 @@ class ApiService {
     return token;
   }
 
+  Future<void> registerUser({
+    required String email,
+    required String password,
+  }) async {
+    final response = await http
+        .post(
+          Uri.parse('${_backend.baseUrl}/api/v1/auth/register'),
+          headers: const {
+            'Content-Type': 'application/json',
+            'Accept': 'application/json',
+          },
+          body: jsonEncode({'email': email, 'password': password}),
+        )
+        .timeout(const Duration(seconds: 8));
+
+    if (response.statusCode == 204) {
+      return;
+    }
+    _throwIfError(response, fallbackMessage: 'Failed to register user');
+  }
+
   Future<bool> checkHealth(BackendConfig backend) async {
     try {
       final response = await http

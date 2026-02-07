@@ -33,6 +33,7 @@ class _JobsPageState extends State<JobsPage> {
   late final TextEditingController _hostController;
 
   bool _loading = false;
+  bool _hideToken = true;
   String? _error;
   List<Job> _jobs = const [];
   List<JobTask> _tasks = const [];
@@ -285,9 +286,20 @@ class _JobsPageState extends State<JobsPage> {
               Expanded(
                 child: TextField(
                   controller: _tokenController,
-                  decoration: const InputDecoration(
+                  obscureText: _hideToken,
+                  maxLines: 1,
+                  decoration: InputDecoration(
                     labelText: 'Bearer Token',
-                    border: OutlineInputBorder(),
+                    border: const OutlineInputBorder(),
+                    isDense: true,
+                    suffixIcon: IconButton(
+                      onPressed: () {
+                        setState(() => _hideToken = !_hideToken);
+                      },
+                      icon: Icon(
+                        _hideToken ? Icons.visibility : Icons.visibility_off,
+                      ),
+                    ),
                   ),
                 ),
               ),

@@ -66,6 +66,19 @@ In-app jobs dashboard (admin):
 - Use admin credentials and fetch token.
 - Create jobs, assign employees, and inspect job tasks/assignments against the active backend.
 
+Invite/register/login workflow (dev):
+- Admin creates an employee or client in the Admin/Clients page.
+- UI now shows an `Invite Ready` dialog and can open `Register Invite`.
+- `Register Invite` calls `POST /api/v1/auth/register` to set credentials.
+- Login page supports:
+  - `Login` (real token fetch)
+  - `Register Invite`
+  - `Development Bypass` (kept for local speed)
+
+OAuth token input behavior:
+- Token fields are now compact and hidden by default behind a visibility toggle,
+  so long JWTs stay out of the way during normal CRUD flows.
+
 Authorization behavior mirrored across all 3 backends:
 - Admin: full CRUD on employees/clients/locations/cleaning/jobs.
 - Cleaner user: assigned jobs + job tasks only.

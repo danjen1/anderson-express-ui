@@ -26,6 +26,7 @@ class _AdminPageState extends State<AdminPage> {
   ApiService get _api => ApiService();
 
   bool _loading = false;
+  bool _hideToken = true;
   String? _error;
   List<Employee> _employees = const [];
 
@@ -126,18 +127,58 @@ class _AdminPageState extends State<AdminPage> {
     if (result == null) return;
 
     try {
-      await _api.createEmployee(result, bearerToken: _tokenController.text);
+      final created = await _api.createEmployee(
+        result,
+        bearerToken: _tokenController.text,
+      );
       await _loadEmployees();
       if (!mounted) return;
       ScaffoldMessenger.of(
         context,
       ).showSnackBar(const SnackBar(content: Text('Employee created')));
+      final inviteEmail = created.email ?? result.email;
+      if (inviteEmail.trim().isNotEmpty) {
+        await _showInviteDialog(inviteEmail.trim(), 'employee');
+      }
     } catch (error) {
       if (!mounted) return;
       ScaffoldMessenger.of(
         context,
       ).showSnackBar(SnackBar(content: Text(error.toString())));
     }
+  }
+
+  Future<void> _showInviteDialog(String email, String role) async {
+    await showDialog<void>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Invite Ready'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text('New $role added for: $email'),
+            const SizedBox(height: 10),
+            const Text(
+              'Next step: open Register Invite and complete password setup.',
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Close'),
+          ),
+          FilledButton(
+            onPressed: () {
+              Navigator.pop(context);
+              Navigator.pushNamed(context, '/register', arguments: email);
+            },
+            child: const Text('Open Register Invite'),
+          ),
+        ],
+      ),
+    );
   }
 
   Future<void> _showEditDialog(Employee employee) async {
@@ -310,12 +351,19 @@ class _AdminPageState extends State<AdminPage> {
             const SizedBox(height: 12),
             TextField(
               controller: _tokenController,
+              obscureText: _hideToken,
+              maxLines: 1,
               decoration: InputDecoration(
-                labelText: 'Bearer Token (required for Rust/Python/Vapor)',
+                labelText: 'Bearer Token',
                 border: const OutlineInputBorder(),
+                isDense: true,
                 suffixIcon: IconButton(
-                  onPressed: _loadEmployees,
-                  icon: const Icon(Icons.login),
+                  onPressed: () {
+                    setState(() => _hideToken = !_hideToken);
+                  },
+                  icon: Icon(
+                    _hideToken ? Icons.visibility : Icons.visibility_off,
+                  ),
                 ),
               ),
             ),

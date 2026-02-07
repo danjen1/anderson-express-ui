@@ -26,6 +26,7 @@ class _ClientsPageState extends State<ClientsPage> {
   ApiService get _api => ApiService();
 
   bool _loading = false;
+  bool _hideToken = true;
   String? _error;
   List<Client> _clients = const [];
 
@@ -125,18 +126,58 @@ class _ClientsPageState extends State<ClientsPage> {
     if (result == null) return;
 
     try {
-      await _api.createClient(result, bearerToken: _tokenController.text);
+      final created = await _api.createClient(
+        result,
+        bearerToken: _tokenController.text,
+      );
       await _loadClients();
       if (!mounted) return;
       ScaffoldMessenger.of(
         context,
       ).showSnackBar(const SnackBar(content: Text('Client created')));
+      final inviteEmail = created.email ?? result.email;
+      if (inviteEmail.trim().isNotEmpty) {
+        await _showInviteDialog(inviteEmail.trim(), 'client');
+      }
     } catch (error) {
       if (!mounted) return;
       ScaffoldMessenger.of(
         context,
       ).showSnackBar(SnackBar(content: Text(error.toString())));
     }
+  }
+
+  Future<void> _showInviteDialog(String email, String role) async {
+    await showDialog<void>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Invite Ready'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text('New $role added for: $email'),
+            const SizedBox(height: 10),
+            const Text(
+              'Next step: open Register Invite and complete password setup.',
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Close'),
+          ),
+          FilledButton(
+            onPressed: () {
+              Navigator.pop(context);
+              Navigator.pushNamed(context, '/register', arguments: email);
+            },
+            child: const Text('Open Register Invite'),
+          ),
+        ],
+      ),
+    );
   }
 
   Future<void> _showEditDialog(Client client) async {
@@ -306,12 +347,19 @@ class _ClientsPageState extends State<ClientsPage> {
             const SizedBox(height: 12),
             TextField(
               controller: _tokenController,
+              obscureText: _hideToken,
+              maxLines: 1,
               decoration: InputDecoration(
                 labelText: 'Bearer Token',
                 border: const OutlineInputBorder(),
+                isDense: true,
                 suffixIcon: IconButton(
-                  onPressed: _loadClients,
-                  icon: const Icon(Icons.login),
+                  onPressed: () {
+                    setState(() => _hideToken = !_hideToken);
+                  },
+                  icon: Icon(
+                    _hideToken ? Icons.visibility : Icons.visibility_off,
+                  ),
                 ),
               ),
             ),
