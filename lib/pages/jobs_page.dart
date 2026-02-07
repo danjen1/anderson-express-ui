@@ -6,6 +6,7 @@ import '../models/job.dart';
 import '../models/job_assignment.dart';
 import '../models/job_task.dart';
 import '../services/api_service.dart';
+import '../services/auth_session.dart';
 import '../services/backend_runtime.dart';
 import '../widgets/backend_banner.dart';
 
@@ -17,10 +18,6 @@ class JobsPage extends StatefulWidget {
 }
 
 class _JobsPageState extends State<JobsPage> {
-  final _emailController = TextEditingController(
-    text: 'admin@andersonexpress.com',
-  );
-  final _passwordController = TextEditingController(text: 'dev-password');
   final _tokenController = TextEditingController();
 
   final _profileIdController = TextEditingController(text: '1');
@@ -33,7 +30,6 @@ class _JobsPageState extends State<JobsPage> {
   late final TextEditingController _hostController;
 
   bool _loading = false;
-  bool _hideToken = true;
   String? _error;
   List<Job> _jobs = const [];
   List<JobTask> _tasks = const [];
@@ -50,12 +46,31 @@ class _JobsPageState extends State<JobsPage> {
     super.initState();
     _selectedBackend = _backend.kind;
     _hostController = TextEditingController(text: BackendRuntime.host);
+    final session = AuthSession.current;
+    if (session == null) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted) return;
+        Navigator.pushReplacementNamed(context, '/');
+      });
+      return;
+    }
+    _tokenController.text = session.token;
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
+      if (!mounted) return;
+      if (!session.user.isAdmin) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(const SnackBar(content: Text('Admin access required')));
+        Navigator.pushReplacementNamed(context, '/home');
+        return;
+      }
+      await _loadJobs();
+      await _loadEmployees();
+    });
   }
 
   @override
   void dispose() {
-    _emailController.dispose();
-    _passwordController.dispose();
     _tokenController.dispose();
     _profileIdController.dispose();
     _locationIdController.dispose();
@@ -82,24 +97,9 @@ class _JobsPageState extends State<JobsPage> {
       _assignments = const [];
       _selectedJobId = null;
       _selectedEmployeeId = null;
-      _tokenController.clear();
+      _tokenController.text = AuthSession.current?.token ?? '';
     });
-  }
-
-  Future<void> _fetchToken() async {
-    try {
-      final token = await _api.fetchToken(
-        email: _emailController.text.trim(),
-        password: _passwordController.text,
-      );
-      if (!mounted) return;
-      setState(() => _tokenController.text = token);
-      await _loadJobs();
-      await _loadEmployees();
-    } catch (error) {
-      if (!mounted) return;
-      setState(() => _error = error.toString());
-    }
+    await _loadJobs();
   }
 
   Future<void> _loadEmployees() async {
@@ -118,7 +118,7 @@ class _JobsPageState extends State<JobsPage> {
   Future<void> _loadJobs() async {
     final token = _tokenController.text.trim();
     if (token.isEmpty) {
-      setState(() => _error = 'Fetch token first');
+      setState(() => _error = 'Login required');
       return;
     }
     setState(() => _loading = true);
@@ -166,7 +166,7 @@ class _JobsPageState extends State<JobsPage> {
   Future<void> _createJob() async {
     final token = _tokenController.text.trim();
     if (token.isEmpty) {
-      setState(() => _error = 'Fetch token first');
+      setState(() => _error = 'Login required');
       return;
     }
     try {
@@ -258,52 +258,9 @@ class _JobsPageState extends State<JobsPage> {
             ],
           ),
           const SizedBox(height: 12),
-          TextField(
-            controller: _emailController,
-            decoration: const InputDecoration(
-              labelText: 'Admin Email',
-              border: OutlineInputBorder(),
-            ),
-          ),
-          const SizedBox(height: 8),
-          TextField(
-            controller: _passwordController,
-            obscureText: true,
-            decoration: const InputDecoration(
-              labelText: 'Admin Password',
-              border: OutlineInputBorder(),
-            ),
-          ),
-          const SizedBox(height: 8),
-          Row(
-            children: [
-              OutlinedButton.icon(
-                onPressed: _fetchToken,
-                icon: const Icon(Icons.key),
-                label: const Text('Fetch Token'),
-              ),
-              const SizedBox(width: 8),
-              Expanded(
-                child: TextField(
-                  controller: _tokenController,
-                  obscureText: _hideToken,
-                  maxLines: 1,
-                  decoration: InputDecoration(
-                    labelText: 'Bearer Token',
-                    border: const OutlineInputBorder(),
-                    isDense: true,
-                    suffixIcon: IconButton(
-                      onPressed: () {
-                        setState(() => _hideToken = !_hideToken);
-                      },
-                      icon: Icon(
-                        _hideToken ? Icons.visibility : Icons.visibility_off,
-                      ),
-                    ),
-                  ),
-                ),
-              ),
-            ],
+          Text(
+            'Authenticated as admin session from login.',
+            style: Theme.of(context).textTheme.bodySmall,
           ),
           const SizedBox(height: 12),
           const Text(

@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../models/backend_config.dart';
 import '../models/location.dart';
 import '../services/api_service.dart';
+import '../services/auth_session.dart';
 import '../services/backend_runtime.dart';
 import '../widgets/backend_banner.dart';
 
@@ -14,10 +15,6 @@ class LocationsPage extends StatefulWidget {
 }
 
 class _LocationsPageState extends State<LocationsPage> {
-  final _emailController = TextEditingController(
-    text: 'admin@andersonexpress.com',
-  );
-  final _passwordController = TextEditingController(text: 'dev-password');
   final _tokenController = TextEditingController();
   final _clientFilterController = TextEditingController();
   late BackendKind _selectedBackend;
@@ -27,22 +24,43 @@ class _LocationsPageState extends State<LocationsPage> {
   ApiService get _api => ApiService();
 
   bool _loading = false;
-  bool _hideToken = true;
   String? _error;
   List<Location> _locations = const [];
+  bool _isAdmin = false;
 
   @override
   void initState() {
     super.initState();
     _selectedBackend = _backend.kind;
     _hostController = TextEditingController(text: BackendRuntime.host);
+    final session = AuthSession.current;
+    if (session == null) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted) return;
+        Navigator.pushReplacementNamed(context, '/');
+      });
+      return;
+    }
+    _tokenController.text = session.token;
+    _isAdmin = session.user.isAdmin;
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
+      if (!mounted) return;
+      if (!session.user.isAdmin && !session.user.isClient) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Locations access requires admin/client role'),
+          ),
+        );
+        Navigator.pushReplacementNamed(context, '/home');
+        return;
+      }
+      await _loadLocations();
+    });
   }
 
   @override
   void dispose() {
     _hostController.dispose();
-    _emailController.dispose();
-    _passwordController.dispose();
     _tokenController.dispose();
     _clientFilterController.dispose();
     super.dispose();
@@ -62,34 +80,13 @@ class _LocationsPageState extends State<LocationsPage> {
     setState(() {
       _error = null;
       _locations = const [];
-      _tokenController.clear();
+      _tokenController.text = AuthSession.current?.token ?? '';
     });
+    await _loadLocations();
+    if (!mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(content: Text('Backend set to ${next.label} (${next.baseUrl})')),
     );
-  }
-
-  Future<void> _fetchToken() async {
-    try {
-      final token = await _api.fetchToken(
-        email: _emailController.text.trim(),
-        password: _passwordController.text,
-      );
-      if (!mounted) return;
-      setState(() {
-        _tokenController.text = token;
-      });
-      await _loadLocations();
-      if (!mounted) return;
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(const SnackBar(content: Text('Token fetched')));
-    } catch (error) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text(error.toString())));
-    }
   }
 
   Future<void> _loadLocations() async {
@@ -123,6 +120,12 @@ class _LocationsPageState extends State<LocationsPage> {
   }
 
   Future<void> _showCreateDialog() async {
+    if (!_isAdmin) {
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('Admin access required')));
+      return;
+    }
     final result = await showDialog<LocationCreateInput>(
       context: context,
       builder: (context) => const _LocationEditorDialog(),
@@ -180,6 +183,12 @@ class _LocationsPageState extends State<LocationsPage> {
   }
 
   Future<void> _delete(Location location) async {
+    if (!_isAdmin) {
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('Admin access required')));
+      return;
+    }
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
@@ -234,7 +243,7 @@ class _LocationsPageState extends State<LocationsPage> {
         ],
       ),
       floatingActionButton: FloatingActionButton.extended(
-        onPressed: _showCreateDialog,
+        onPressed: _isAdmin ? _showCreateDialog : null,
         icon: const Icon(Icons.add_location_alt),
         label: const Text('Add Location'),
       ),
@@ -287,49 +296,11 @@ class _LocationsPageState extends State<LocationsPage> {
               ],
             ),
             const SizedBox(height: 12),
-            TextField(
-              controller: _emailController,
-              decoration: const InputDecoration(
-                labelText: 'Auth Email',
-                border: OutlineInputBorder(),
-              ),
-            ),
-            const SizedBox(height: 12),
-            TextField(
-              controller: _passwordController,
-              obscureText: true,
-              decoration: const InputDecoration(
-                labelText: 'Auth Password',
-                border: OutlineInputBorder(),
-              ),
-            ),
-            const SizedBox(height: 12),
-            Align(
-              alignment: Alignment.centerLeft,
-              child: OutlinedButton.icon(
-                onPressed: _loading ? null : _fetchToken,
-                icon: const Icon(Icons.key),
-                label: const Text('Fetch Token'),
-              ),
-            ),
-            const SizedBox(height: 12),
-            TextField(
-              controller: _tokenController,
-              obscureText: _hideToken,
-              maxLines: 1,
-              decoration: InputDecoration(
-                labelText: 'Bearer Token',
-                border: const OutlineInputBorder(),
-                isDense: true,
-                suffixIcon: IconButton(
-                  onPressed: () {
-                    setState(() => _hideToken = !_hideToken);
-                  },
-                  icon: Icon(
-                    _hideToken ? Icons.visibility : Icons.visibility_off,
-                  ),
-                ),
-              ),
+            Text(
+              _isAdmin
+                  ? 'Authenticated as admin session from login.'
+                  : 'Authenticated as client session from login.',
+              style: Theme.of(context).textTheme.bodySmall,
             ),
             const SizedBox(height: 12),
             TextField(
@@ -359,17 +330,6 @@ class _LocationsPageState extends State<LocationsPage> {
                   style: TextStyle(color: Colors.red.shade700),
                 ),
               ),
-            if (_tokenController.text.trim().isEmpty && _locations.isEmpty)
-              Container(
-                width: double.infinity,
-                margin: const EdgeInsets.only(bottom: 12),
-                padding: const EdgeInsets.all(12),
-                decoration: BoxDecoration(
-                  color: Colors.blue.shade50,
-                  borderRadius: BorderRadius.circular(8),
-                ),
-                child: const Text('Fetch token first, then load locations.'),
-              ),
             Expanded(
               child: _loading
                   ? const Center(child: CircularProgressIndicator())
@@ -394,10 +354,11 @@ class _LocationsPageState extends State<LocationsPage> {
                                   onPressed: () => _showEditDialog(location),
                                   icon: const Icon(Icons.edit),
                                 ),
-                                IconButton(
-                                  onPressed: () => _delete(location),
-                                  icon: const Icon(Icons.delete),
-                                ),
+                                if (_isAdmin)
+                                  IconButton(
+                                    onPressed: () => _delete(location),
+                                    icon: const Icon(Icons.delete),
+                                  ),
                               ],
                             ),
                           ),

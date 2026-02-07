@@ -4,6 +4,7 @@ import '../models/backend_config.dart';
 import '../models/job.dart';
 import '../models/job_task.dart';
 import '../services/api_service.dart';
+import '../services/auth_session.dart';
 import '../services/backend_runtime.dart';
 import '../widgets/backend_banner.dart';
 
@@ -15,10 +16,6 @@ class CleanerPage extends StatefulWidget {
 }
 
 class _CleanerPageState extends State<CleanerPage> {
-  final _emailController = TextEditingController(
-    text: 'john@andersonexpress.com',
-  );
-  final _passwordController = TextEditingController(text: 'dev-password');
   final _tokenController = TextEditingController();
   late BackendKind _selectedBackend;
   late final TextEditingController _hostController;
@@ -37,13 +34,33 @@ class _CleanerPageState extends State<CleanerPage> {
     super.initState();
     _selectedBackend = _backend.kind;
     _hostController = TextEditingController(text: BackendRuntime.host);
+    final session = AuthSession.current;
+    if (session == null) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted) return;
+        Navigator.pushReplacementNamed(context, '/');
+      });
+      return;
+    }
+    _tokenController.text = session.token;
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
+      if (!mounted) return;
+      if (!session.user.isEmployee) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Cleaner access requires employee role'),
+          ),
+        );
+        Navigator.pushReplacementNamed(context, '/home');
+        return;
+      }
+      await _loadAssignedJobs();
+    });
   }
 
   @override
   void dispose() {
     _hostController.dispose();
-    _emailController.dispose();
-    _passwordController.dispose();
     _tokenController.dispose();
     super.dispose();
   }
@@ -64,23 +81,9 @@ class _CleanerPageState extends State<CleanerPage> {
       _jobs = const [];
       _tasks = const [];
       _selectedJobId = null;
-      _tokenController.clear();
+      _tokenController.text = AuthSession.current?.token ?? '';
     });
-  }
-
-  Future<void> _fetchToken() async {
-    try {
-      final token = await _api.fetchToken(
-        email: _emailController.text.trim(),
-        password: _passwordController.text,
-      );
-      if (!mounted) return;
-      setState(() => _tokenController.text = token);
-      await _loadAssignedJobs();
-    } catch (error) {
-      if (!mounted) return;
-      setState(() => _error = error.toString());
-    }
+    await _loadAssignedJobs();
   }
 
   Future<void> _loadAssignedJobs() async {
@@ -208,42 +211,9 @@ class _CleanerPageState extends State<CleanerPage> {
               ],
             ),
             const SizedBox(height: 12),
-            TextField(
-              controller: _emailController,
-              decoration: const InputDecoration(
-                labelText: 'Cleaner Email',
-                border: OutlineInputBorder(),
-              ),
-            ),
-            const SizedBox(height: 8),
-            TextField(
-              controller: _passwordController,
-              obscureText: true,
-              decoration: const InputDecoration(
-                labelText: 'Cleaner Password',
-                border: OutlineInputBorder(),
-              ),
-            ),
-            const SizedBox(height: 8),
-            Align(
-              alignment: Alignment.centerLeft,
-              child: OutlinedButton.icon(
-                onPressed: _loading ? null : _fetchToken,
-                icon: const Icon(Icons.key),
-                label: const Text('Fetch Token'),
-              ),
-            ),
-            const SizedBox(height: 8),
-            TextField(
-              controller: _tokenController,
-              decoration: InputDecoration(
-                labelText: 'Bearer Token',
-                border: const OutlineInputBorder(),
-                suffixIcon: IconButton(
-                  onPressed: _loadAssignedJobs,
-                  icon: const Icon(Icons.login),
-                ),
-              ),
+            Text(
+              'Authenticated as cleaner session from login.',
+              style: Theme.of(context).textTheme.bodySmall,
             ),
             if (_error != null) ...[
               const SizedBox(height: 10),

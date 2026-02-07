@@ -81,8 +81,10 @@ class _ClientsPageState extends State<ClientsPage> {
     setState(() {
       _error = null;
       _clients = const [];
-      _tokenController.clear();
+      _tokenController.text = AuthSession.current?.token ?? '';
     });
+    await _loadClients();
+    if (!mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(content: Text('Backend set to ${next.label} (${next.baseUrl})')),
     );
