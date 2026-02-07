@@ -58,7 +58,18 @@ Runtime backend switch (no relaunch required):
 
 In-app cleaner dashboard:
 - Open `Cleaner` from the System Status page.
-- Fetch a token, then create/list cleaning `task-definitions` and `task-rules` against the active backend.
+- Use cleaner credentials (`john@andersonexpress.com` / `worker123`) and fetch token.
+- Cleaner only sees assigned jobs and their tasks for the active backend.
+
+In-app jobs dashboard (admin):
+- Open `Jobs` from the System Status page.
+- Use admin credentials and fetch token.
+- Create jobs, assign employees, and inspect job tasks/assignments against the active backend.
+
+Authorization behavior mirrored across all 3 backends:
+- Admin: full CRUD on employees/clients/locations/cleaning/jobs.
+- Cleaner user: assigned jobs + job tasks only.
+- Client user: own locations only.
 
 ## Chrome/Web against Linux backend host
 

@@ -5,6 +5,9 @@ import 'package:http/http.dart' as http;
 import '../models/backend_config.dart';
 import '../models/client.dart';
 import '../models/employee.dart';
+import '../models/job.dart';
+import '../models/job_assignment.dart';
+import '../models/job_task.dart';
 import '../models/location.dart';
 import '../models/task_definition.dart';
 import '../models/task_rule.dart';
@@ -312,6 +315,121 @@ class ApiService {
       return data['message'].toString();
     }
     return 'Location deleted';
+  }
+
+  Future<List<Job>> listJobs({
+    List<String>? statusFilter,
+    String? bearerToken,
+  }) async {
+    var uri = Uri.parse('${_backend.baseUrl}/api/v1/jobs');
+    if (statusFilter != null && statusFilter.isNotEmpty) {
+      final query = statusFilter
+          .map((value) => 'status_filter=${Uri.encodeQueryComponent(value)}')
+          .join('&');
+      uri = Uri.parse('${uri.toString()}?$query');
+    }
+
+    final response = await http
+        .get(uri, headers: _headers(bearerToken))
+        .timeout(const Duration(seconds: 8));
+
+    _throwIfError(response, fallbackMessage: 'Failed to list jobs');
+    final data = jsonDecode(response.body) as List<dynamic>;
+    return data
+        .map((item) => Job.fromJson(item as Map<String, dynamic>))
+        .toList();
+  }
+
+  Future<Job> createJob(JobCreateInput input, {String? bearerToken}) async {
+    final response = await http
+        .post(
+          Uri.parse('${_backend.baseUrl}/api/v1/jobs'),
+          headers: _headers(bearerToken),
+          body: jsonEncode(input.toJson()),
+        )
+        .timeout(const Duration(seconds: 8));
+
+    _throwIfError(response, fallbackMessage: 'Failed to create job');
+    final data = jsonDecode(response.body) as Map<String, dynamic>;
+    return Job.fromJson(data);
+  }
+
+  Future<List<JobTask>> listJobTasks(
+    String jobId, {
+    String? bearerToken,
+  }) async {
+    final response = await http
+        .get(
+          Uri.parse('${_backend.baseUrl}/api/v1/jobs/$jobId/tasks'),
+          headers: _headers(bearerToken),
+        )
+        .timeout(const Duration(seconds: 8));
+
+    _throwIfError(response, fallbackMessage: 'Failed to list job tasks');
+    final data = jsonDecode(response.body) as List<dynamic>;
+    return data
+        .map((item) => JobTask.fromJson(item as Map<String, dynamic>))
+        .toList();
+  }
+
+  Future<JobTask> updateJobTask(
+    String jobId,
+    String taskId,
+    JobTaskUpdateInput input, {
+    String? bearerToken,
+  }) async {
+    final payload = input.toJson();
+    if (payload.isEmpty) {
+      throw Exception('No update fields provided');
+    }
+
+    final response = await http
+        .patch(
+          Uri.parse('${_backend.baseUrl}/api/v1/jobs/$jobId/tasks/$taskId'),
+          headers: _headers(bearerToken),
+          body: jsonEncode(payload),
+        )
+        .timeout(const Duration(seconds: 8));
+
+    _throwIfError(response, fallbackMessage: 'Failed to update job task');
+    final data = jsonDecode(response.body) as Map<String, dynamic>;
+    return JobTask.fromJson(data);
+  }
+
+  Future<List<JobAssignment>> listJobAssignments(
+    String jobId, {
+    String? bearerToken,
+  }) async {
+    final response = await http
+        .get(
+          Uri.parse('${_backend.baseUrl}/api/v1/jobs/$jobId/assignments'),
+          headers: _headers(bearerToken),
+        )
+        .timeout(const Duration(seconds: 8));
+
+    _throwIfError(response, fallbackMessage: 'Failed to list job assignments');
+    final data = jsonDecode(response.body) as List<dynamic>;
+    return data
+        .map((item) => JobAssignment.fromJson(item as Map<String, dynamic>))
+        .toList();
+  }
+
+  Future<JobAssignment> createJobAssignment(
+    String jobId,
+    JobAssignmentCreateInput input, {
+    String? bearerToken,
+  }) async {
+    final response = await http
+        .post(
+          Uri.parse('${_backend.baseUrl}/api/v1/jobs/$jobId/assignments'),
+          headers: _headers(bearerToken),
+          body: jsonEncode(input.toJson()),
+        )
+        .timeout(const Duration(seconds: 8));
+
+    _throwIfError(response, fallbackMessage: 'Failed to create job assignment');
+    final data = jsonDecode(response.body) as Map<String, dynamic>;
+    return JobAssignment.fromJson(data);
   }
 
   Future<List<TaskDefinition>> listTaskDefinitions({

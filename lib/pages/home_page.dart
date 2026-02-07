@@ -371,6 +371,13 @@ class _HomePageState extends State<HomePage> {
                                   ),
                                   ElevatedButton.icon(
                                     onPressed: () {
+                                      Navigator.pushNamed(context, '/jobs');
+                                    },
+                                    icon: const Icon(Icons.work),
+                                    label: const Text('Jobs'),
+                                  ),
+                                  ElevatedButton.icon(
+                                    onPressed: () {
                                       Navigator.pushNamed(
                                         context,
                                         '/locations',

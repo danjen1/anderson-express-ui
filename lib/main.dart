@@ -5,6 +5,7 @@ import 'pages/home_page.dart';
 import 'pages/cleaner_page.dart';
 import 'pages/admin_page.dart';
 import 'pages/clients_page.dart';
+import 'pages/jobs_page.dart';
 import 'pages/locations_page.dart';
 import 'pages/qa_smoke_page.dart';
 
@@ -31,6 +32,7 @@ class MyApp extends StatelessWidget {
         '/cleaner': (context) => CleanerPage(),
         '/admin': (context) => AdminPage(),
         '/clients': (context) => ClientsPage(),
+        '/jobs': (context) => JobsPage(),
         '/locations': (context) => LocationsPage(),
         '/qa-smoke': (context) => QaSmokePage(),
       },
