@@ -18,8 +18,6 @@ class JobsPage extends StatefulWidget {
 }
 
 class _JobsPageState extends State<JobsPage> {
-  final _tokenController = TextEditingController();
-
   final _profileIdController = TextEditingController(text: '1');
   final _locationIdController = TextEditingController(text: '1');
   final _dateController = TextEditingController(
@@ -37,6 +35,7 @@ class _JobsPageState extends State<JobsPage> {
   List<Employee> _employees = const [];
   String? _selectedJobId;
   String? _selectedEmployeeId;
+  String? get _token => AuthSession.current?.token.trim();
 
   ApiService get _api => ApiService();
   BackendConfig get _backend => BackendRuntime.config;
@@ -54,7 +53,6 @@ class _JobsPageState extends State<JobsPage> {
       });
       return;
     }
-    _tokenController.text = session.token;
     WidgetsBinding.instance.addPostFrameCallback((_) async {
       if (!mounted) return;
       if (!session.user.isAdmin) {
@@ -71,7 +69,6 @@ class _JobsPageState extends State<JobsPage> {
 
   @override
   void dispose() {
-    _tokenController.dispose();
     _profileIdController.dispose();
     _locationIdController.dispose();
     _dateController.dispose();
@@ -90,21 +87,15 @@ class _JobsPageState extends State<JobsPage> {
     );
     BackendRuntime.setConfig(next);
     if (!mounted) return;
-    setState(() {
-      _error = null;
-      _jobs = const [];
-      _tasks = const [];
-      _assignments = const [];
-      _selectedJobId = null;
-      _selectedEmployeeId = null;
-      _tokenController.text = AuthSession.current?.token ?? '';
-    });
-    await _loadJobs();
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text('Backend set to ${next.label} (${next.baseUrl})')),
+    );
+    Navigator.pushReplacementNamed(context, '/home');
   }
 
   Future<void> _loadEmployees() async {
-    final token = _tokenController.text.trim();
-    if (token.isEmpty) return;
+    final token = _token;
+    if (token == null || token.isEmpty) return;
     try {
       final employees = await _api.listEmployees(bearerToken: token);
       if (!mounted) return;
@@ -116,8 +107,8 @@ class _JobsPageState extends State<JobsPage> {
   }
 
   Future<void> _loadJobs() async {
-    final token = _tokenController.text.trim();
-    if (token.isEmpty) {
+    final token = _token;
+    if (token == null || token.isEmpty) {
       setState(() => _error = 'Login required');
       return;
     }
@@ -143,9 +134,11 @@ class _JobsPageState extends State<JobsPage> {
   }
 
   Future<void> _loadSelectedJobDetails() async {
-    final token = _tokenController.text.trim();
+    final token = _token;
     final jobId = _selectedJobId;
-    if (token.isEmpty || jobId == null || jobId.isEmpty) return;
+    if (token == null || token.isEmpty || jobId == null || jobId.isEmpty) {
+      return;
+    }
     try {
       final tasks = await _api.listJobTasks(jobId, bearerToken: token);
       final assignments = await _api.listJobAssignments(
@@ -164,8 +157,8 @@ class _JobsPageState extends State<JobsPage> {
   }
 
   Future<void> _createJob() async {
-    final token = _tokenController.text.trim();
-    if (token.isEmpty) {
+    final token = _token;
+    if (token == null || token.isEmpty) {
       setState(() => _error = 'Login required');
       return;
     }
@@ -186,10 +179,12 @@ class _JobsPageState extends State<JobsPage> {
   }
 
   Future<void> _assignEmployee() async {
-    final token = _tokenController.text.trim();
+    final token = _token;
     final jobId = _selectedJobId;
     final employeeId = _selectedEmployeeId;
-    if (token.isEmpty || jobId == null || employeeId == null) return;
+    if (token == null || token.isEmpty || jobId == null || employeeId == null) {
+      return;
+    }
     try {
       await _api.createJobAssignment(
         jobId,

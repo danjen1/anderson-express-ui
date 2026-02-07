@@ -16,7 +16,6 @@ class CleanerPage extends StatefulWidget {
 }
 
 class _CleanerPageState extends State<CleanerPage> {
-  final _tokenController = TextEditingController();
   late BackendKind _selectedBackend;
   late final TextEditingController _hostController;
 
@@ -28,6 +27,7 @@ class _CleanerPageState extends State<CleanerPage> {
   List<Job> _jobs = const [];
   List<JobTask> _tasks = const [];
   String? _selectedJobId;
+  String? get _token => AuthSession.current?.token.trim();
 
   @override
   void initState() {
@@ -42,7 +42,6 @@ class _CleanerPageState extends State<CleanerPage> {
       });
       return;
     }
-    _tokenController.text = session.token;
     WidgetsBinding.instance.addPostFrameCallback((_) async {
       if (!mounted) return;
       if (!session.user.isEmployee) {
@@ -61,7 +60,6 @@ class _CleanerPageState extends State<CleanerPage> {
   @override
   void dispose() {
     _hostController.dispose();
-    _tokenController.dispose();
     super.dispose();
   }
 
@@ -76,24 +74,27 @@ class _CleanerPageState extends State<CleanerPage> {
     );
     BackendRuntime.setConfig(next);
     if (!mounted) return;
-    setState(() {
-      _error = null;
-      _jobs = const [];
-      _tasks = const [];
-      _selectedJobId = null;
-      _tokenController.text = AuthSession.current?.token ?? '';
-    });
-    await _loadAssignedJobs();
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text('Backend set to ${next.label} (${next.baseUrl})')),
+    );
+    Navigator.pushReplacementNamed(context, '/home');
   }
 
   Future<void> _loadAssignedJobs() async {
+    final token = _token;
+    if (token == null || token.isEmpty) {
+      setState(() {
+        _error = 'Login required. Please sign in again.';
+      });
+      return;
+    }
+
     setState(() {
       _loading = true;
       _error = null;
     });
 
     try {
-      final token = _tokenController.text.trim();
       final jobs = await _api.listJobs(bearerToken: token);
       if (!mounted) return;
       setState(() {
@@ -114,9 +115,11 @@ class _CleanerPageState extends State<CleanerPage> {
   }
 
   Future<void> _loadSelectedJobTasks() async {
-    final token = _tokenController.text.trim();
+    final token = _token;
     final jobId = _selectedJobId;
-    if (token.isEmpty || jobId == null || jobId.isEmpty) return;
+    if (token == null || token.isEmpty || jobId == null || jobId.isEmpty) {
+      return;
+    }
     try {
       final tasks = await _api.listJobTasks(jobId, bearerToken: token);
       if (!mounted) return;
@@ -128,9 +131,9 @@ class _CleanerPageState extends State<CleanerPage> {
   }
 
   Future<void> _toggleTaskComplete(JobTask task, bool nextValue) async {
-    final token = _tokenController.text.trim();
+    final token = _token;
     final jobId = _selectedJobId;
-    if (token.isEmpty || jobId == null) return;
+    if (token == null || token.isEmpty || jobId == null) return;
     try {
       await _api.updateJobTask(
         jobId,

@@ -15,11 +15,6 @@ class ClientsPage extends StatefulWidget {
 }
 
 class _ClientsPageState extends State<ClientsPage> {
-  final _emailController = TextEditingController(
-    text: 'admin@andersonexpress.com',
-  );
-  final _passwordController = TextEditingController(text: 'dev-password');
-  final _tokenController = TextEditingController();
   late BackendKind _selectedBackend;
   late final TextEditingController _hostController;
 
@@ -27,9 +22,9 @@ class _ClientsPageState extends State<ClientsPage> {
   ApiService get _api => ApiService();
 
   bool _loading = false;
-  bool _hideToken = true;
   String? _error;
   List<Client> _clients = const [];
+  String? get _token => AuthSession.current?.token.trim();
 
   @override
   void initState() {
@@ -44,7 +39,6 @@ class _ClientsPageState extends State<ClientsPage> {
       });
       return;
     }
-    _tokenController.text = session.token;
     WidgetsBinding.instance.addPostFrameCallback((_) async {
       if (!mounted) return;
       if (!session.user.isAdmin) {
@@ -61,9 +55,6 @@ class _ClientsPageState extends State<ClientsPage> {
   @override
   void dispose() {
     _hostController.dispose();
-    _emailController.dispose();
-    _passwordController.dispose();
-    _tokenController.dispose();
     super.dispose();
   }
 
@@ -78,51 +69,28 @@ class _ClientsPageState extends State<ClientsPage> {
     );
     BackendRuntime.setConfig(next);
     if (!mounted) return;
-    setState(() {
-      _error = null;
-      _clients = const [];
-      _tokenController.text = AuthSession.current?.token ?? '';
-    });
-    await _loadClients();
-    if (!mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(content: Text('Backend set to ${next.label} (${next.baseUrl})')),
     );
-  }
-
-  Future<void> _fetchToken() async {
-    try {
-      final token = await _api.fetchToken(
-        email: _emailController.text.trim(),
-        password: _passwordController.text,
-      );
-      if (!mounted) return;
-      setState(() {
-        _tokenController.text = token;
-      });
-      await _loadClients();
-      if (!mounted) return;
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(const SnackBar(content: Text('Token fetched')));
-    } catch (error) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text(error.toString())));
-    }
+    Navigator.pushReplacementNamed(context, '/home');
   }
 
   Future<void> _loadClients() async {
+    final token = _token;
+    if (token == null || token.isEmpty) {
+      setState(() {
+        _error = 'Login required. Please sign in again.';
+      });
+      return;
+    }
+
     setState(() {
       _loading = true;
       _error = null;
     });
 
     try {
-      final clients = await _api.listClients(
-        bearerToken: _tokenController.text,
-      );
+      final clients = await _api.listClients(bearerToken: token);
       if (!mounted) return;
       setState(() {
         _clients = clients;
@@ -157,10 +125,7 @@ class _ClientsPageState extends State<ClientsPage> {
     if (result == null) return;
 
     try {
-      final created = await _api.createClient(
-        result,
-        bearerToken: _tokenController.text,
-      );
+      final created = await _api.createClient(result, bearerToken: _token);
       await _loadClients();
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
@@ -195,11 +160,7 @@ class _ClientsPageState extends State<ClientsPage> {
     if (result == null) return;
 
     try {
-      await _api.updateClient(
-        client.id,
-        result,
-        bearerToken: _tokenController.text,
-      );
+      await _api.updateClient(client.id, result, bearerToken: _token);
       await _loadClients();
       if (!mounted) return;
       ScaffoldMessenger.of(
@@ -234,10 +195,7 @@ class _ClientsPageState extends State<ClientsPage> {
     if (confirmed != true) return;
 
     try {
-      final message = await _api.deleteClient(
-        client.id,
-        bearerToken: _tokenController.text,
-      );
+      final message = await _api.deleteClient(client.id, bearerToken: _token);
       await _loadClients();
       if (!mounted) return;
       ScaffoldMessenger.of(
@@ -316,51 +274,6 @@ class _ClientsPageState extends State<ClientsPage> {
                 ),
               ],
             ),
-            const SizedBox(height: 12),
-            TextField(
-              controller: _emailController,
-              decoration: const InputDecoration(
-                labelText: 'Auth Email',
-                border: OutlineInputBorder(),
-              ),
-            ),
-            const SizedBox(height: 12),
-            TextField(
-              controller: _passwordController,
-              obscureText: true,
-              decoration: const InputDecoration(
-                labelText: 'Auth Password',
-                border: OutlineInputBorder(),
-              ),
-            ),
-            const SizedBox(height: 12),
-            Align(
-              alignment: Alignment.centerLeft,
-              child: OutlinedButton.icon(
-                onPressed: _loading ? null : _fetchToken,
-                icon: const Icon(Icons.key),
-                label: const Text('Fetch Token'),
-              ),
-            ),
-            const SizedBox(height: 12),
-            TextField(
-              controller: _tokenController,
-              obscureText: _hideToken,
-              maxLines: 1,
-              decoration: InputDecoration(
-                labelText: 'Bearer Token',
-                border: const OutlineInputBorder(),
-                isDense: true,
-                suffixIcon: IconButton(
-                  onPressed: () {
-                    setState(() => _hideToken = !_hideToken);
-                  },
-                  icon: Icon(
-                    _hideToken ? Icons.visibility : Icons.visibility_off,
-                  ),
-                ),
-              ),
-            ),
             const SizedBox(height: 16),
             if (_error != null)
               Container(
@@ -376,7 +289,7 @@ class _ClientsPageState extends State<ClientsPage> {
                   style: TextStyle(color: Colors.red.shade700),
                 ),
               ),
-            if (_tokenController.text.trim().isEmpty && _clients.isEmpty)
+            if ((_token == null || _token!.isEmpty) && _clients.isEmpty)
               Container(
                 width: double.infinity,
                 margin: const EdgeInsets.only(bottom: 12),
@@ -385,7 +298,7 @@ class _ClientsPageState extends State<ClientsPage> {
                   color: Colors.blue.shade50,
                   borderRadius: BorderRadius.circular(8),
                 ),
-                child: const Text('Fetch token first, then load clients.'),
+                child: const Text('Login required. Please sign in again.'),
               ),
             Expanded(
               child: _loading

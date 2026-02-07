@@ -15,11 +15,6 @@ class AdminPage extends StatefulWidget {
 }
 
 class _AdminPageState extends State<AdminPage> {
-  final _emailController = TextEditingController(
-    text: 'admin@andersonexpress.com',
-  );
-  final _passwordController = TextEditingController(text: 'dev-password');
-  final _tokenController = TextEditingController();
   late BackendKind _selectedBackend;
   late final TextEditingController _hostController;
 
@@ -27,9 +22,9 @@ class _AdminPageState extends State<AdminPage> {
   ApiService get _api => ApiService();
 
   bool _loading = false;
-  bool _hideToken = true;
   String? _error;
   List<Employee> _employees = const [];
+  String? get _token => AuthSession.current?.token.trim();
 
   @override
   void initState() {
@@ -44,7 +39,6 @@ class _AdminPageState extends State<AdminPage> {
       });
       return;
     }
-    _tokenController.text = session.token;
     WidgetsBinding.instance.addPostFrameCallback((_) async {
       if (!mounted) return;
       if (!session.user.isAdmin) {
@@ -61,9 +55,6 @@ class _AdminPageState extends State<AdminPage> {
   @override
   void dispose() {
     _hostController.dispose();
-    _emailController.dispose();
-    _passwordController.dispose();
-    _tokenController.dispose();
     super.dispose();
   }
 
@@ -78,45 +69,17 @@ class _AdminPageState extends State<AdminPage> {
     );
     BackendRuntime.setConfig(next);
     if (!mounted) return;
-    setState(() {
-      _error = null;
-      _employees = const [];
-      _tokenController.text = AuthSession.current?.token ?? '';
-    });
-    await _loadEmployees();
-    if (!mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(content: Text('Backend set to ${next.label} (${next.baseUrl})')),
     );
-  }
-
-  Future<void> _fetchToken() async {
-    try {
-      final token = await _api.fetchToken(
-        email: _emailController.text.trim(),
-        password: _passwordController.text,
-      );
-      if (!mounted) return;
-      setState(() {
-        _tokenController.text = token;
-      });
-      await _loadEmployees();
-      if (!mounted) return;
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(const SnackBar(content: Text('Token fetched')));
-    } catch (error) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text(error.toString())));
-    }
+    Navigator.pushReplacementNamed(context, '/home');
   }
 
   Future<void> _loadEmployees() async {
-    if (_tokenController.text.trim().isEmpty) {
+    final token = _token;
+    if (token == null || token.isEmpty) {
       setState(() {
-        _error = 'Fetch token first, then load employees.';
+        _error = 'Login required. Please sign in again.';
       });
       return;
     }
@@ -127,9 +90,7 @@ class _AdminPageState extends State<AdminPage> {
     });
 
     try {
-      final employees = await _api.listEmployees(
-        bearerToken: _tokenController.text,
-      );
+      final employees = await _api.listEmployees(bearerToken: token);
       if (!mounted) return;
       setState(() {
         _employees = employees;
@@ -165,10 +126,7 @@ class _AdminPageState extends State<AdminPage> {
     if (result == null) return;
 
     try {
-      final created = await _api.createEmployee(
-        result,
-        bearerToken: _tokenController.text,
-      );
+      final created = await _api.createEmployee(result, bearerToken: _token);
       await _loadEmployees();
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
@@ -204,11 +162,7 @@ class _AdminPageState extends State<AdminPage> {
     if (result == null) return;
 
     try {
-      await _api.updateEmployee(
-        employee.id,
-        result,
-        bearerToken: _tokenController.text,
-      );
+      await _api.updateEmployee(employee.id, result, bearerToken: _token);
       await _loadEmployees();
       if (!mounted) return;
       ScaffoldMessenger.of(
@@ -246,7 +200,7 @@ class _AdminPageState extends State<AdminPage> {
     try {
       final message = await _api.deleteEmployee(
         employee.id,
-        bearerToken: _tokenController.text,
+        bearerToken: _token,
       );
       await _loadEmployees();
       if (!mounted) return;
@@ -327,51 +281,6 @@ class _AdminPageState extends State<AdminPage> {
                 ),
               ],
             ),
-            const SizedBox(height: 12),
-            TextField(
-              controller: _emailController,
-              decoration: const InputDecoration(
-                labelText: 'Auth Email',
-                border: OutlineInputBorder(),
-              ),
-            ),
-            const SizedBox(height: 12),
-            TextField(
-              controller: _passwordController,
-              obscureText: true,
-              decoration: const InputDecoration(
-                labelText: 'Auth Password',
-                border: OutlineInputBorder(),
-              ),
-            ),
-            const SizedBox(height: 12),
-            Align(
-              alignment: Alignment.centerLeft,
-              child: OutlinedButton.icon(
-                onPressed: _loading ? null : _fetchToken,
-                icon: const Icon(Icons.key),
-                label: const Text('Fetch Token'),
-              ),
-            ),
-            const SizedBox(height: 12),
-            TextField(
-              controller: _tokenController,
-              obscureText: _hideToken,
-              maxLines: 1,
-              decoration: InputDecoration(
-                labelText: 'Bearer Token',
-                border: const OutlineInputBorder(),
-                isDense: true,
-                suffixIcon: IconButton(
-                  onPressed: () {
-                    setState(() => _hideToken = !_hideToken);
-                  },
-                  icon: Icon(
-                    _hideToken ? Icons.visibility : Icons.visibility_off,
-                  ),
-                ),
-              ),
-            ),
             const SizedBox(height: 16),
             if (_error != null)
               Container(
@@ -387,7 +296,7 @@ class _AdminPageState extends State<AdminPage> {
                   style: TextStyle(color: Colors.red.shade700),
                 ),
               ),
-            if (_tokenController.text.trim().isEmpty && _employees.isEmpty)
+            if ((_token == null || _token!.isEmpty) && _employees.isEmpty)
               Container(
                 width: double.infinity,
                 margin: const EdgeInsets.only(bottom: 12),
@@ -396,7 +305,7 @@ class _AdminPageState extends State<AdminPage> {
                   color: Colors.blue.shade50,
                   borderRadius: BorderRadius.circular(8),
                 ),
-                child: const Text('Fetch token first, then load employees.'),
+                child: const Text('Login required. Please sign in again.'),
               ),
             Expanded(
               child: _loading

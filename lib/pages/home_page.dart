@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 
 import '../models/backend_config.dart';
+import '../models/job.dart';
+import '../models/location.dart';
 import '../services/api_service.dart';
 import '../services/auth_session.dart';
 import '../services/backend_runtime.dart';
@@ -18,13 +20,15 @@ class _HomePageState extends State<HomePage> {
   bool pythonOk = false;
   bool vaporOk = false;
   bool loading = true;
-  bool visible = false;
-
+  String? error;
   DateTime? lastChecked;
 
-  final ApiService _api = ApiService();
   late BackendKind _selectedBackend;
   late final TextEditingController _hostController;
+  List<Job> _adminPendingJobs = const [];
+  List<Job> _cleanerJobs = const [];
+  List<Location> _clientLocations = const [];
+  List<Job> _clientPendingJobs = const [];
 
   BackendConfig get _activeBackend => BackendRuntime.config;
   AuthSessionState? get _session => AuthSession.current;
@@ -52,6 +56,8 @@ class _HomePageState extends State<HomePage> {
   @override
   void initState() {
     super.initState();
+    _selectedBackend = _activeBackend.kind;
+    _hostController = TextEditingController(text: BackendRuntime.host);
     if (_session == null) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (!mounted) return;
@@ -59,9 +65,7 @@ class _HomePageState extends State<HomePage> {
       });
       return;
     }
-    _selectedBackend = _activeBackend.kind;
-    _hostController = TextEditingController(text: BackendRuntime.host);
-    _checkServices();
+    _bootstrap();
   }
 
   @override
@@ -70,30 +74,88 @@ class _HomePageState extends State<HomePage> {
     super.dispose();
   }
 
-  Future<void> _checkServices() async {
+  Future<void> _bootstrap() async {
+    final valid = await _ensureSessionIsValid();
+    if (!mounted) return;
+    if (!valid) {
+      Navigator.pushReplacementNamed(context, '/');
+      return;
+    }
+    await _loadDashboard();
+  }
+
+  Future<bool> _ensureSessionIsValid() async {
+    final session = _session;
+    if (session == null) {
+      return false;
+    }
+    try {
+      final user = await ApiService().whoAmI(bearerToken: session.token);
+      AuthSession.set(AuthSessionState(token: session.token, user: user));
+      return true;
+    } catch (_) {
+      AuthSession.clear();
+      return false;
+    }
+  }
+
+  Future<void> _loadDashboard() async {
     setState(() {
       loading = true;
-    });
-    final results = await Future.wait([
-      _api.checkHealth(_healthConfigFor(BackendKind.rust)),
-      _api.checkHealth(_healthConfigFor(BackendKind.python)),
-      _api.checkHealth(_healthConfigFor(BackendKind.vapor)),
-    ]);
-
-    if (!mounted) return;
-
-    setState(() {
-      rustOk = results[0];
-      pythonOk = results[1];
-      vaporOk = results[2];
-      loading = false;
-      lastChecked = DateTime.now();
+      error = null;
     });
 
-    // Trigger entrance animation
-    await Future.delayed(const Duration(milliseconds: 100));
-    if (mounted) {
-      setState(() => visible = true);
+    try {
+      final api = ApiService();
+      final results = await Future.wait([
+        api.checkHealth(_healthConfigFor(BackendKind.rust)),
+        api.checkHealth(_healthConfigFor(BackendKind.python)),
+        api.checkHealth(_healthConfigFor(BackendKind.vapor)),
+      ]);
+
+      final token = _session?.token ?? '';
+      List<Job> adminPending = const [];
+      List<Job> cleanerJobs = const [];
+      List<Location> clientLocations = const [];
+      List<Job> clientPending = const [];
+
+      if (_isAdmin) {
+        adminPending = await api.listJobs(
+          statusFilter: const ['pending'],
+          bearerToken: token,
+        );
+      } else if (_isEmployee) {
+        cleanerJobs = await api.listJobs(bearerToken: token);
+      } else if (_isClient) {
+        clientLocations = await api.listLocations(bearerToken: token);
+        clientPending = await api.listJobs(
+          statusFilter: const ['pending'],
+          bearerToken: token,
+        );
+      }
+
+      if (!mounted) return;
+      setState(() {
+        rustOk = results[0];
+        pythonOk = results[1];
+        vaporOk = results[2];
+        _adminPendingJobs = adminPending;
+        _cleanerJobs = cleanerJobs;
+        _clientLocations = clientLocations;
+        _clientPendingJobs = clientPending;
+        lastChecked = DateTime.now();
+      });
+    } catch (loadError) {
+      if (!mounted) return;
+      setState(() {
+        error = loadError.toString();
+      });
+    } finally {
+      if (mounted) {
+        setState(() {
+          loading = false;
+        });
+      }
     }
   }
 
@@ -108,14 +170,20 @@ class _HomePageState extends State<HomePage> {
     );
     BackendRuntime.setConfig(next);
     if (!mounted) return;
-    setState(() {});
-    await _checkServices();
+    final stillValid = await _ensureSessionIsValid();
     if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text('Active backend set to ${next.label} (${next.baseUrl})'),
-      ),
-    );
+    if (!stillValid) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text(
+            'Session is not valid on selected backend. Please sign in again.',
+          ),
+        ),
+      );
+      Navigator.pushReplacementNamed(context, '/');
+      return;
+    }
+    await _loadDashboard();
   }
 
   String _timeAgo(DateTime time) {
@@ -125,33 +193,154 @@ class _HomePageState extends State<HomePage> {
     return '${seconds ~/ 60} minutes ago';
   }
 
-  Widget _statusCard(String name, bool ok) {
+  Widget _statusChip(String name, bool ok) {
     final color = ok ? Colors.green : Colors.red;
-    final icon = ok ? Icons.check_circle : Icons.error;
+    return Chip(
+      avatar: Icon(
+        ok ? Icons.check_circle : Icons.error,
+        size: 18,
+        color: color,
+      ),
+      label: Text('$name: ${ok ? 'Online' : 'Offline'}'),
+      backgroundColor: color.withValues(alpha: 0.1),
+      side: BorderSide(color: color.withValues(alpha: 0.35)),
+      labelStyle: TextStyle(color: color, fontWeight: FontWeight.w700),
+    );
+  }
 
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-      decoration: BoxDecoration(
-        color: color.withValues(alpha: 0.08),
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: color.withValues(alpha: 0.4)),
+  Widget _cardList({
+    required String title,
+    required String empty,
+    required List<Widget> children,
+  }) {
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(title, style: const TextStyle(fontWeight: FontWeight.w700)),
+            const SizedBox(height: 10),
+            if (children.isEmpty)
+              Text(empty, style: const TextStyle(color: Colors.black54)),
+            ...children,
+          ],
+        ),
       ),
-      child: Row(
-        children: [
-          Icon(icon, color: color, size: 28),
-          const SizedBox(width: 16),
-          Expanded(
-            child: Text(
-              name,
-              style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w500),
+    );
+  }
+
+  Widget _buildAdminLanding() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Wrap(
+          spacing: 10,
+          runSpacing: 10,
+          children: [
+            FilledButton.icon(
+              onPressed: () => Navigator.pushNamed(context, '/admin'),
+              icon: const Icon(Icons.badge),
+              label: const Text('Employees'),
             ),
-          ),
-          Text(
-            ok ? 'Online' : 'Offline',
-            style: TextStyle(fontWeight: FontWeight.bold, color: color),
-          ),
-        ],
-      ),
+            FilledButton.icon(
+              onPressed: () => Navigator.pushNamed(context, '/clients'),
+              icon: const Icon(Icons.business),
+              label: const Text('Clients'),
+            ),
+            FilledButton.icon(
+              onPressed: () => Navigator.pushNamed(context, '/locations'),
+              icon: const Icon(Icons.location_on),
+              label: const Text('Locations'),
+            ),
+            FilledButton.icon(
+              onPressed: () => Navigator.pushNamed(context, '/jobs'),
+              icon: const Icon(Icons.work),
+              label: const Text('Jobs'),
+            ),
+          ],
+        ),
+        const SizedBox(height: 14),
+        _cardList(
+          title: 'Pending Jobs Overview',
+          empty: 'No pending jobs',
+          children: _adminPendingJobs
+              .map(
+                (job) => ListTile(
+                  contentPadding: EdgeInsets.zero,
+                  dense: true,
+                  leading: const Icon(Icons.schedule),
+                  title: Text(job.jobNumber),
+                  subtitle: Text(
+                    'Location #${job.locationId} • ${job.scheduledDate}',
+                  ),
+                ),
+              )
+              .toList(),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildCleanerLanding() {
+    return _cardList(
+      title: 'Your Assigned Jobs',
+      empty: 'No jobs assigned',
+      children: _cleanerJobs
+          .map(
+            (job) => ListTile(
+              contentPadding: EdgeInsets.zero,
+              dense: true,
+              title: Text(job.jobNumber),
+              subtitle: Text('${job.status} • ${job.scheduledDate}'),
+              trailing: IconButton(
+                icon: const Icon(Icons.chevron_right),
+                onPressed: () => Navigator.pushNamed(context, '/cleaner'),
+              ),
+            ),
+          )
+          .toList(),
+    );
+  }
+
+  Widget _buildClientLanding() {
+    return Column(
+      children: [
+        _cardList(
+          title: 'Your Locations',
+          empty: 'No locations found',
+          children: _clientLocations
+              .map(
+                (location) => ListTile(
+                  contentPadding: EdgeInsets.zero,
+                  dense: true,
+                  title: Text(location.locationNumber),
+                  subtitle: Text(
+                    '${location.type} • ${location.address ?? 'No address'}',
+                  ),
+                ),
+              )
+              .toList(),
+        ),
+        const SizedBox(height: 12),
+        _cardList(
+          title: 'Pending Jobs For Your Locations',
+          empty: 'No pending jobs',
+          children: _clientPendingJobs
+              .map(
+                (job) => ListTile(
+                  contentPadding: EdgeInsets.zero,
+                  dense: true,
+                  leading: const Icon(Icons.pending_actions),
+                  title: Text(job.jobNumber),
+                  subtitle: Text(
+                    'Location #${job.locationId} • ${job.scheduledDate}',
+                  ),
+                ),
+              )
+              .toList(),
+        ),
+      ],
     );
   }
 
@@ -159,8 +348,7 @@ class _HomePageState extends State<HomePage> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('System Status'),
-        elevation: 0,
+        title: const Text('Anderson Express'),
         bottom: const BackendBanner(),
         actions: [
           IconButton(
@@ -172,278 +360,118 @@ class _HomePageState extends State<HomePage> {
             tooltip: 'Logout',
           ),
           IconButton(
-            onPressed: _checkServices,
+            onPressed: _loadDashboard,
             icon: const Icon(Icons.refresh),
             tooltip: 'Refresh health checks',
           ),
         ],
       ),
-      body: Container(
-        decoration: const BoxDecoration(
-          gradient: LinearGradient(
-            begin: Alignment.topCenter,
-            end: Alignment.bottomCenter,
-            colors: [Color(0xFFF5F7FA), Color(0xFFE4E8ED)],
-          ),
-        ),
-        child: SafeArea(
-          child: SingleChildScrollView(
-            padding: const EdgeInsets.all(24.0),
-            child: Center(
-              child: loading
-                  ? const CircularProgressIndicator()
-                  : AnimatedOpacity(
-                      opacity: visible ? 1 : 0,
-                      duration: const Duration(milliseconds: 600),
-                      curve: Curves.easeOut,
-                      child: AnimatedScale(
-                        scale: visible ? 1 : 0.96,
-                        duration: const Duration(milliseconds: 600),
-                        curve: Curves.easeOut,
-                        child: Card(
-                          elevation: 4,
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(16),
-                          ),
-                          child: SingleChildScrollView(
-                            padding: const EdgeInsets.all(32.0),
-                            child: Column(
-                              mainAxisSize: MainAxisSize.min,
+      body: SafeArea(
+        child: loading
+            ? const Center(child: CircularProgressIndicator())
+            : RefreshIndicator(
+                onRefresh: _loadDashboard,
+                child: ListView(
+                  padding: const EdgeInsets.all(16),
+                  children: [
+                    Card(
+                      child: Padding(
+                        padding: const EdgeInsets.all(16),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            const Text(
+                              'Service Status',
+                              style: TextStyle(fontWeight: FontWeight.w700),
+                            ),
+                            const SizedBox(height: 10),
+                            Wrap(
+                              spacing: 8,
+                              runSpacing: 8,
                               children: [
-                                // Animated logo placeholder
-                                AnimatedScale(
-                                  scale: visible ? 1 : 0.85,
-                                  duration: const Duration(seconds: 1),
-                                  curve: Curves.easeOutBack,
-                                  child: Container(
-                                    width: 72,
-                                    height: 72,
-                                    decoration: BoxDecoration(
-                                      color: Colors.blue.shade100,
-                                      borderRadius: BorderRadius.circular(16),
+                                _statusChip('Rust', rustOk),
+                                _statusChip('Python', pythonOk),
+                                _statusChip('Vapor', vaporOk),
+                              ],
+                            ),
+                            const SizedBox(height: 12),
+                            const Text(
+                              'Switch API Backend',
+                              style: TextStyle(fontWeight: FontWeight.w700),
+                            ),
+                            const SizedBox(height: 8),
+                            Wrap(
+                              spacing: 8,
+                              runSpacing: 8,
+                              children: BackendKind.values
+                                  .map(
+                                    (kind) => ChoiceChip(
+                                      label: Text(switch (kind) {
+                                        BackendKind.rust => 'Rust',
+                                        BackendKind.python => 'Python',
+                                        BackendKind.vapor => 'Vapor',
+                                      }),
+                                      selected: _selectedBackend == kind,
+                                      onSelected: (_) => setState(
+                                        () => _selectedBackend = kind,
+                                      ),
                                     ),
-                                    child: const Icon(
-                                      Icons.local_shipping,
-                                      size: 40,
-                                      color: Colors.blue,
-                                    ),
-                                  ),
-                                ),
-
-                                const SizedBox(height: 20),
-
-                                const Text(
-                                  'Services Online',
-                                  style: TextStyle(
-                                    fontSize: 26,
-                                    fontWeight: FontWeight.bold,
-                                  ),
-                                ),
-                                const SizedBox(height: 8),
-                                const Text(
-                                  'Live system health overview',
-                                  style: TextStyle(color: Colors.grey),
-                                ),
-                                const SizedBox(height: 6),
-                                Container(
-                                  width: double.infinity,
-                                  padding: const EdgeInsets.all(14),
-                                  decoration: BoxDecoration(
-                                    color: Colors.blue.shade50,
-                                    borderRadius: BorderRadius.circular(12),
-                                    border: Border.all(
-                                      color: Colors.blue.shade200,
+                                  )
+                                  .toList(),
+                            ),
+                            const SizedBox(height: 8),
+                            Row(
+                              children: [
+                                Expanded(
+                                  child: TextField(
+                                    controller: _hostController,
+                                    decoration: const InputDecoration(
+                                      labelText: 'Backend Host',
+                                      border: OutlineInputBorder(),
+                                      isDense: true,
                                     ),
                                   ),
-                                  child: Column(
-                                    crossAxisAlignment:
-                                        CrossAxisAlignment.start,
-                                    children: [
-                                      Text(
-                                        'ACTIVE BACKEND',
-                                        style: TextStyle(
-                                          fontSize: 12,
-                                          fontWeight: FontWeight.w700,
-                                          color: Colors.blue.shade900,
-                                          letterSpacing: 0.8,
-                                        ),
-                                      ),
-                                      const SizedBox(height: 6),
-                                      Text(
-                                        _activeBackend.label,
-                                        style: const TextStyle(
-                                          fontSize: 24,
-                                          fontWeight: FontWeight.w800,
-                                        ),
-                                      ),
-                                      const SizedBox(height: 2),
-                                      Text(
-                                        _activeBackend.baseUrl,
-                                        style: TextStyle(
-                                          fontSize: 13,
-                                          color: Colors.blue.shade900,
-                                        ),
-                                      ),
-                                    ],
-                                  ),
                                 ),
-                                const SizedBox(height: 12),
-                                Wrap(
-                                  spacing: 8,
-                                  runSpacing: 8,
-                                  children: BackendKind.values
-                                      .map(
-                                        (kind) => ChoiceChip(
-                                          label: Text(switch (kind) {
-                                            BackendKind.rust => 'Rust',
-                                            BackendKind.python => 'Python',
-                                            BackendKind.vapor => 'Vapor',
-                                          }),
-                                          selected: _selectedBackend == kind,
-                                          onSelected: (_) {
-                                            setState(
-                                              () => _selectedBackend = kind,
-                                            );
-                                          },
-                                        ),
-                                      )
-                                      .toList(),
-                                ),
-                                const SizedBox(height: 8),
-                                Row(
-                                  children: [
-                                    Expanded(
-                                      child: TextField(
-                                        controller: _hostController,
-                                        decoration: const InputDecoration(
-                                          labelText:
-                                              'Backend Host (e.g. archlinux)',
-                                          border: OutlineInputBorder(),
-                                          isDense: true,
-                                        ),
-                                      ),
-                                    ),
-                                    const SizedBox(width: 8),
-                                    FilledButton.icon(
-                                      onPressed: _applyBackendSelection,
-                                      icon: const Icon(Icons.check),
-                                      label: const Text('Apply'),
-                                    ),
-                                  ],
-                                ),
-                                if (lastChecked != null) ...[
-                                  const SizedBox(height: 6),
-                                  Text(
-                                    'Last checked: ${_timeAgo(lastChecked!)}',
-                                    style: const TextStyle(
-                                      fontSize: 13,
-                                      color: Colors.grey,
-                                    ),
-                                  ),
-                                ],
-
-                                const SizedBox(height: 32),
-
-                                _statusCard('Rust API', rustOk),
-                                const SizedBox(height: 12),
-                                _statusCard('Python API', pythonOk),
-                                const SizedBox(height: 12),
-                                _statusCard('Vapor API', vaporOk),
-
-                                const SizedBox(height: 32),
-                                const Divider(),
-                                const SizedBox(height: 20),
-
-                                const Text(
-                                  'Enter Demo As',
-                                  style: TextStyle(
-                                    fontSize: 20,
-                                    fontWeight: FontWeight.w600,
-                                  ),
-                                ),
-                                const SizedBox(height: 16),
-
-                                Wrap(
-                                  alignment: WrapAlignment.center,
-                                  spacing: 12,
-                                  runSpacing: 12,
-                                  children: [
-                                    if (_isEmployee)
-                                      ElevatedButton.icon(
-                                        onPressed: () {
-                                          Navigator.pushNamed(
-                                            context,
-                                            '/cleaner',
-                                          );
-                                        },
-                                        icon: const Icon(
-                                          Icons.cleaning_services,
-                                        ),
-                                        label: const Text('Cleaner'),
-                                      ),
-                                    if (_isAdmin) ...[
-                                      ElevatedButton.icon(
-                                        onPressed: () {
-                                          Navigator.pushNamed(
-                                            context,
-                                            '/admin',
-                                          );
-                                        },
-                                        icon: const Icon(
-                                          Icons.admin_panel_settings,
-                                        ),
-                                        label: const Text('Employees'),
-                                      ),
-                                      ElevatedButton.icon(
-                                        onPressed: () {
-                                          Navigator.pushNamed(
-                                            context,
-                                            '/clients',
-                                          );
-                                        },
-                                        icon: const Icon(Icons.business),
-                                        label: const Text('Clients'),
-                                      ),
-                                      ElevatedButton.icon(
-                                        onPressed: () {
-                                          Navigator.pushNamed(context, '/jobs');
-                                        },
-                                        icon: const Icon(Icons.work),
-                                        label: const Text('Jobs'),
-                                      ),
-                                    ],
-                                    if (_isAdmin || _isClient)
-                                      ElevatedButton.icon(
-                                        onPressed: () {
-                                          Navigator.pushNamed(
-                                            context,
-                                            '/locations',
-                                          );
-                                        },
-                                        icon: const Icon(Icons.location_on),
-                                        label: const Text('Locations'),
-                                      ),
-                                    ElevatedButton.icon(
-                                      onPressed: () {
-                                        Navigator.pushNamed(
-                                          context,
-                                          '/qa-smoke',
-                                        );
-                                      },
-                                      icon: const Icon(Icons.science),
-                                      label: const Text('QA Smoke'),
-                                    ),
-                                  ],
+                                const SizedBox(width: 8),
+                                FilledButton.icon(
+                                  onPressed: _applyBackendSelection,
+                                  icon: const Icon(Icons.check),
+                                  label: const Text('Apply'),
                                 ),
                               ],
                             ),
-                          ),
+                            if (lastChecked != null) ...[
+                              const SizedBox(height: 8),
+                              Text(
+                                'Last checked: ${_timeAgo(lastChecked!)}',
+                                style: const TextStyle(
+                                  fontSize: 12,
+                                  color: Colors.black54,
+                                ),
+                              ),
+                            ],
+                          ],
                         ),
                       ),
                     ),
-            ),
-          ),
-        ),
+                    const SizedBox(height: 12),
+                    if (error != null)
+                      Card(
+                        color: Colors.red.shade50,
+                        child: Padding(
+                          padding: const EdgeInsets.all(12),
+                          child: Text(
+                            error!,
+                            style: TextStyle(color: Colors.red.shade700),
+                          ),
+                        ),
+                      ),
+                    if (_isAdmin) _buildAdminLanding(),
+                    if (_isEmployee) _buildCleanerLanding(),
+                    if (_isClient) _buildClientLanding(),
+                  ],
+                ),
+              ),
       ),
     );
   }

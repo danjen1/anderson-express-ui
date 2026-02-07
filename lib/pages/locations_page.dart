@@ -15,7 +15,6 @@ class LocationsPage extends StatefulWidget {
 }
 
 class _LocationsPageState extends State<LocationsPage> {
-  final _tokenController = TextEditingController();
   final _clientFilterController = TextEditingController();
   late BackendKind _selectedBackend;
   late final TextEditingController _hostController;
@@ -27,6 +26,7 @@ class _LocationsPageState extends State<LocationsPage> {
   String? _error;
   List<Location> _locations = const [];
   bool _isAdmin = false;
+  String? get _token => AuthSession.current?.token.trim();
 
   @override
   void initState() {
@@ -41,7 +41,6 @@ class _LocationsPageState extends State<LocationsPage> {
       });
       return;
     }
-    _tokenController.text = session.token;
     _isAdmin = session.user.isAdmin;
     WidgetsBinding.instance.addPostFrameCallback((_) async {
       if (!mounted) return;
@@ -61,7 +60,6 @@ class _LocationsPageState extends State<LocationsPage> {
   @override
   void dispose() {
     _hostController.dispose();
-    _tokenController.dispose();
     _clientFilterController.dispose();
     super.dispose();
   }
@@ -77,19 +75,21 @@ class _LocationsPageState extends State<LocationsPage> {
     );
     BackendRuntime.setConfig(next);
     if (!mounted) return;
-    setState(() {
-      _error = null;
-      _locations = const [];
-      _tokenController.text = AuthSession.current?.token ?? '';
-    });
-    await _loadLocations();
-    if (!mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(content: Text('Backend set to ${next.label} (${next.baseUrl})')),
     );
+    Navigator.pushReplacementNamed(context, '/home');
   }
 
   Future<void> _loadLocations() async {
+    final token = _token;
+    if (token == null || token.isEmpty) {
+      setState(() {
+        _error = 'Login required. Please sign in again.';
+      });
+      return;
+    }
+
     setState(() {
       _loading = true;
       _error = null;
@@ -99,7 +99,7 @@ class _LocationsPageState extends State<LocationsPage> {
       final filterClientId = int.tryParse(_clientFilterController.text.trim());
       final locations = await _api.listLocations(
         clientId: filterClientId,
-        bearerToken: _tokenController.text,
+        bearerToken: token,
       );
       if (!mounted) return;
       setState(() {
@@ -134,7 +134,7 @@ class _LocationsPageState extends State<LocationsPage> {
     if (result == null) return;
 
     try {
-      await _api.createLocation(result, bearerToken: _tokenController.text);
+      await _api.createLocation(result, bearerToken: _token);
       await _loadLocations();
       if (!mounted) return;
       ScaffoldMessenger.of(
@@ -164,11 +164,7 @@ class _LocationsPageState extends State<LocationsPage> {
     if (result == null) return;
 
     try {
-      await _api.updateLocation(
-        location.id,
-        result,
-        bearerToken: _tokenController.text,
-      );
+      await _api.updateLocation(location.id, result, bearerToken: _token);
       await _loadLocations();
       if (!mounted) return;
       ScaffoldMessenger.of(
@@ -214,7 +210,7 @@ class _LocationsPageState extends State<LocationsPage> {
     try {
       final message = await _api.deleteLocation(
         location.id,
-        bearerToken: _tokenController.text,
+        bearerToken: _token,
       );
       await _loadLocations();
       if (!mounted) return;
