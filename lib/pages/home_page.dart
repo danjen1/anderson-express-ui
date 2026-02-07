@@ -1,4 +1,6 @@
 import 'package:flutter/material.dart';
+
+import '../models/backend_config.dart';
 import '../services/api_service.dart';
 
 class HomePage extends StatefulWidget {
@@ -18,6 +20,7 @@ class _HomePageState extends State<HomePage> {
   DateTime? lastChecked;
 
   final ApiService _api = ApiService();
+  final BackendConfig _activeBackend = BackendConfig.fromEnvironment();
 
   @override
   void initState() {
@@ -27,9 +30,9 @@ class _HomePageState extends State<HomePage> {
 
   Future<void> _checkServices() async {
     final results = await Future.wait([
-      _api.checkHealth(ApiService.rustBase),
-      _api.checkHealth(ApiService.pythonBase),
-      _api.checkHealth(ApiService.vaporBase),
+      _api.checkHealth(ApiService.rustConfig),
+      _api.checkHealth(ApiService.pythonConfig),
+      _api.checkHealth(ApiService.vaporConfig),
     ]);
 
     if (!mounted) return;
@@ -155,6 +158,14 @@ class _HomePageState extends State<HomePage> {
                                 'Live system health overview',
                                 style: TextStyle(color: Colors.grey),
                               ),
+                              const SizedBox(height: 6),
+                              Text(
+                                'Active backend: ${_activeBackend.label} (${_activeBackend.baseUrl})',
+                                style: const TextStyle(
+                                  fontSize: 13,
+                                  color: Colors.grey,
+                                ),
+                              ),
                               if (lastChecked != null) ...[
                                 const SizedBox(height: 6),
                                 Text(
@@ -187,8 +198,10 @@ class _HomePageState extends State<HomePage> {
                               ),
                               const SizedBox(height: 16),
 
-                              Row(
-                                mainAxisAlignment: MainAxisAlignment.center,
+                              Wrap(
+                                alignment: WrapAlignment.center,
+                                spacing: 12,
+                                runSpacing: 12,
                                 children: [
                                   ElevatedButton.icon(
                                     onPressed: () {
@@ -197,7 +210,6 @@ class _HomePageState extends State<HomePage> {
                                     icon: const Icon(Icons.cleaning_services),
                                     label: const Text('Cleaner'),
                                   ),
-                                  const SizedBox(width: 16),
                                   ElevatedButton.icon(
                                     onPressed: () {
                                       Navigator.pushNamed(context, '/admin');
@@ -206,6 +218,13 @@ class _HomePageState extends State<HomePage> {
                                       Icons.admin_panel_settings,
                                     ),
                                     label: const Text('Admin'),
+                                  ),
+                                  ElevatedButton.icon(
+                                    onPressed: () {
+                                      Navigator.pushNamed(context, '/qa-smoke');
+                                    },
+                                    icon: const Icon(Icons.science),
+                                    label: const Text('QA Smoke'),
                                   ),
                                 ],
                               ),

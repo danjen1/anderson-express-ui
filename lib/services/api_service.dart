@@ -1,18 +1,198 @@
+import 'dart:convert';
+
 import 'package:http/http.dart' as http;
 
-class ApiService {
-  static const String rustBase = 'http://192.168.1.152:9000';
-  static const String pythonBase = 'http://192.168.1.152:8000';
-  static const String vaporBase = 'http://192.168.1.152:9001';
+import '../models/backend_config.dart';
+import '../models/employee.dart';
 
-  Future<bool> checkHealth(String baseUrl) async {
+class ApiService {
+  ApiService({BackendConfig? backend})
+    : _backend = backend ?? BackendConfig.fromEnvironment();
+
+  final BackendConfig _backend;
+
+  static BackendConfig get rustConfig => const BackendConfig(
+    kind: BackendKind.rust,
+    baseUrl: 'http://localhost:9000',
+    healthPath: '/api/v1/healthz',
+    employeesPath: '/api/v1/employees',
+  );
+
+  static BackendConfig get pythonConfig => const BackendConfig(
+    kind: BackendKind.python,
+    baseUrl: 'http://localhost:8000',
+    healthPath: '/api/v1/healthz',
+    employeesPath: '/api/v1/employees',
+  );
+
+  static BackendConfig get vaporConfig => const BackendConfig(
+    kind: BackendKind.vapor,
+    baseUrl: 'http://localhost:9001',
+    healthPath: '/api/v1/healthz',
+    employeesPath: '/api/v1/employees',
+  );
+
+  BackendConfig get backend => _backend;
+
+  Future<String> fetchToken({
+    required String email,
+    required String password,
+  }) async {
+    final body =
+        'username=${Uri.encodeQueryComponent(email)}&password=${Uri.encodeQueryComponent(password)}';
+    final response = await http
+        .post(
+          Uri.parse('${_backend.baseUrl}/api/v1/auth/token'),
+          headers: const {
+            'Content-Type': 'application/x-www-form-urlencoded',
+            'Accept': 'application/json',
+          },
+          body: body,
+        )
+        .timeout(const Duration(seconds: 8));
+
+    _throwIfError(response, fallbackMessage: 'Failed to fetch auth token');
+    final data = jsonDecode(response.body) as Map<String, dynamic>;
+    final token = data['access_token']?.toString() ?? '';
+    if (token.isEmpty) {
+      throw Exception('Auth response missing access_token');
+    }
+    return token;
+  }
+
+  Future<bool> checkHealth(BackendConfig backend) async {
     try {
       final response = await http
-          .get(Uri.parse('$baseUrl/healthz'))
+          .get(Uri.parse('${backend.baseUrl}${backend.healthPath}'))
           .timeout(const Duration(seconds: 5));
       return response.statusCode == 200;
     } catch (_) {
       return false;
     }
+  }
+
+  Future<List<Employee>> listEmployees({
+    List<String>? employeeStatus,
+    String? bearerToken,
+  }) async {
+    var uri = Uri.parse('${_backend.baseUrl}${_backend.employeesPath}');
+    if (employeeStatus != null && employeeStatus.isNotEmpty) {
+      final query = employeeStatus
+          .map((value) => 'employee_status=${Uri.encodeQueryComponent(value)}')
+          .join('&');
+      uri = Uri.parse('${uri.toString()}?$query');
+    }
+
+    final response = await http
+        .get(uri, headers: _headers(bearerToken))
+        .timeout(const Duration(seconds: 8));
+
+    _throwIfError(response, fallbackMessage: 'Failed to list employees');
+    final data = jsonDecode(response.body) as List<dynamic>;
+    return data
+        .map((item) => Employee.fromJson(item as Map<String, dynamic>))
+        .toList();
+  }
+
+  Future<Employee> createEmployee(
+    EmployeeCreateInput input, {
+    String? bearerToken,
+  }) async {
+    final response = await http
+        .post(
+          Uri.parse('${_backend.baseUrl}${_backend.employeesPath}'),
+          headers: _headers(bearerToken),
+          body: jsonEncode(input.toJson()),
+        )
+        .timeout(const Duration(seconds: 8));
+
+    _throwIfError(response, fallbackMessage: 'Failed to create employee');
+    final data = jsonDecode(response.body) as Map<String, dynamic>;
+    return Employee.fromJson(data);
+  }
+
+  Future<Employee> updateEmployee(
+    String employeeId,
+    EmployeeUpdateInput input, {
+    String? bearerToken,
+  }) async {
+    final payload = input.toJson();
+    if (payload.isEmpty) {
+      throw Exception('No update fields provided');
+    }
+
+    final response = await http
+        .patch(
+          Uri.parse('${_backend.baseUrl}${_backend.employeesPath}/$employeeId'),
+          headers: _headers(bearerToken),
+          body: jsonEncode(payload),
+        )
+        .timeout(const Duration(seconds: 8));
+
+    _throwIfError(response, fallbackMessage: 'Failed to update employee');
+    final data = jsonDecode(response.body) as Map<String, dynamic>;
+    return Employee.fromJson(data);
+  }
+
+  Future<String> deleteEmployee(
+    String employeeId, {
+    String? bearerToken,
+  }) async {
+    final response = await http
+        .delete(
+          Uri.parse('${_backend.baseUrl}${_backend.employeesPath}/$employeeId'),
+          headers: _headers(bearerToken),
+        )
+        .timeout(const Duration(seconds: 8));
+
+    _throwIfError(response, fallbackMessage: 'Failed to delete employee');
+    if (response.body.isEmpty) {
+      return 'Employee deleted';
+    }
+    final data = jsonDecode(response.body);
+    if (data is Map<String, dynamic> && data['message'] != null) {
+      return data['message'].toString();
+    }
+    return 'Employee deleted';
+  }
+
+  Map<String, String> _headers(String? bearerToken) {
+    final headers = <String, String>{
+      'Content-Type': 'application/json',
+      'Accept': 'application/json',
+    };
+    if (bearerToken != null && bearerToken.trim().isNotEmpty) {
+      headers['Authorization'] = 'Bearer ${bearerToken.trim()}';
+    }
+    return headers;
+  }
+
+  void _throwIfError(
+    http.Response response, {
+    required String fallbackMessage,
+  }) {
+    if (response.statusCode >= 200 && response.statusCode < 300) {
+      return;
+    }
+
+    String message = fallbackMessage;
+    try {
+      final data = jsonDecode(response.body);
+      if (data is Map<String, dynamic>) {
+        if (data['error'] != null) {
+          message = data['error'].toString();
+        } else if (data['detail'] != null) {
+          message = data['detail'].toString();
+        } else if (data['message'] != null) {
+          message = data['message'].toString();
+        }
+      }
+    } catch (_) {
+      if (response.body.isNotEmpty) {
+        message = response.body;
+      }
+    }
+
+    throw Exception('HTTP ${response.statusCode}: $message');
   }
 }

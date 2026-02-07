@@ -14,10 +14,7 @@ class LoginPage extends StatelessWidget {
             children: [
               const Text(
                 'Anderson Express',
-                style: TextStyle(
-                  fontSize: 32,
-                  fontWeight: FontWeight.bold,
-                ),
+                style: TextStyle(fontSize: 32, fontWeight: FontWeight.bold),
               ),
               const SizedBox(height: 8),
               const Text(
@@ -47,7 +44,10 @@ class LoginPage extends StatelessWidget {
                   Navigator.pushReplacementNamed(context, '/home');
                 },
                 style: ElevatedButton.styleFrom(
-                  padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 14),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 32,
+                    vertical: 14,
+                  ),
                 ),
                 child: const Text('Enter Demo Mode'),
               ),
