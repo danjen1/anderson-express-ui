@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../models/backend_config.dart';
+import '../models/client.dart';
 import '../models/employee.dart';
 import '../services/api_service.dart';
 
@@ -75,6 +76,17 @@ class _QaSmokePageState extends State<QaSmokePage> {
     _log('Token fetched');
   }
 
+  Future<String> _ensureToken(ApiService service) async {
+    if (_token == null || _token!.isEmpty) {
+      await _fetchToken();
+    }
+    final token = _token;
+    if (token == null || token.isEmpty) {
+      throw Exception('Token missing');
+    }
+    return token;
+  }
+
   Future<void> _runEmployeeSmoke() async {
     setState(() {
       _running = true;
@@ -83,28 +95,24 @@ class _QaSmokePageState extends State<QaSmokePage> {
 
     final service = ApiService(backend: _activeConfig());
     try {
-      await _fetchToken();
-      final token = _token;
-      if (token == null || token.isEmpty) {
-        throw Exception('Token missing');
-      }
-
+      final token = await _ensureToken(service);
       final suffix = DateTime.now().millisecondsSinceEpoch;
+
       final created = await service.createEmployee(
         EmployeeCreateInput(
-          name: 'QA Smoke $suffix',
-          email: 'qa.smoke.$suffix@example.com',
+          name: 'QA Smoke Employee $suffix',
+          email: 'qa.smoke.employee.$suffix@example.com',
           accessLevel: 'USER',
           city: 'QA',
           state: 'SM',
         ),
         bearerToken: token,
       );
-      _log('Create: ${created.id}');
+      _log('Employee create: ${created.id}');
 
       final listed = await service.listEmployees(bearerToken: token);
       final found = listed.any((e) => e.id == created.id);
-      _log('List: ${found ? "found created employee" : "not found"}');
+      _log('Employee list: ${found ? "found created employee" : "not found"}');
       if (!found) {
         throw Exception('Created employee missing from list');
       }
@@ -114,16 +122,69 @@ class _QaSmokePageState extends State<QaSmokePage> {
         const EmployeeUpdateInput(city: 'QA-UPDATED'),
         bearerToken: token,
       );
-      _log('Update: city=${updated.city ?? ""}');
+      _log('Employee update: city=${updated.city ?? ""}');
 
       final deleted = await service.deleteEmployee(
         created.id,
         bearerToken: token,
       );
-      _log('Delete: $deleted');
-      _log('Smoke test passed');
+      _log('Employee delete: $deleted');
+      _log('Employee smoke passed');
     } catch (error) {
-      _log('Smoke test failed: $error');
+      _log('Employee smoke failed: $error');
+    } finally {
+      if (mounted) {
+        setState(() {
+          _running = false;
+        });
+      }
+    }
+  }
+
+  Future<void> _runClientSmoke() async {
+    setState(() {
+      _running = true;
+      _logs.clear();
+    });
+
+    final service = ApiService(backend: _activeConfig());
+    try {
+      final token = await _ensureToken(service);
+      final suffix = DateTime.now().millisecondsSinceEpoch;
+
+      final created = await service.createClient(
+        ClientCreateInput(
+          name: 'QA Smoke Client $suffix',
+          email: 'qa.smoke.client.$suffix@example.com',
+          city: 'QA',
+          state: 'SM',
+        ),
+        bearerToken: token,
+      );
+      _log('Client create: ${created.id}');
+
+      final listed = await service.listClients(bearerToken: token);
+      final found = listed.any((c) => c.id == created.id);
+      _log('Client list: ${found ? "found created client" : "not found"}');
+      if (!found) {
+        throw Exception('Created client missing from list');
+      }
+
+      final updated = await service.updateClient(
+        created.id,
+        const ClientUpdateInput(city: 'QA-UPDATED'),
+        bearerToken: token,
+      );
+      _log('Client update: city=${updated.city ?? ""}');
+
+      final deleted = await service.deleteClient(
+        created.id,
+        bearerToken: token,
+      );
+      _log('Client delete: $deleted');
+      _log('Client smoke passed');
+    } catch (error) {
+      _log('Client smoke failed: $error');
     } finally {
       if (mounted) {
         setState(() {
@@ -136,7 +197,7 @@ class _QaSmokePageState extends State<QaSmokePage> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('QA Smoke - Employee CRUD')),
+      appBar: AppBar(title: const Text('QA Smoke - Employee + Client CRUD')),
       body: Padding(
         padding: const EdgeInsets.all(16),
         child: Column(
@@ -194,14 +255,15 @@ class _QaSmokePageState extends State<QaSmokePage> {
               ),
             ),
             const SizedBox(height: 12),
-            Row(
+            Wrap(
+              spacing: 12,
+              runSpacing: 12,
               children: [
                 OutlinedButton.icon(
                   onPressed: _running ? null : _fetchToken,
                   icon: const Icon(Icons.key),
                   label: const Text('Fetch Token'),
                 ),
-                const SizedBox(width: 12),
                 FilledButton.icon(
                   onPressed: _running ? null : _runEmployeeSmoke,
                   icon: _running
@@ -210,8 +272,19 @@ class _QaSmokePageState extends State<QaSmokePage> {
                           height: 16,
                           child: CircularProgressIndicator(strokeWidth: 2),
                         )
-                      : const Icon(Icons.play_arrow),
+                      : const Icon(Icons.badge),
                   label: const Text('Run Employee Smoke'),
+                ),
+                FilledButton.icon(
+                  onPressed: _running ? null : _runClientSmoke,
+                  icon: _running
+                      ? const SizedBox(
+                          width: 16,
+                          height: 16,
+                          child: CircularProgressIndicator(strokeWidth: 2),
+                        )
+                      : const Icon(Icons.business),
+                  label: const Text('Run Client Smoke'),
                 ),
               ],
             ),

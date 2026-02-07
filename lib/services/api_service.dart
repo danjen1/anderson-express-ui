@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'package:http/http.dart' as http;
 
 import '../models/backend_config.dart';
+import '../models/client.dart';
 import '../models/employee.dart';
 
 class ApiService {
@@ -154,6 +155,80 @@ class ApiService {
       return data['message'].toString();
     }
     return 'Employee deleted';
+  }
+
+  Future<List<Client>> listClients({String? bearerToken}) async {
+    final response = await http
+        .get(
+          Uri.parse('${_backend.baseUrl}/api/v1/clients'),
+          headers: _headers(bearerToken),
+        )
+        .timeout(const Duration(seconds: 8));
+
+    _throwIfError(response, fallbackMessage: 'Failed to list clients');
+    final data = jsonDecode(response.body) as List<dynamic>;
+    return data
+        .map((item) => Client.fromJson(item as Map<String, dynamic>))
+        .toList();
+  }
+
+  Future<Client> createClient(
+    ClientCreateInput input, {
+    String? bearerToken,
+  }) async {
+    final response = await http
+        .post(
+          Uri.parse('${_backend.baseUrl}/api/v1/clients'),
+          headers: _headers(bearerToken),
+          body: jsonEncode(input.toJson()),
+        )
+        .timeout(const Duration(seconds: 8));
+
+    _throwIfError(response, fallbackMessage: 'Failed to create client');
+    final data = jsonDecode(response.body) as Map<String, dynamic>;
+    return Client.fromJson(data);
+  }
+
+  Future<Client> updateClient(
+    String clientId,
+    ClientUpdateInput input, {
+    String? bearerToken,
+  }) async {
+    final payload = input.toJson();
+    if (payload.isEmpty) {
+      throw Exception('No update fields provided');
+    }
+
+    final response = await http
+        .patch(
+          Uri.parse('${_backend.baseUrl}/api/v1/clients/$clientId'),
+          headers: _headers(bearerToken),
+          body: jsonEncode(payload),
+        )
+        .timeout(const Duration(seconds: 8));
+
+    _throwIfError(response, fallbackMessage: 'Failed to update client');
+    final data = jsonDecode(response.body) as Map<String, dynamic>;
+    return Client.fromJson(data);
+  }
+
+  Future<String> deleteClient(String clientId, {String? bearerToken}) async {
+    final response = await http
+        .delete(
+          Uri.parse('${_backend.baseUrl}/api/v1/clients/$clientId'),
+          headers: _headers(bearerToken),
+        )
+        .timeout(const Duration(seconds: 8));
+
+    _throwIfError(response, fallbackMessage: 'Failed to delete client');
+    if (response.body.isEmpty) {
+      return 'Client deleted';
+    }
+    final data = jsonDecode(response.body);
+    if (data is Map<String, dynamic> && data['message'] != null) {
+      return data['message'].toString();
+    }
+    return 'Client deleted';
   }
 
   Map<String, String> _headers(String? bearerToken) {

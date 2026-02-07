@@ -40,7 +40,7 @@ curl -X POST http://localhost:9001/api/v1/auth/token -H 'Content-Type: applicati
 
 In-app QA flow:
 - Open `QA Smoke` from the System Status page.
-- Pick backend (`Rust`, `Python`, or `Vapor`), then run `Fetch Token` and `Run Employee Smoke`.
+- Pick backend (`Rust`, `Python`, or `Vapor`), then run `Fetch Token`, `Run Employee Smoke`, or `Run Client Smoke`.
 
 ## Chrome/Web against Linux backend host
 
