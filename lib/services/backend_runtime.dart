@@ -24,4 +24,25 @@ class BackendRuntime {
     final uri = Uri.parse(_config.baseUrl);
     return uri.scheme.isNotEmpty ? uri.scheme : 'http';
   }
+
+  static String normalizeHostInput(String raw) {
+    final value = raw.trim();
+    if (value.isEmpty) return host;
+    if (value.contains('://')) {
+      final uri = Uri.tryParse(value);
+      if (uri != null && uri.host.isNotEmpty) {
+        return uri.host;
+      }
+    }
+    if (value.contains('/')) {
+      final uri = Uri.tryParse('http://$value');
+      if (uri != null && uri.host.isNotEmpty) {
+        return uri.host;
+      }
+    }
+    if (value.contains(':')) {
+      return value.split(':').first.trim();
+    }
+    return value;
+  }
 }

@@ -33,7 +33,14 @@ class _LoginPageState extends State<LoginPage> {
         password: _passwordController.text,
       );
       final user = await _api.whoAmI(bearerToken: token);
-      AuthSession.set(AuthSessionState(token: token, user: user));
+      AuthSession.set(
+        AuthSessionState(
+          token: token,
+          user: user,
+          loginEmail: _emailController.text.trim(),
+          loginPassword: _passwordController.text,
+        ),
+      );
       if (!mounted) return;
       Navigator.pushReplacementNamed(context, '/home');
     } catch (error) {

@@ -59,9 +59,7 @@ class _ClientsPageState extends State<ClientsPage> {
   }
 
   Future<void> _applyBackendSelection() async {
-    final host = _hostController.text.trim().isEmpty
-        ? BackendRuntime.host
-        : _hostController.text.trim();
+    final host = BackendRuntime.normalizeHostInput(_hostController.text);
     final next = BackendConfig.forKind(
       _selectedBackend,
       host: host,
@@ -131,7 +129,7 @@ class _ClientsPageState extends State<ClientsPage> {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(
-            'Client created. Invitation email sent to ${created.email ?? result.email}.',
+            'Client created. Invitation email requested for ${created.email ?? result.email}.',
           ),
         ),
       );

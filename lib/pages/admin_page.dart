@@ -59,9 +59,7 @@ class _AdminPageState extends State<AdminPage> {
   }
 
   Future<void> _applyBackendSelection() async {
-    final host = _hostController.text.trim().isEmpty
-        ? BackendRuntime.host
-        : _hostController.text.trim();
+    final host = BackendRuntime.normalizeHostInput(_hostController.text);
     final next = BackendConfig.forKind(
       _selectedBackend,
       host: host,
@@ -132,7 +130,7 @@ class _AdminPageState extends State<AdminPage> {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(
-            'Employee created. Invitation email sent to ${created.email ?? result.email}.',
+            'Employee created. Invitation email requested for ${created.email ?? result.email}.',
           ),
         ),
       );

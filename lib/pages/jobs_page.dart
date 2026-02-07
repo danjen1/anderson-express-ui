@@ -77,9 +77,7 @@ class _JobsPageState extends State<JobsPage> {
   }
 
   Future<void> _applyBackendSelection() async {
-    final host = _hostController.text.trim().isEmpty
-        ? BackendRuntime.host
-        : _hostController.text.trim();
+    final host = BackendRuntime.normalizeHostInput(_hostController.text);
     final next = BackendConfig.forKind(
       _selectedBackend,
       host: host,

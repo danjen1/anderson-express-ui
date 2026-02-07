@@ -3,10 +3,17 @@ import 'package:flutter/foundation.dart';
 import '../models/auth_user.dart';
 
 class AuthSessionState {
-  const AuthSessionState({required this.token, required this.user});
+  const AuthSessionState({
+    required this.token,
+    required this.user,
+    this.loginEmail,
+    this.loginPassword,
+  });
 
   final String token;
   final AuthUser user;
+  final String? loginEmail;
+  final String? loginPassword;
 }
 
 class AuthSession {

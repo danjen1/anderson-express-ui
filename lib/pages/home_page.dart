@@ -91,11 +91,39 @@ class _HomePageState extends State<HomePage> {
     }
     try {
       final user = await ApiService().whoAmI(bearerToken: session.token);
-      AuthSession.set(AuthSessionState(token: session.token, user: user));
+      AuthSession.set(
+        AuthSessionState(
+          token: session.token,
+          user: user,
+          loginEmail: session.loginEmail,
+          loginPassword: session.loginPassword,
+        ),
+      );
       return true;
     } catch (_) {
-      AuthSession.clear();
-      return false;
+      final email = session.loginEmail;
+      final password = session.loginPassword;
+      if (email == null || password == null) {
+        AuthSession.clear();
+        return false;
+      }
+      try {
+        final api = ApiService();
+        final token = await api.fetchToken(email: email, password: password);
+        final user = await api.whoAmI(bearerToken: token);
+        AuthSession.set(
+          AuthSessionState(
+            token: token,
+            user: user,
+            loginEmail: email,
+            loginPassword: password,
+          ),
+        );
+        return true;
+      } catch (_) {
+        AuthSession.clear();
+        return false;
+      }
     }
   }
 
@@ -160,9 +188,7 @@ class _HomePageState extends State<HomePage> {
   }
 
   Future<void> _applyBackendSelection() async {
-    final host = _hostController.text.trim().isEmpty
-        ? BackendRuntime.host
-        : _hostController.text.trim();
+    final host = BackendRuntime.normalizeHostInput(_hostController.text);
     final next = BackendConfig.forKind(
       _selectedBackend,
       host: host,
@@ -403,36 +429,31 @@ class _HomePageState extends State<HomePage> {
                             Wrap(
                               spacing: 8,
                               runSpacing: 8,
-                              children: BackendKind.values
-                                  .map(
-                                    (kind) => ChoiceChip(
-                                      label: Text(switch (kind) {
-                                        BackendKind.rust => 'Rust',
-                                        BackendKind.python => 'Python',
-                                        BackendKind.vapor => 'Vapor',
-                                      }),
-                                      selected: _selectedBackend == kind,
-                                      onSelected: (_) => setState(
-                                        () => _selectedBackend = kind,
-                                      ),
-                                    ),
-                                  )
-                                  .toList(),
-                            ),
-                            const SizedBox(height: 8),
-                            Row(
                               children: [
-                                Expanded(
+                                ...BackendKind.values.map(
+                                  (kind) => ChoiceChip(
+                                    label: Text(switch (kind) {
+                                      BackendKind.rust => 'Rust',
+                                      BackendKind.python => 'Python',
+                                      BackendKind.vapor => 'Vapor',
+                                    }),
+                                    selected: _selectedBackend == kind,
+                                    onSelected: (_) =>
+                                        setState(() => _selectedBackend = kind),
+                                  ),
+                                ),
+                                SizedBox(
+                                  width: 240,
                                   child: TextField(
                                     controller: _hostController,
                                     decoration: const InputDecoration(
-                                      labelText: 'Backend Host',
+                                      labelText: 'Host',
+                                      hintText: 'archlinux or http://host',
                                       border: OutlineInputBorder(),
                                       isDense: true,
                                     ),
                                   ),
                                 ),
-                                const SizedBox(width: 8),
                                 FilledButton.icon(
                                   onPressed: _applyBackendSelection,
                                   icon: const Icon(Icons.check),
