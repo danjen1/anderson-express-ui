@@ -6,6 +6,8 @@ import '../models/backend_config.dart';
 import '../models/client.dart';
 import '../models/employee.dart';
 import '../models/location.dart';
+import '../models/task_definition.dart';
+import '../models/task_rule.dart';
 import 'backend_runtime.dart';
 
 class ApiService {
@@ -312,7 +314,7 @@ class ApiService {
     return 'Location deleted';
   }
 
-  Future<List<Map<String, dynamic>>> listTaskDefinitions({
+  Future<List<TaskDefinition>> listTaskDefinitions({
     String? bearerToken,
   }) async {
     final response = await http
@@ -324,12 +326,32 @@ class ApiService {
 
     _throwIfError(response, fallbackMessage: 'Failed to list task definitions');
     final data = jsonDecode(response.body) as List<dynamic>;
-    return data.map((item) => Map<String, dynamic>.from(item as Map)).toList();
+    return data
+        .map((item) => TaskDefinition.fromJson(item as Map<String, dynamic>))
+        .toList();
   }
 
-  Future<List<Map<String, dynamic>>> listTaskRules({
+  Future<TaskDefinition> createTaskDefinition(
+    TaskDefinitionCreateInput input, {
     String? bearerToken,
   }) async {
+    final response = await http
+        .post(
+          Uri.parse('${_backend.baseUrl}/api/v1/cleaning/task-definitions'),
+          headers: _headers(bearerToken),
+          body: jsonEncode(input.toJson()),
+        )
+        .timeout(const Duration(seconds: 8));
+
+    _throwIfError(
+      response,
+      fallbackMessage: 'Failed to create task definition',
+    );
+    final data = jsonDecode(response.body) as Map<String, dynamic>;
+    return TaskDefinition.fromJson(data);
+  }
+
+  Future<List<TaskRule>> listTaskRules({String? bearerToken}) async {
     final response = await http
         .get(
           Uri.parse('${_backend.baseUrl}/api/v1/cleaning/task-rules'),
@@ -339,7 +361,26 @@ class ApiService {
 
     _throwIfError(response, fallbackMessage: 'Failed to list task rules');
     final data = jsonDecode(response.body) as List<dynamic>;
-    return data.map((item) => Map<String, dynamic>.from(item as Map)).toList();
+    return data
+        .map((item) => TaskRule.fromJson(item as Map<String, dynamic>))
+        .toList();
+  }
+
+  Future<TaskRule> createTaskRule(
+    TaskRuleCreateInput input, {
+    String? bearerToken,
+  }) async {
+    final response = await http
+        .post(
+          Uri.parse('${_backend.baseUrl}/api/v1/cleaning/task-rules'),
+          headers: _headers(bearerToken),
+          body: jsonEncode(input.toJson()),
+        )
+        .timeout(const Duration(seconds: 8));
+
+    _throwIfError(response, fallbackMessage: 'Failed to create task rule');
+    final data = jsonDecode(response.body) as Map<String, dynamic>;
+    return TaskRule.fromJson(data);
   }
 
   Map<String, String> _headers(String? bearerToken) {

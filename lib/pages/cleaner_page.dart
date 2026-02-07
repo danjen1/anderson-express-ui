@@ -1,6 +1,10 @@
+import 'dart:convert';
+
 import 'package:flutter/material.dart';
 
 import '../models/backend_config.dart';
+import '../models/task_definition.dart';
+import '../models/task_rule.dart';
 import '../services/api_service.dart';
 import '../services/backend_runtime.dart';
 import '../widgets/backend_banner.dart';
@@ -26,8 +30,20 @@ class _CleanerPageState extends State<CleanerPage> {
 
   bool _loading = false;
   String? _error;
-  List<Map<String, dynamic>> _clients = const [];
-  List<Map<String, dynamic>> _locations = const [];
+  List<TaskDefinition> _taskDefinitions = const [];
+  List<TaskRule> _taskRules = const [];
+
+  final _taskCodeController = TextEditingController();
+  final _taskNameController = TextEditingController();
+  final _taskCategoryController = TextEditingController(text: 'general');
+  final _taskDescriptionController = TextEditingController();
+
+  final _ruleTaskIdController = TextEditingController();
+  final _ruleConditionController = TextEditingController(
+    text: '{"location.type":"residential"}',
+  );
+  final _ruleDisplayOrderController = TextEditingController(text: '10');
+  final _ruleNotesController = TextEditingController();
 
   @override
   void initState() {
@@ -42,6 +58,14 @@ class _CleanerPageState extends State<CleanerPage> {
     _emailController.dispose();
     _passwordController.dispose();
     _tokenController.dispose();
+    _taskCodeController.dispose();
+    _taskNameController.dispose();
+    _taskCategoryController.dispose();
+    _taskDescriptionController.dispose();
+    _ruleTaskIdController.dispose();
+    _ruleConditionController.dispose();
+    _ruleDisplayOrderController.dispose();
+    _ruleNotesController.dispose();
     super.dispose();
   }
 
@@ -58,8 +82,8 @@ class _CleanerPageState extends State<CleanerPage> {
     if (!mounted) return;
     setState(() {
       _error = null;
-      _clients = const [];
-      _locations = const [];
+      _taskDefinitions = const [];
+      _taskRules = const [];
       _tokenController.clear();
     });
     ScaffoldMessenger.of(context).showSnackBar(
@@ -98,20 +122,14 @@ class _CleanerPageState extends State<CleanerPage> {
 
     try {
       final token = _tokenController.text.trim();
-      final clients = await _api.listClients(bearerToken: token);
-      final locations = await _api.listLocations(bearerToken: token);
+      final taskDefinitions = await _api.listTaskDefinitions(
+        bearerToken: token,
+      );
+      final taskRules = await _api.listTaskRules(bearerToken: token);
       if (!mounted) return;
       setState(() {
-        _clients = clients.map((c) => {'id': c.id, 'name': c.name}).toList();
-        _locations = locations
-            .map(
-              (l) => {
-                'id': l.id,
-                'location_number': l.locationNumber,
-                'client_id': l.clientId,
-              },
-            )
-            .toList();
+        _taskDefinitions = taskDefinitions;
+        _taskRules = taskRules;
       });
     } catch (error) {
       if (!mounted) return;
@@ -123,11 +141,80 @@ class _CleanerPageState extends State<CleanerPage> {
     }
   }
 
+  Future<void> _createTaskDefinition() async {
+    final token = _tokenController.text.trim();
+    if (token.isEmpty) {
+      setState(() => _error = 'Fetch token first');
+      return;
+    }
+    try {
+      final created = await _api.createTaskDefinition(
+        TaskDefinitionCreateInput(
+          code: _taskCodeController.text.trim(),
+          name: _taskNameController.text.trim(),
+          category: _taskCategoryController.text.trim(),
+          description: _taskDescriptionController.text.trim().isEmpty
+              ? null
+              : _taskDescriptionController.text.trim(),
+        ),
+        bearerToken: token,
+      );
+      if (!mounted) return;
+      _taskCodeController.clear();
+      _taskNameController.clear();
+      _taskDescriptionController.clear();
+      await _loadCleanerData();
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Task definition created: ${created.code}')),
+      );
+    } catch (error) {
+      if (!mounted) return;
+      setState(() => _error = error.toString());
+    }
+  }
+
+  Future<void> _createTaskRule() async {
+    final token = _tokenController.text.trim();
+    if (token.isEmpty) {
+      setState(() => _error = 'Fetch token first');
+      return;
+    }
+    try {
+      final taskDefinitionId = int.parse(_ruleTaskIdController.text.trim());
+      final decoded = jsonDecode(_ruleConditionController.text.trim());
+      if (decoded is! Map<String, dynamic>) {
+        throw Exception('Conditions must be a JSON object');
+      }
+      final created = await _api.createTaskRule(
+        TaskRuleCreateInput(
+          taskDefinitionId: taskDefinitionId,
+          appliesWhen: decoded,
+          displayOrder: int.tryParse(_ruleDisplayOrderController.text.trim()),
+          notesTemplate: _ruleNotesController.text.trim().isEmpty
+              ? null
+              : _ruleNotesController.text.trim(),
+        ),
+        bearerToken: token,
+      );
+      if (!mounted) return;
+      _ruleNotesController.clear();
+      await _loadCleanerData();
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Task rule created: ${created.id}')),
+      );
+    } catch (error) {
+      if (!mounted) return;
+      setState(() => _error = error.toString());
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Cleaner - Clients & Locations'),
+        title: const Text('Cleaner - Task Definitions & Rules'),
         bottom: const BackendBanner(),
         actions: [
           IconButton(
@@ -201,6 +288,13 @@ class _CleanerPageState extends State<CleanerPage> {
               ),
             ),
             const SizedBox(height: 12),
+            const Align(
+              alignment: Alignment.centerLeft,
+              child: Text(
+                'Cleaning configuration endpoints are admin-only in all backends.',
+              ),
+            ),
+            const SizedBox(height: 12),
             Align(
               alignment: Alignment.centerLeft,
               child: OutlinedButton.icon(
@@ -239,29 +333,138 @@ class _CleanerPageState extends State<CleanerPage> {
             Expanded(
               child: _loading
                   ? const Center(child: CircularProgressIndicator())
-                  : Row(
+                  : Column(
                       children: [
-                        Expanded(
-                          child: _ListPane(
-                            title: 'Clients (${_clients.length})',
-                            rows: _clients
-                                .map(
-                                  (item) =>
-                                      '${item['id'] ?? ''} • ${item['name'] ?? ''}',
-                                )
-                                .toList(),
-                          ),
+                        _CreateSection(
+                          title: 'Create Task Definition',
+                          children: [
+                            TextField(
+                              controller: _taskCodeController,
+                              decoration: const InputDecoration(
+                                labelText: 'Code (e.g. CLEAN_WINDOWS)',
+                                border: OutlineInputBorder(),
+                              ),
+                            ),
+                            const SizedBox(height: 8),
+                            TextField(
+                              controller: _taskNameController,
+                              decoration: const InputDecoration(
+                                labelText: 'Name',
+                                border: OutlineInputBorder(),
+                              ),
+                            ),
+                            const SizedBox(height: 8),
+                            Row(
+                              children: [
+                                Expanded(
+                                  child: TextField(
+                                    controller: _taskCategoryController,
+                                    decoration: const InputDecoration(
+                                      labelText: 'Category',
+                                      border: OutlineInputBorder(),
+                                    ),
+                                  ),
+                                ),
+                                const SizedBox(width: 8),
+                                FilledButton.icon(
+                                  onPressed: _loading
+                                      ? null
+                                      : _createTaskDefinition,
+                                  icon: const Icon(Icons.add),
+                                  label: const Text('Create'),
+                                ),
+                              ],
+                            ),
+                            const SizedBox(height: 8),
+                            TextField(
+                              controller: _taskDescriptionController,
+                              decoration: const InputDecoration(
+                                labelText: 'Description',
+                                border: OutlineInputBorder(),
+                              ),
+                            ),
+                          ],
                         ),
-                        const SizedBox(width: 12),
+                        const SizedBox(height: 10),
+                        _CreateSection(
+                          title: 'Create Task Rule',
+                          children: [
+                            Row(
+                              children: [
+                                Expanded(
+                                  child: TextField(
+                                    controller: _ruleTaskIdController,
+                                    decoration: const InputDecoration(
+                                      labelText: 'Task Definition ID',
+                                      border: OutlineInputBorder(),
+                                    ),
+                                  ),
+                                ),
+                                const SizedBox(width: 8),
+                                Expanded(
+                                  child: TextField(
+                                    controller: _ruleDisplayOrderController,
+                                    decoration: const InputDecoration(
+                                      labelText: 'Display Order',
+                                      border: OutlineInputBorder(),
+                                    ),
+                                  ),
+                                ),
+                                const SizedBox(width: 8),
+                                FilledButton.icon(
+                                  onPressed: _loading ? null : _createTaskRule,
+                                  icon: const Icon(Icons.rule),
+                                  label: const Text('Create'),
+                                ),
+                              ],
+                            ),
+                            const SizedBox(height: 8),
+                            TextField(
+                              controller: _ruleConditionController,
+                              decoration: const InputDecoration(
+                                labelText: 'Conditions JSON (flat key/value)',
+                                border: OutlineInputBorder(),
+                              ),
+                            ),
+                            const SizedBox(height: 8),
+                            TextField(
+                              controller: _ruleNotesController,
+                              decoration: const InputDecoration(
+                                labelText: 'Notes Template',
+                                border: OutlineInputBorder(),
+                              ),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 10),
                         Expanded(
-                          child: _ListPane(
-                            title: 'Locations (${_locations.length})',
-                            rows: _locations
-                                .map(
-                                  (item) =>
-                                      '${item['location_number'] ?? ''} • client ${item['client_id'] ?? ''}',
-                                )
-                                .toList(),
+                          child: Row(
+                            children: [
+                              Expanded(
+                                child: _ListPane(
+                                  title:
+                                      'Task Definitions (${_taskDefinitions.length})',
+                                  rows: _taskDefinitions
+                                      .map(
+                                        (item) =>
+                                            '${item.id} • ${item.code} • ${item.category}',
+                                      )
+                                      .toList(),
+                                ),
+                              ),
+                              const SizedBox(width: 12),
+                              Expanded(
+                                child: _ListPane(
+                                  title: 'Task Rules (${_taskRules.length})',
+                                  rows: _taskRules
+                                      .map(
+                                        (item) =>
+                                            '${item.id} • task ${item.taskDefinitionId} • required=${item.required}',
+                                      )
+                                      .toList(),
+                                ),
+                              ),
+                            ],
                           ),
                         ),
                       ],
@@ -269,6 +472,33 @@ class _CleanerPageState extends State<CleanerPage> {
             ),
           ],
         ),
+      ),
+    );
+  }
+}
+
+class _CreateSection extends StatelessWidget {
+  const _CreateSection({required this.title, required this.children});
+
+  final String title;
+  final List<Widget> children;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(10),
+      decoration: BoxDecoration(
+        border: Border.all(color: Colors.black12),
+        borderRadius: BorderRadius.circular(8),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(title, style: const TextStyle(fontWeight: FontWeight.w700)),
+          const SizedBox(height: 8),
+          ...children,
+        ],
       ),
     );
   }

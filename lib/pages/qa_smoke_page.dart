@@ -4,6 +4,8 @@ import '../models/backend_config.dart';
 import '../models/client.dart';
 import '../models/employee.dart';
 import '../models/location.dart';
+import '../models/task_definition.dart';
+import '../models/task_rule.dart';
 import '../services/api_service.dart';
 import '../widgets/backend_banner.dart';
 
@@ -276,11 +278,80 @@ class _QaSmokePageState extends State<QaSmokePage> {
     }
   }
 
+  Future<void> _runCleaningSmoke() async {
+    setState(() {
+      _running = true;
+      _logs.clear();
+    });
+
+    final service = ApiService(backend: _activeConfig());
+    try {
+      final token = await _ensureToken(service);
+      final suffix = DateTime.now().millisecondsSinceEpoch;
+
+      final task = await service.createTaskDefinition(
+        TaskDefinitionCreateInput(
+          code: 'QA_SMOKE_TASK_$suffix',
+          name: 'QA Smoke Task $suffix',
+          category: 'qa',
+          description: 'Created by QA cleaner smoke',
+        ),
+        bearerToken: token,
+      );
+      _log('Cleaning task definition create: ${task.id}');
+
+      final listedTasks = await service.listTaskDefinitions(bearerToken: token);
+      final taskFound = listedTasks.any((t) => t.id == task.id);
+      _log(
+        'Cleaning task definition list: ${taskFound ? "found created task definition" : "not found"}',
+      );
+      if (!taskFound) {
+        throw Exception('Created task definition missing from list');
+      }
+
+      final taskId = int.tryParse(task.id);
+      if (taskId == null) {
+        throw Exception('Invalid task definition id: ${task.id}');
+      }
+
+      final rule = await service.createTaskRule(
+        TaskRuleCreateInput(
+          taskDefinitionId: taskId,
+          appliesWhen: {'location.type': 'residential'},
+          required: true,
+          displayOrder: 10,
+          notesTemplate: 'QA cleaner smoke note',
+        ),
+        bearerToken: token,
+      );
+      _log('Cleaning task rule create: ${rule.id}');
+
+      final listedRules = await service.listTaskRules(bearerToken: token);
+      final ruleFound = listedRules.any((r) => r.id == rule.id);
+      _log(
+        'Cleaning task rule list: ${ruleFound ? "found created rule" : "not found"}',
+      );
+      if (!ruleFound) {
+        throw Exception('Created task rule missing from list');
+      }
+
+      _log('Cleaning smoke passed');
+    } catch (error) {
+      _log('Cleaning smoke failed: $error');
+    } finally {
+      if (mounted) {
+        setState(() {
+          _running = false;
+        });
+      }
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('QA Smoke - Employee + Client + Location CRUD'),
+        title: const Text('QA Smoke - Employee + Client + Location + Cleaner'),
         bottom: const BackendBanner(),
       ),
       body: Padding(
@@ -381,6 +452,17 @@ class _QaSmokePageState extends State<QaSmokePage> {
                         )
                       : const Icon(Icons.location_on),
                   label: const Text('Run Location Smoke'),
+                ),
+                FilledButton.icon(
+                  onPressed: _running ? null : _runCleaningSmoke,
+                  icon: _running
+                      ? const SizedBox(
+                          width: 16,
+                          height: 16,
+                          child: CircularProgressIndicator(strokeWidth: 2),
+                        )
+                      : const Icon(Icons.cleaning_services),
+                  label: const Text('Run Cleaner Smoke'),
                 ),
               ],
             ),

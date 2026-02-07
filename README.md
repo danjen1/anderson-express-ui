@@ -40,16 +40,25 @@ curl -X POST http://localhost:9001/api/v1/auth/token -H 'Content-Type: applicati
 
 In-app QA flow:
 - Open `QA Smoke` from the System Status page.
-- Pick backend (`Rust`, `Python`, or `Vapor`), then run `Fetch Token`, `Run Employee Smoke`, or `Run Client Smoke`.
+- Pick backend (`Rust`, `Python`, or `Vapor`), then run `Fetch Token`, `Run Employee Smoke`, `Run Client Smoke`, `Run Location Smoke`, or `Run Cleaner Smoke`.
 
 In-app admin locations CRUD:
 - Open `Locations` from the System Status page.
 - Fetch a token, then list/create/update/delete locations against the active backend.
 
+In-app admin clients CRUD:
+- Open `Clients` from the System Status page.
+- Fetch a token, then list/create/update/delete clients against the active backend.
+
 Runtime backend switch (no relaunch required):
 - Open `System Status`.
 - Choose backend (`Rust`, `Python`, `Vapor`), set host (for example `archlinux`), and click `Apply`.
-- Admin and Locations pages use this active backend setting.
+- The active backend banner is shown globally in app bars.
+- Admin, Clients, Locations, Cleaner, and QA Smoke pages use this active backend setting.
+
+In-app cleaner dashboard:
+- Open `Cleaner` from the System Status page.
+- Fetch a token, then create/list cleaning `task-definitions` and `task-rules` against the active backend.
 
 ## Chrome/Web against Linux backend host
 

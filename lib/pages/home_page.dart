@@ -184,7 +184,7 @@ class _HomePageState extends State<HomePage> {
                         shape: RoundedRectangleBorder(
                           borderRadius: BorderRadius.circular(16),
                         ),
-                        child: Padding(
+                        child: SingleChildScrollView(
                           padding: const EdgeInsets.all(32.0),
                           child: Column(
                             mainAxisSize: MainAxisSize.min,
@@ -361,6 +361,13 @@ class _HomePageState extends State<HomePage> {
                                       Icons.admin_panel_settings,
                                     ),
                                     label: const Text('Admin'),
+                                  ),
+                                  ElevatedButton.icon(
+                                    onPressed: () {
+                                      Navigator.pushNamed(context, '/clients');
+                                    },
+                                    icon: const Icon(Icons.business),
+                                    label: const Text('Clients'),
                                   ),
                                   ElevatedButton.icon(
                                     onPressed: () {
