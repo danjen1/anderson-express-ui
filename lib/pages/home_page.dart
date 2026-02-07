@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../models/backend_config.dart';
 import '../services/api_service.dart';
 import '../services/backend_runtime.dart';
+import '../widgets/backend_banner.dart';
 
 class HomePage extends StatefulWidget {
   const HomePage({super.key});
@@ -148,6 +149,7 @@ class _HomePageState extends State<HomePage> {
       appBar: AppBar(
         title: const Text('System Status'),
         elevation: 0,
+        bottom: const BackendBanner(),
         actions: [
           IconButton(
             onPressed: _checkServices,

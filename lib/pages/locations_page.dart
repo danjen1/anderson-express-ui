@@ -4,6 +4,7 @@ import '../models/backend_config.dart';
 import '../models/location.dart';
 import '../services/api_service.dart';
 import '../services/backend_runtime.dart';
+import '../widgets/backend_banner.dart';
 
 class LocationsPage extends StatefulWidget {
   const LocationsPage({super.key});
@@ -19,27 +20,52 @@ class _LocationsPageState extends State<LocationsPage> {
   final _passwordController = TextEditingController(text: 'dev-password');
   final _tokenController = TextEditingController();
   final _clientFilterController = TextEditingController();
-  final _api = ApiService();
+  late BackendKind _selectedBackend;
+  late final TextEditingController _hostController;
 
   BackendConfig get _backend => BackendRuntime.config;
+  ApiService get _api => ApiService();
 
-  bool _loading = true;
+  bool _loading = false;
   String? _error;
   List<Location> _locations = const [];
 
   @override
   void initState() {
     super.initState();
-    _loadLocations();
+    _selectedBackend = _backend.kind;
+    _hostController = TextEditingController(text: BackendRuntime.host);
   }
 
   @override
   void dispose() {
+    _hostController.dispose();
     _emailController.dispose();
     _passwordController.dispose();
     _tokenController.dispose();
     _clientFilterController.dispose();
     super.dispose();
+  }
+
+  Future<void> _applyBackendSelection() async {
+    final host = _hostController.text.trim().isEmpty
+        ? BackendRuntime.host
+        : _hostController.text.trim();
+    final next = BackendConfig.forKind(
+      _selectedBackend,
+      host: host,
+      scheme: BackendRuntime.scheme,
+    );
+    BackendRuntime.setConfig(next);
+    if (!mounted) return;
+    setState(() {
+      _error = null;
+      _locations = const [];
+      _tokenController.clear();
+    });
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text('Backend set to ${next.label} (${next.baseUrl})')),
+    );
   }
 
   Future<void> _fetchToken() async {
@@ -198,6 +224,7 @@ class _LocationsPageState extends State<LocationsPage> {
     return Scaffold(
       appBar: AppBar(
         title: const Text('Admin - Locations'),
+        bottom: const BackendBanner(),
         actions: [
           IconButton(
             onPressed: _loading ? null : _loadLocations,
@@ -217,6 +244,46 @@ class _LocationsPageState extends State<LocationsPage> {
             Text(
               'Backend: ${_backend.label} (${_backend.baseUrl})',
               style: Theme.of(context).textTheme.bodySmall,
+            ),
+            const SizedBox(height: 12),
+            Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              children: BackendKind.values
+                  .map(
+                    (kind) => ChoiceChip(
+                      label: Text(switch (kind) {
+                        BackendKind.rust => 'Rust',
+                        BackendKind.python => 'Python',
+                        BackendKind.vapor => 'Vapor',
+                      }),
+                      selected: _selectedBackend == kind,
+                      onSelected: (_) {
+                        setState(() => _selectedBackend = kind);
+                      },
+                    ),
+                  )
+                  .toList(),
+            ),
+            const SizedBox(height: 12),
+            Row(
+              children: [
+                Expanded(
+                  child: TextField(
+                    controller: _hostController,
+                    decoration: const InputDecoration(
+                      labelText: 'Backend Host',
+                      border: OutlineInputBorder(),
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 8),
+                FilledButton.icon(
+                  onPressed: _applyBackendSelection,
+                  icon: const Icon(Icons.check),
+                  label: const Text('Apply'),
+                ),
+              ],
             ),
             const SizedBox(height: 12),
             TextField(
@@ -283,6 +350,17 @@ class _LocationsPageState extends State<LocationsPage> {
                   _error!,
                   style: TextStyle(color: Colors.red.shade700),
                 ),
+              ),
+            if (_tokenController.text.trim().isEmpty && _locations.isEmpty)
+              Container(
+                width: double.infinity,
+                margin: const EdgeInsets.only(bottom: 12),
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: Colors.blue.shade50,
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: const Text('Fetch token first, then load locations.'),
               ),
             Expanded(
               child: _loading

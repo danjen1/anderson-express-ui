@@ -3,7 +3,9 @@ import 'package:flutter/material.dart';
 import '../models/backend_config.dart';
 import '../models/client.dart';
 import '../models/employee.dart';
+import '../models/location.dart';
 import '../services/api_service.dart';
+import '../widgets/backend_banner.dart';
 
 class QaSmokePage extends StatefulWidget {
   const QaSmokePage({super.key});
@@ -194,10 +196,93 @@ class _QaSmokePageState extends State<QaSmokePage> {
     }
   }
 
+  Future<void> _runLocationSmoke() async {
+    setState(() {
+      _running = true;
+      _logs.clear();
+    });
+
+    final service = ApiService(backend: _activeConfig());
+    try {
+      final token = await _ensureToken(service);
+      final suffix = DateTime.now().millisecondsSinceEpoch;
+
+      final client = await service.createClient(
+        ClientCreateInput(
+          name: 'QA Smoke Location Client $suffix',
+          email: 'qa.smoke.location.client.$suffix@example.com',
+          city: 'QA',
+          state: 'SM',
+        ),
+        bearerToken: token,
+      );
+      _log('Location smoke client create: ${client.id}');
+
+      final clientId = int.tryParse(client.id);
+      if (clientId == null) {
+        throw Exception('Invalid client id: ${client.id}');
+      }
+
+      final created = await service.createLocation(
+        LocationCreateInput(
+          type: 'residential',
+          clientId: clientId,
+          city: 'QA',
+          state: 'SM',
+          address: 'QA Street $suffix',
+          zipCode: '00000',
+        ),
+        bearerToken: token,
+      );
+      _log('Location create: ${created.id}');
+
+      final listed = await service.listLocations(
+        clientId: clientId,
+        bearerToken: token,
+      );
+      final found = listed.any((l) => l.id == created.id);
+      _log('Location list: ${found ? "found created location" : "not found"}');
+      if (!found) {
+        throw Exception('Created location missing from list');
+      }
+
+      final updated = await service.updateLocation(
+        created.id,
+        const LocationUpdateInput(city: 'QA-UPDATED'),
+        bearerToken: token,
+      );
+      _log('Location update: city=${updated.city ?? ""}');
+
+      final deletedLocation = await service.deleteLocation(
+        created.id,
+        bearerToken: token,
+      );
+      _log('Location delete: $deletedLocation');
+
+      final deletedClient = await service.deleteClient(
+        client.id,
+        bearerToken: token,
+      );
+      _log('Location smoke cleanup client delete: $deletedClient');
+      _log('Location smoke passed');
+    } catch (error) {
+      _log('Location smoke failed: $error');
+    } finally {
+      if (mounted) {
+        setState(() {
+          _running = false;
+        });
+      }
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('QA Smoke - Employee + Client CRUD')),
+      appBar: AppBar(
+        title: const Text('QA Smoke - Employee + Client + Location CRUD'),
+        bottom: const BackendBanner(),
+      ),
       body: Padding(
         padding: const EdgeInsets.all(16),
         child: Column(
@@ -285,6 +370,17 @@ class _QaSmokePageState extends State<QaSmokePage> {
                         )
                       : const Icon(Icons.business),
                   label: const Text('Run Client Smoke'),
+                ),
+                FilledButton.icon(
+                  onPressed: _running ? null : _runLocationSmoke,
+                  icon: _running
+                      ? const SizedBox(
+                          width: 16,
+                          height: 16,
+                          child: CircularProgressIndicator(strokeWidth: 2),
+                        )
+                      : const Icon(Icons.location_on),
+                  label: const Text('Run Location Smoke'),
                 ),
               ],
             ),

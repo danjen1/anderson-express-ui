@@ -4,6 +4,7 @@ import '../models/backend_config.dart';
 import '../models/employee.dart';
 import '../services/api_service.dart';
 import '../services/backend_runtime.dart';
+import '../widgets/backend_banner.dart';
 
 class AdminPage extends StatefulWidget {
   const AdminPage({super.key});
@@ -18,26 +19,51 @@ class _AdminPageState extends State<AdminPage> {
   );
   final _passwordController = TextEditingController(text: 'dev-password');
   final _tokenController = TextEditingController();
-  final _api = ApiService();
+  late BackendKind _selectedBackend;
+  late final TextEditingController _hostController;
 
   BackendConfig get _backend => BackendRuntime.config;
+  ApiService get _api => ApiService();
 
-  bool _loading = true;
+  bool _loading = false;
   String? _error;
   List<Employee> _employees = const [];
 
   @override
   void initState() {
     super.initState();
-    _loadEmployees();
+    _selectedBackend = _backend.kind;
+    _hostController = TextEditingController(text: BackendRuntime.host);
   }
 
   @override
   void dispose() {
+    _hostController.dispose();
     _emailController.dispose();
     _passwordController.dispose();
     _tokenController.dispose();
     super.dispose();
+  }
+
+  Future<void> _applyBackendSelection() async {
+    final host = _hostController.text.trim().isEmpty
+        ? BackendRuntime.host
+        : _hostController.text.trim();
+    final next = BackendConfig.forKind(
+      _selectedBackend,
+      host: host,
+      scheme: BackendRuntime.scheme,
+    );
+    BackendRuntime.setConfig(next);
+    if (!mounted) return;
+    setState(() {
+      _error = null;
+      _employees = const [];
+      _tokenController.clear();
+    });
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text('Backend set to ${next.label} (${next.baseUrl})')),
+    );
   }
 
   Future<void> _fetchToken() async {
@@ -194,6 +220,7 @@ class _AdminPageState extends State<AdminPage> {
     return Scaffold(
       appBar: AppBar(
         title: const Text('Admin - Employees'),
+        bottom: const BackendBanner(),
         actions: [
           IconButton(
             onPressed: _loading ? null : _loadEmployees,
@@ -213,6 +240,46 @@ class _AdminPageState extends State<AdminPage> {
             Text(
               'Backend: ${_backend.label} (${_backend.baseUrl})',
               style: Theme.of(context).textTheme.bodySmall,
+            ),
+            const SizedBox(height: 12),
+            Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              children: BackendKind.values
+                  .map(
+                    (kind) => ChoiceChip(
+                      label: Text(switch (kind) {
+                        BackendKind.rust => 'Rust',
+                        BackendKind.python => 'Python',
+                        BackendKind.vapor => 'Vapor',
+                      }),
+                      selected: _selectedBackend == kind,
+                      onSelected: (_) {
+                        setState(() => _selectedBackend = kind);
+                      },
+                    ),
+                  )
+                  .toList(),
+            ),
+            const SizedBox(height: 12),
+            Row(
+              children: [
+                Expanded(
+                  child: TextField(
+                    controller: _hostController,
+                    decoration: const InputDecoration(
+                      labelText: 'Backend Host',
+                      border: OutlineInputBorder(),
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 8),
+                FilledButton.icon(
+                  onPressed: _applyBackendSelection,
+                  icon: const Icon(Icons.check),
+                  label: const Text('Apply'),
+                ),
+              ],
             ),
             const SizedBox(height: 12),
             TextField(
@@ -266,6 +333,17 @@ class _AdminPageState extends State<AdminPage> {
                   _error!,
                   style: TextStyle(color: Colors.red.shade700),
                 ),
+              ),
+            if (_tokenController.text.trim().isEmpty && _employees.isEmpty)
+              Container(
+                width: double.infinity,
+                margin: const EdgeInsets.only(bottom: 12),
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: Colors.blue.shade50,
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: const Text('Fetch token first, then load employees.'),
               ),
             Expanded(
               child: _loading

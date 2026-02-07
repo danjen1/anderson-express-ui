@@ -312,6 +312,36 @@ class ApiService {
     return 'Location deleted';
   }
 
+  Future<List<Map<String, dynamic>>> listTaskDefinitions({
+    String? bearerToken,
+  }) async {
+    final response = await http
+        .get(
+          Uri.parse('${_backend.baseUrl}/api/v1/cleaning/task-definitions'),
+          headers: _headers(bearerToken),
+        )
+        .timeout(const Duration(seconds: 8));
+
+    _throwIfError(response, fallbackMessage: 'Failed to list task definitions');
+    final data = jsonDecode(response.body) as List<dynamic>;
+    return data.map((item) => Map<String, dynamic>.from(item as Map)).toList();
+  }
+
+  Future<List<Map<String, dynamic>>> listTaskRules({
+    String? bearerToken,
+  }) async {
+    final response = await http
+        .get(
+          Uri.parse('${_backend.baseUrl}/api/v1/cleaning/task-rules'),
+          headers: _headers(bearerToken),
+        )
+        .timeout(const Duration(seconds: 8));
+
+    _throwIfError(response, fallbackMessage: 'Failed to list task rules');
+    final data = jsonDecode(response.body) as List<dynamic>;
+    return data.map((item) => Map<String, dynamic>.from(item as Map)).toList();
+  }
+
   Map<String, String> _headers(String? bearerToken) {
     final headers = <String, String>{
       'Content-Type': 'application/json',
