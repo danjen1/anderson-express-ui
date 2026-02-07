@@ -91,6 +91,13 @@ class _AdminPageState extends State<AdminPage> {
   }
 
   Future<void> _loadEmployees() async {
+    if (_tokenController.text.trim().isEmpty) {
+      setState(() {
+        _error = 'Fetch token first, then load employees.';
+      });
+      return;
+    }
+
     setState(() {
       _loading = true;
       _error = null;

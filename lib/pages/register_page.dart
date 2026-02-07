@@ -22,6 +22,12 @@ class _RegisterPageState extends State<RegisterPage> {
     if (_emailController.text.isEmpty && arg is String && arg.isNotEmpty) {
       _emailController.text = arg;
     }
+    final linkedEmail = Uri.base.queryParameters['email'];
+    if (_emailController.text.isEmpty &&
+        linkedEmail != null &&
+        linkedEmail.isNotEmpty) {
+      _emailController.text = linkedEmail;
+    }
   }
 
   @override

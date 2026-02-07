@@ -166,241 +166,253 @@ class _HomePageState extends State<HomePage> {
             colors: [Color(0xFFF5F7FA), Color(0xFFE4E8ED)],
           ),
         ),
-        child: Center(
-          child: Padding(
+        child: SafeArea(
+          child: SingleChildScrollView(
             padding: const EdgeInsets.all(24.0),
-            child: loading
-                ? const CircularProgressIndicator()
-                : AnimatedOpacity(
-                    opacity: visible ? 1 : 0,
-                    duration: const Duration(milliseconds: 600),
-                    curve: Curves.easeOut,
-                    child: AnimatedScale(
-                      scale: visible ? 1 : 0.96,
+            child: Center(
+              child: loading
+                  ? const CircularProgressIndicator()
+                  : AnimatedOpacity(
+                      opacity: visible ? 1 : 0,
                       duration: const Duration(milliseconds: 600),
                       curve: Curves.easeOut,
-                      child: Card(
-                        elevation: 4,
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(16),
-                        ),
-                        child: SingleChildScrollView(
-                          padding: const EdgeInsets.all(32.0),
-                          child: Column(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              // Animated logo placeholder
-                              AnimatedScale(
-                                scale: visible ? 1 : 0.85,
-                                duration: const Duration(seconds: 1),
-                                curve: Curves.easeOutBack,
-                                child: Container(
-                                  width: 72,
-                                  height: 72,
+                      child: AnimatedScale(
+                        scale: visible ? 1 : 0.96,
+                        duration: const Duration(milliseconds: 600),
+                        curve: Curves.easeOut,
+                        child: Card(
+                          elevation: 4,
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(16),
+                          ),
+                          child: SingleChildScrollView(
+                            padding: const EdgeInsets.all(32.0),
+                            child: Column(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                // Animated logo placeholder
+                                AnimatedScale(
+                                  scale: visible ? 1 : 0.85,
+                                  duration: const Duration(seconds: 1),
+                                  curve: Curves.easeOutBack,
+                                  child: Container(
+                                    width: 72,
+                                    height: 72,
+                                    decoration: BoxDecoration(
+                                      color: Colors.blue.shade100,
+                                      borderRadius: BorderRadius.circular(16),
+                                    ),
+                                    child: const Icon(
+                                      Icons.local_shipping,
+                                      size: 40,
+                                      color: Colors.blue,
+                                    ),
+                                  ),
+                                ),
+
+                                const SizedBox(height: 20),
+
+                                const Text(
+                                  'Services Online',
+                                  style: TextStyle(
+                                    fontSize: 26,
+                                    fontWeight: FontWeight.bold,
+                                  ),
+                                ),
+                                const SizedBox(height: 8),
+                                const Text(
+                                  'Live system health overview',
+                                  style: TextStyle(color: Colors.grey),
+                                ),
+                                const SizedBox(height: 6),
+                                Container(
+                                  width: double.infinity,
+                                  padding: const EdgeInsets.all(14),
                                   decoration: BoxDecoration(
-                                    color: Colors.blue.shade100,
-                                    borderRadius: BorderRadius.circular(16),
+                                    color: Colors.blue.shade50,
+                                    borderRadius: BorderRadius.circular(12),
+                                    border: Border.all(
+                                      color: Colors.blue.shade200,
+                                    ),
                                   ),
-                                  child: const Icon(
-                                    Icons.local_shipping,
-                                    size: 40,
-                                    color: Colors.blue,
+                                  child: Column(
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.start,
+                                    children: [
+                                      Text(
+                                        'ACTIVE BACKEND',
+                                        style: TextStyle(
+                                          fontSize: 12,
+                                          fontWeight: FontWeight.w700,
+                                          color: Colors.blue.shade900,
+                                          letterSpacing: 0.8,
+                                        ),
+                                      ),
+                                      const SizedBox(height: 6),
+                                      Text(
+                                        _activeBackend.label,
+                                        style: const TextStyle(
+                                          fontSize: 24,
+                                          fontWeight: FontWeight.w800,
+                                        ),
+                                      ),
+                                      const SizedBox(height: 2),
+                                      Text(
+                                        _activeBackend.baseUrl,
+                                        style: TextStyle(
+                                          fontSize: 13,
+                                          color: Colors.blue.shade900,
+                                        ),
+                                      ),
+                                    ],
                                   ),
                                 ),
-                              ),
-
-                              const SizedBox(height: 20),
-
-                              const Text(
-                                'Services Online',
-                                style: TextStyle(
-                                  fontSize: 26,
-                                  fontWeight: FontWeight.bold,
+                                const SizedBox(height: 12),
+                                Wrap(
+                                  spacing: 8,
+                                  runSpacing: 8,
+                                  children: BackendKind.values
+                                      .map(
+                                        (kind) => ChoiceChip(
+                                          label: Text(switch (kind) {
+                                            BackendKind.rust => 'Rust',
+                                            BackendKind.python => 'Python',
+                                            BackendKind.vapor => 'Vapor',
+                                          }),
+                                          selected: _selectedBackend == kind,
+                                          onSelected: (_) {
+                                            setState(
+                                              () => _selectedBackend = kind,
+                                            );
+                                          },
+                                        ),
+                                      )
+                                      .toList(),
                                 ),
-                              ),
-                              const SizedBox(height: 8),
-                              const Text(
-                                'Live system health overview',
-                                style: TextStyle(color: Colors.grey),
-                              ),
-                              const SizedBox(height: 6),
-                              Container(
-                                width: double.infinity,
-                                padding: const EdgeInsets.all(14),
-                                decoration: BoxDecoration(
-                                  color: Colors.blue.shade50,
-                                  borderRadius: BorderRadius.circular(12),
-                                  border: Border.all(
-                                    color: Colors.blue.shade200,
-                                  ),
-                                ),
-                                child: Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                const SizedBox(height: 8),
+                                Row(
                                   children: [
-                                    Text(
-                                      'ACTIVE BACKEND',
-                                      style: TextStyle(
-                                        fontSize: 12,
-                                        fontWeight: FontWeight.w700,
-                                        color: Colors.blue.shade900,
-                                        letterSpacing: 0.8,
+                                    Expanded(
+                                      child: TextField(
+                                        controller: _hostController,
+                                        decoration: const InputDecoration(
+                                          labelText:
+                                              'Backend Host (e.g. archlinux)',
+                                          border: OutlineInputBorder(),
+                                          isDense: true,
+                                        ),
                                       ),
                                     ),
-                                    const SizedBox(height: 6),
-                                    Text(
-                                      _activeBackend.label,
-                                      style: const TextStyle(
-                                        fontSize: 24,
-                                        fontWeight: FontWeight.w800,
-                                      ),
-                                    ),
-                                    const SizedBox(height: 2),
-                                    Text(
-                                      _activeBackend.baseUrl,
-                                      style: TextStyle(
-                                        fontSize: 13,
-                                        color: Colors.blue.shade900,
-                                      ),
+                                    const SizedBox(width: 8),
+                                    FilledButton.icon(
+                                      onPressed: _applyBackendSelection,
+                                      icon: const Icon(Icons.check),
+                                      label: const Text('Apply'),
                                     ),
                                   ],
                                 ),
-                              ),
-                              const SizedBox(height: 12),
-                              Wrap(
-                                spacing: 8,
-                                runSpacing: 8,
-                                children: BackendKind.values
-                                    .map(
-                                      (kind) => ChoiceChip(
-                                        label: Text(switch (kind) {
-                                          BackendKind.rust => 'Rust',
-                                          BackendKind.python => 'Python',
-                                          BackendKind.vapor => 'Vapor',
-                                        }),
-                                        selected: _selectedBackend == kind,
-                                        onSelected: (_) {
-                                          setState(
-                                            () => _selectedBackend = kind,
-                                          );
-                                        },
-                                      ),
-                                    )
-                                    .toList(),
-                              ),
-                              const SizedBox(height: 8),
-                              Row(
-                                children: [
-                                  Expanded(
-                                    child: TextField(
-                                      controller: _hostController,
-                                      decoration: const InputDecoration(
-                                        labelText:
-                                            'Backend Host (e.g. archlinux)',
-                                        border: OutlineInputBorder(),
-                                        isDense: true,
-                                      ),
+                                if (lastChecked != null) ...[
+                                  const SizedBox(height: 6),
+                                  Text(
+                                    'Last checked: ${_timeAgo(lastChecked!)}',
+                                    style: const TextStyle(
+                                      fontSize: 13,
+                                      color: Colors.grey,
                                     ),
                                   ),
-                                  const SizedBox(width: 8),
-                                  FilledButton.icon(
-                                    onPressed: _applyBackendSelection,
-                                    icon: const Icon(Icons.check),
-                                    label: const Text('Apply'),
-                                  ),
                                 ],
-                              ),
-                              if (lastChecked != null) ...[
-                                const SizedBox(height: 6),
-                                Text(
-                                  'Last checked: ${_timeAgo(lastChecked!)}',
-                                  style: const TextStyle(
-                                    fontSize: 13,
-                                    color: Colors.grey,
+
+                                const SizedBox(height: 32),
+
+                                _statusCard('Rust API', rustOk),
+                                const SizedBox(height: 12),
+                                _statusCard('Python API', pythonOk),
+                                const SizedBox(height: 12),
+                                _statusCard('Vapor API', vaporOk),
+
+                                const SizedBox(height: 32),
+                                const Divider(),
+                                const SizedBox(height: 20),
+
+                                const Text(
+                                  'Enter Demo As',
+                                  style: TextStyle(
+                                    fontSize: 20,
+                                    fontWeight: FontWeight.w600,
                                   ),
+                                ),
+                                const SizedBox(height: 16),
+
+                                Wrap(
+                                  alignment: WrapAlignment.center,
+                                  spacing: 12,
+                                  runSpacing: 12,
+                                  children: [
+                                    ElevatedButton.icon(
+                                      onPressed: () {
+                                        Navigator.pushNamed(
+                                          context,
+                                          '/cleaner',
+                                        );
+                                      },
+                                      icon: const Icon(Icons.cleaning_services),
+                                      label: const Text('Cleaner'),
+                                    ),
+                                    ElevatedButton.icon(
+                                      onPressed: () {
+                                        Navigator.pushNamed(context, '/admin');
+                                      },
+                                      icon: const Icon(
+                                        Icons.admin_panel_settings,
+                                      ),
+                                      label: const Text('Admin'),
+                                    ),
+                                    ElevatedButton.icon(
+                                      onPressed: () {
+                                        Navigator.pushNamed(
+                                          context,
+                                          '/clients',
+                                        );
+                                      },
+                                      icon: const Icon(Icons.business),
+                                      label: const Text('Clients'),
+                                    ),
+                                    ElevatedButton.icon(
+                                      onPressed: () {
+                                        Navigator.pushNamed(context, '/jobs');
+                                      },
+                                      icon: const Icon(Icons.work),
+                                      label: const Text('Jobs'),
+                                    ),
+                                    ElevatedButton.icon(
+                                      onPressed: () {
+                                        Navigator.pushNamed(
+                                          context,
+                                          '/locations',
+                                        );
+                                      },
+                                      icon: const Icon(Icons.location_on),
+                                      label: const Text('Locations'),
+                                    ),
+                                    ElevatedButton.icon(
+                                      onPressed: () {
+                                        Navigator.pushNamed(
+                                          context,
+                                          '/qa-smoke',
+                                        );
+                                      },
+                                      icon: const Icon(Icons.science),
+                                      label: const Text('QA Smoke'),
+                                    ),
+                                  ],
                                 ),
                               ],
-
-                              const SizedBox(height: 32),
-
-                              _statusCard('Rust API', rustOk),
-                              const SizedBox(height: 12),
-                              _statusCard('Python API', pythonOk),
-                              const SizedBox(height: 12),
-                              _statusCard('Vapor API', vaporOk),
-
-                              const SizedBox(height: 32),
-                              const Divider(),
-                              const SizedBox(height: 20),
-
-                              const Text(
-                                'Enter Demo As',
-                                style: TextStyle(
-                                  fontSize: 20,
-                                  fontWeight: FontWeight.w600,
-                                ),
-                              ),
-                              const SizedBox(height: 16),
-
-                              Wrap(
-                                alignment: WrapAlignment.center,
-                                spacing: 12,
-                                runSpacing: 12,
-                                children: [
-                                  ElevatedButton.icon(
-                                    onPressed: () {
-                                      Navigator.pushNamed(context, '/cleaner');
-                                    },
-                                    icon: const Icon(Icons.cleaning_services),
-                                    label: const Text('Cleaner'),
-                                  ),
-                                  ElevatedButton.icon(
-                                    onPressed: () {
-                                      Navigator.pushNamed(context, '/admin');
-                                    },
-                                    icon: const Icon(
-                                      Icons.admin_panel_settings,
-                                    ),
-                                    label: const Text('Admin'),
-                                  ),
-                                  ElevatedButton.icon(
-                                    onPressed: () {
-                                      Navigator.pushNamed(context, '/clients');
-                                    },
-                                    icon: const Icon(Icons.business),
-                                    label: const Text('Clients'),
-                                  ),
-                                  ElevatedButton.icon(
-                                    onPressed: () {
-                                      Navigator.pushNamed(context, '/jobs');
-                                    },
-                                    icon: const Icon(Icons.work),
-                                    label: const Text('Jobs'),
-                                  ),
-                                  ElevatedButton.icon(
-                                    onPressed: () {
-                                      Navigator.pushNamed(
-                                        context,
-                                        '/locations',
-                                      );
-                                    },
-                                    icon: const Icon(Icons.location_on),
-                                    label: const Text('Locations'),
-                                  ),
-                                  ElevatedButton.icon(
-                                    onPressed: () {
-                                      Navigator.pushNamed(context, '/qa-smoke');
-                                    },
-                                    icon: const Icon(Icons.science),
-                                    label: const Text('QA Smoke'),
-                                  ),
-                                ],
-                              ),
-                            ],
+                            ),
                           ),
                         ),
                       ),
                     ),
-                  ),
+            ),
           ),
         ),
       ),

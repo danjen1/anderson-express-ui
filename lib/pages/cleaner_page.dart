@@ -18,7 +18,7 @@ class _CleanerPageState extends State<CleanerPage> {
   final _emailController = TextEditingController(
     text: 'john@andersonexpress.com',
   );
-  final _passwordController = TextEditingController(text: 'worker123');
+  final _passwordController = TextEditingController(text: 'dev-password');
   final _tokenController = TextEditingController();
   late BackendKind _selectedBackend;
   late final TextEditingController _hostController;
@@ -155,151 +155,154 @@ class _CleanerPageState extends State<CleanerPage> {
           ),
         ],
       ),
-      body: ListView(
-        padding: const EdgeInsets.all(16),
-        children: [
-          Text(
-            'Cleaner users only see jobs assigned to them, including each job\'s task list.',
-            style: Theme.of(context).textTheme.bodySmall,
-          ),
-          const SizedBox(height: 8),
-          Text(
-            'Backend: ${_backend.label} (${_backend.baseUrl})',
-            style: Theme.of(context).textTheme.bodySmall,
-          ),
-          const SizedBox(height: 12),
-          Wrap(
-            spacing: 8,
-            runSpacing: 8,
-            children: BackendKind.values
-                .map(
-                  (kind) => ChoiceChip(
-                    label: Text(switch (kind) {
-                      BackendKind.rust => 'Rust',
-                      BackendKind.python => 'Python',
-                      BackendKind.vapor => 'Vapor',
-                    }),
-                    selected: _selectedBackend == kind,
-                    onSelected: (_) => setState(() => _selectedBackend = kind),
-                  ),
-                )
-                .toList(),
-          ),
-          const SizedBox(height: 8),
-          Row(
-            children: [
-              Expanded(
-                child: TextField(
-                  controller: _hostController,
-                  decoration: const InputDecoration(
-                    labelText: 'Backend Host',
-                    border: OutlineInputBorder(),
+      body: SafeArea(
+        child: ListView(
+          padding: const EdgeInsets.all(16),
+          children: [
+            Text(
+              'Cleaner users only see jobs assigned to them, including each job\'s task list.',
+              style: Theme.of(context).textTheme.bodySmall,
+            ),
+            const SizedBox(height: 8),
+            Text(
+              'Backend: ${_backend.label} (${_backend.baseUrl})',
+              style: Theme.of(context).textTheme.bodySmall,
+            ),
+            const SizedBox(height: 12),
+            Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              children: BackendKind.values
+                  .map(
+                    (kind) => ChoiceChip(
+                      label: Text(switch (kind) {
+                        BackendKind.rust => 'Rust',
+                        BackendKind.python => 'Python',
+                        BackendKind.vapor => 'Vapor',
+                      }),
+                      selected: _selectedBackend == kind,
+                      onSelected: (_) =>
+                          setState(() => _selectedBackend = kind),
+                    ),
+                  )
+                  .toList(),
+            ),
+            const SizedBox(height: 8),
+            Row(
+              children: [
+                Expanded(
+                  child: TextField(
+                    controller: _hostController,
+                    decoration: const InputDecoration(
+                      labelText: 'Backend Host',
+                      border: OutlineInputBorder(),
+                    ),
                   ),
                 ),
+                const SizedBox(width: 8),
+                FilledButton.icon(
+                  onPressed: _applyBackendSelection,
+                  icon: const Icon(Icons.check),
+                  label: const Text('Apply'),
+                ),
+              ],
+            ),
+            const SizedBox(height: 12),
+            TextField(
+              controller: _emailController,
+              decoration: const InputDecoration(
+                labelText: 'Cleaner Email',
+                border: OutlineInputBorder(),
               ),
-              const SizedBox(width: 8),
-              FilledButton.icon(
-                onPressed: _applyBackendSelection,
-                icon: const Icon(Icons.check),
-                label: const Text('Apply'),
+            ),
+            const SizedBox(height: 8),
+            TextField(
+              controller: _passwordController,
+              obscureText: true,
+              decoration: const InputDecoration(
+                labelText: 'Cleaner Password',
+                border: OutlineInputBorder(),
               ),
+            ),
+            const SizedBox(height: 8),
+            Align(
+              alignment: Alignment.centerLeft,
+              child: OutlinedButton.icon(
+                onPressed: _loading ? null : _fetchToken,
+                icon: const Icon(Icons.key),
+                label: const Text('Fetch Token'),
+              ),
+            ),
+            const SizedBox(height: 8),
+            TextField(
+              controller: _tokenController,
+              decoration: InputDecoration(
+                labelText: 'Bearer Token',
+                border: const OutlineInputBorder(),
+                suffixIcon: IconButton(
+                  onPressed: _loadAssignedJobs,
+                  icon: const Icon(Icons.login),
+                ),
+              ),
+            ),
+            if (_error != null) ...[
+              const SizedBox(height: 10),
+              Text(_error!, style: TextStyle(color: Colors.red.shade700)),
             ],
-          ),
-          const SizedBox(height: 12),
-          TextField(
-            controller: _emailController,
-            decoration: const InputDecoration(
-              labelText: 'Cleaner Email',
-              border: OutlineInputBorder(),
-            ),
-          ),
-          const SizedBox(height: 8),
-          TextField(
-            controller: _passwordController,
-            obscureText: true,
-            decoration: const InputDecoration(
-              labelText: 'Cleaner Password',
-              border: OutlineInputBorder(),
-            ),
-          ),
-          const SizedBox(height: 8),
-          Align(
-            alignment: Alignment.centerLeft,
-            child: OutlinedButton.icon(
-              onPressed: _loading ? null : _fetchToken,
-              icon: const Icon(Icons.key),
-              label: const Text('Fetch Token'),
-            ),
-          ),
-          const SizedBox(height: 8),
-          TextField(
-            controller: _tokenController,
-            decoration: InputDecoration(
-              labelText: 'Bearer Token',
-              border: const OutlineInputBorder(),
-              suffixIcon: IconButton(
-                onPressed: _loadAssignedJobs,
-                icon: const Icon(Icons.login),
+            const SizedBox(height: 12),
+            DropdownButtonFormField<String>(
+              initialValue: _selectedJobId,
+              decoration: const InputDecoration(
+                labelText: 'Assigned Job',
+                border: OutlineInputBorder(),
               ),
+              items: _jobs
+                  .map(
+                    (job) => DropdownMenuItem(
+                      value: job.id,
+                      child: Text('${job.jobNumber} • ${job.status}'),
+                    ),
+                  )
+                  .toList(),
+              onChanged: (value) async {
+                if (value == null) return;
+                setState(() => _selectedJobId = value);
+                await _loadSelectedJobTasks();
+              },
             ),
-          ),
-          if (_error != null) ...[
-            const SizedBox(height: 10),
-            Text(_error!, style: TextStyle(color: Colors.red.shade700)),
-          ],
-          const SizedBox(height: 12),
-          DropdownButtonFormField<String>(
-            initialValue: _selectedJobId,
-            decoration: const InputDecoration(
-              labelText: 'Assigned Job',
-              border: OutlineInputBorder(),
-            ),
-            items: _jobs
-                .map(
-                  (job) => DropdownMenuItem(
-                    value: job.id,
-                    child: Text('${job.jobNumber} • ${job.status}'),
-                  ),
-                )
-                .toList(),
-            onChanged: (value) async {
-              if (value == null) return;
-              setState(() => _selectedJobId = value);
-              await _loadSelectedJobTasks();
-            },
-          ),
-          const SizedBox(height: 12),
-          _loading
-              ? const Center(child: CircularProgressIndicator())
-              : Container(
-                  decoration: BoxDecoration(
-                    border: Border.all(color: Colors.black12),
-                    borderRadius: BorderRadius.circular(8),
-                  ),
-                  child: _tasks.isEmpty
-                      ? const Padding(
-                          padding: EdgeInsets.all(12),
-                          child: Text('No tasks for selected job'),
-                        )
-                      : Column(
-                          children: _tasks
-                              .map(
-                                (task) => CheckboxListTile(
-                                  value: task.completed,
-                                  onChanged: (nextValue) {
-                                    if (nextValue == null) return;
-                                    _toggleTaskComplete(task, nextValue);
-                                  },
-                                  title: Text(task.name),
-                                  subtitle: Text(
-                                    '${task.category} • required=${task.required}',
+            const SizedBox(height: 12),
+            _loading
+                ? const Center(child: CircularProgressIndicator())
+                : Container(
+                    decoration: BoxDecoration(
+                      border: Border.all(color: Colors.black12),
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: _tasks.isEmpty
+                        ? const Padding(
+                            padding: EdgeInsets.all(12),
+                            child: Text('No tasks for selected job'),
+                          )
+                        : Column(
+                            children: _tasks
+                                .map(
+                                  (task) => CheckboxListTile(
+                                    value: task.completed,
+                                    onChanged: (nextValue) {
+                                      if (nextValue == null) return;
+                                      _toggleTaskComplete(task, nextValue);
+                                    },
+                                    title: Text(task.name),
+                                    subtitle: Text(
+                                      '${task.category} • required=${task.required}',
+                                    ),
                                   ),
-                                ),
-                              )
-                              .toList(),
-                        ),
-                ),
-        ],
+                                )
+                                .toList(),
+                          ),
+                  ),
+          ],
+        ),
       ),
     );
   }
