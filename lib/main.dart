@@ -17,6 +17,65 @@ void main() {
 class MyApp extends StatelessWidget {
   const MyApp({super.key});
 
+  Route<dynamic> _routeFor(RouteSettings settings) {
+    final uri = Uri.tryParse(settings.name ?? "/") ?? Uri(path: "/");
+    final path = uri.path.isEmpty ? "/" : uri.path;
+
+    switch (path) {
+      case "/":
+        return MaterialPageRoute(
+          builder: (_) => LoginPage(),
+          settings: settings,
+        );
+      case "/home":
+        return MaterialPageRoute(
+          builder: (_) => HomePage(),
+          settings: settings,
+        );
+      case "/register":
+        return MaterialPageRoute(
+          builder: (_) =>
+              RegisterPage(initialEmail: uri.queryParameters["email"]),
+          settings: settings,
+        );
+      case "/cleaner":
+        return MaterialPageRoute(
+          builder: (_) => CleanerPage(),
+          settings: settings,
+        );
+      case "/admin":
+        return MaterialPageRoute(
+          builder: (_) => AdminPage(),
+          settings: settings,
+        );
+      case "/clients":
+        return MaterialPageRoute(
+          builder: (_) => ClientsPage(),
+          settings: settings,
+        );
+      case "/jobs":
+        return MaterialPageRoute(
+          builder: (_) => JobsPage(),
+          settings: settings,
+        );
+      case "/locations":
+        return MaterialPageRoute(
+          builder: (_) => LocationsPage(),
+          settings: settings,
+        );
+      case "/qa-smoke":
+        return MaterialPageRoute(
+          builder: (_) => QaSmokePage(),
+          settings: settings,
+        );
+      default:
+        return MaterialPageRoute(
+          builder: (_) => LoginPage(),
+          settings: settings,
+        );
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
@@ -27,17 +86,7 @@ class MyApp extends StatelessWidget {
         useMaterial3: true,
       ),
       initialRoute: '/',
-      routes: {
-        '/': (context) => LoginPage(),
-        '/home': (context) => HomePage(),
-        '/register': (context) => RegisterPage(),
-        '/cleaner': (context) => CleanerPage(),
-        '/admin': (context) => AdminPage(),
-        '/clients': (context) => ClientsPage(),
-        '/jobs': (context) => JobsPage(),
-        '/locations': (context) => LocationsPage(),
-        '/qa-smoke': (context) => QaSmokePage(),
-      },
+      onGenerateRoute: _routeFor,
     );
   }
 }

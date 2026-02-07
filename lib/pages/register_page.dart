@@ -3,7 +3,9 @@ import 'package:flutter/material.dart';
 import '../services/api_service.dart';
 
 class RegisterPage extends StatefulWidget {
-  const RegisterPage({super.key});
+  const RegisterPage({super.key, this.initialEmail});
+
+  final String? initialEmail;
 
   @override
   State<RegisterPage> createState() => _RegisterPageState();
@@ -18,6 +20,11 @@ class _RegisterPageState extends State<RegisterPage> {
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
+    if (_emailController.text.isEmpty &&
+        widget.initialEmail != null &&
+        widget.initialEmail!.isNotEmpty) {
+      _emailController.text = widget.initialEmail!;
+    }
     final arg = ModalRoute.of(context)?.settings.arguments;
     if (_emailController.text.isEmpty && arg is String && arg.isNotEmpty) {
       _emailController.text = arg;
@@ -27,6 +34,21 @@ class _RegisterPageState extends State<RegisterPage> {
         linkedEmail != null &&
         linkedEmail.isNotEmpty) {
       _emailController.text = linkedEmail;
+    }
+    if (_emailController.text.isEmpty) {
+      final fragment = Uri.base.fragment;
+      final queryIndex = fragment.indexOf('?');
+      if (queryIndex >= 0 && queryIndex < fragment.length - 1) {
+        try {
+          final query = fragment.substring(queryIndex + 1);
+          final queryEmail = Uri.splitQueryString(query)['email'];
+          if (queryEmail != null && queryEmail.isNotEmpty) {
+            _emailController.text = queryEmail;
+          }
+        } catch (_) {
+          // Ignore malformed fragment query strings.
+        }
+      }
     }
   }
 

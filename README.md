@@ -10,16 +10,19 @@ Use `API_BASE_URL` to override host/port.
 ```bash
 # Rust
 flutter run -d chrome \
+  --web-port=3000 \
   --dart-define=BACKEND=rust \
   --dart-define=API_BASE_URL=http://localhost:9000
 
 # Python
 flutter run -d chrome \
+  --web-port=3000 \
   --dart-define=BACKEND=python \
   --dart-define=API_BASE_URL=http://localhost:8000
 
 # Vapor
 flutter run -d chrome \
+  --web-port=3000 \
   --dart-define=BACKEND=vapor \
   --dart-define=API_BASE_URL=http://localhost:9001
 ```
@@ -90,6 +93,7 @@ If Chrome runs on a different machine than your backend, pass the backend host I
 
 ```bash
 flutter run -d chrome \
+  --web-port=3000 \
   --dart-define=BACKEND=rust \
   --dart-define=API_BASE_URL=http://<linux-host-ip>:9000
 ```
@@ -100,6 +104,7 @@ If Flutter is running on a different machine than the APIs, set host once:
 
 ```bash
 flutter run -d chrome \
+  --web-port=3000 \
   --dart-define=BACKEND=rust \
   --dart-define=BACKEND_HOST=archlinux
 ```
@@ -108,3 +113,5 @@ This makes the app target:
 - Rust: `http://archlinux:9000`
 - Python: `http://archlinux:8000`
 - Vapor: `http://archlinux:9001`
+
+Invite links use `FRONTEND_REGISTER_URL` from backend env (default `http://localhost:3000/#/register`), so `--web-port=3000` is required for those links to open correctly.
