@@ -15,8 +15,7 @@ class BackendConfig {
 
   String get label => switch (kind) {
     BackendKind.rust => 'Rust',
-    BackendKind.python => 'Python',
-    BackendKind.vapor => 'Vapor',
+    _ => 'Rust',
   };
 
   static BackendConfig forKind(
@@ -25,11 +24,13 @@ class BackendConfig {
     String scheme = 'http',
     String overrideUrl = '',
   }) {
+    // Backend switching is deprecated; force Rust as the active backend.
+    const resolvedKind = BackendKind.rust;
     final baseUrl = overrideUrl.isNotEmpty
         ? overrideUrl
-        : '$scheme://$host:${_portForKind(kind)}';
+        : '$scheme://$host:${_portForKind(resolvedKind)}';
     return BackendConfig(
-      kind: kind,
+      kind: resolvedKind,
       baseUrl: baseUrl,
       healthPath: '/healthz',
       employeesPath: '/api/v1/employees',
@@ -37,10 +38,6 @@ class BackendConfig {
   }
 
   static BackendConfig fromEnvironment() {
-    const backendValue = String.fromEnvironment(
-      'BACKEND',
-      defaultValue: 'rust',
-    );
     const overrideUrl = String.fromEnvironment(
       'API_BASE_URL',
       defaultValue: '',
@@ -50,14 +47,8 @@ class BackendConfig {
       defaultValue: '',
     );
 
-    final kind = switch (backendValue.toLowerCase()) {
-      'python' => BackendKind.python,
-      'vapor' => BackendKind.vapor,
-      _ => BackendKind.rust,
-    };
-
     return forKind(
-      kind,
+      BackendKind.rust,
       host: hostOverride.isNotEmpty ? hostOverride : 'localhost',
       scheme: 'http',
       overrideUrl: overrideUrl,
@@ -66,7 +57,6 @@ class BackendConfig {
 
   static int _portForKind(BackendKind kind) => switch (kind) {
     BackendKind.rust => 9000,
-    BackendKind.python => 8000,
-    BackendKind.vapor => 9001,
+    _ => 9000,
   };
 }

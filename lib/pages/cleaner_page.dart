@@ -176,13 +176,12 @@ class _CleanerPageState extends State<CleanerPage> {
             Wrap(
               spacing: 8,
               runSpacing: 8,
-              children: BackendKind.values
+              children: const [BackendKind.rust]
                   .map(
                     (kind) => ChoiceChip(
                       label: Text(switch (kind) {
                         BackendKind.rust => 'Rust',
-                        BackendKind.python => 'Python',
-                        BackendKind.vapor => 'Vapor',
+    _ => 'Rust',
                       }),
                       selected: _selectedBackend == kind,
                       onSelected: (_) =>

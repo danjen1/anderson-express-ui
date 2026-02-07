@@ -26,18 +26,6 @@ class ApiService {
     scheme: BackendRuntime.scheme,
   );
 
-  static BackendConfig get pythonConfig => BackendConfig.forKind(
-    BackendKind.python,
-    host: BackendRuntime.host,
-    scheme: BackendRuntime.scheme,
-  );
-
-  static BackendConfig get vaporConfig => BackendConfig.forKind(
-    BackendKind.vapor,
-    host: BackendRuntime.host,
-    scheme: BackendRuntime.scheme,
-  );
-
   BackendConfig get backend => _backend;
 
   Future<String> fetchToken({

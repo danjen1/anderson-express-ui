@@ -17,8 +17,6 @@ class HomePage extends StatefulWidget {
 
 class _HomePageState extends State<HomePage> {
   bool rustOk = false;
-  bool pythonOk = false;
-  bool vaporOk = false;
   bool loading = true;
   String? error;
   DateTime? lastChecked;
@@ -40,11 +38,7 @@ class _HomePageState extends State<HomePage> {
     final uri = Uri.parse(_activeBackend.baseUrl);
     final host = uri.host.isNotEmpty ? uri.host : 'localhost';
     final scheme = uri.scheme.isNotEmpty ? uri.scheme : 'http';
-    final port = switch (kind) {
-      BackendKind.rust => 9000,
-      BackendKind.python => 8000,
-      BackendKind.vapor => 9001,
-    };
+    final port = switch (kind) { BackendKind.rust => 9000, _ => 9000 };
     return BackendConfig(
       kind: kind,
       baseUrl: '$scheme://$host:$port',
@@ -137,15 +131,11 @@ class _HomePageState extends State<HomePage> {
       final api = ApiService();
       final results = await Future.wait([
         api.checkHealth(_healthConfigFor(BackendKind.rust)),
-        api.checkHealth(_healthConfigFor(BackendKind.python)),
-        api.checkHealth(_healthConfigFor(BackendKind.vapor)),
       ]);
 
       if (!mounted) return;
       setState(() {
         rustOk = results[0];
-        pythonOk = results[1];
-        vaporOk = results[2];
         lastChecked = DateTime.now();
       });
 
@@ -420,13 +410,11 @@ class _HomePageState extends State<HomePage> {
                               runSpacing: 8,
                               children: [
                                 _statusChip('Rust', rustOk),
-                                _statusChip('Python', pythonOk),
-                                _statusChip('Vapor', vaporOk),
                               ],
                             ),
                             const SizedBox(height: 12),
                             const Text(
-                              'Switch API Backend',
+                              'Backend Host',
                               style: TextStyle(fontWeight: FontWeight.w700),
                             ),
                             const SizedBox(height: 8),
@@ -434,12 +422,11 @@ class _HomePageState extends State<HomePage> {
                               spacing: 8,
                               runSpacing: 8,
                               children: [
-                                ...BackendKind.values.map(
+                                ...const [BackendKind.rust].map(
                                   (kind) => ChoiceChip(
                                     label: Text(switch (kind) {
                                       BackendKind.rust => 'Rust',
-                                      BackendKind.python => 'Python',
-                                      BackendKind.vapor => 'Vapor',
+    _ => 'Rust',
                                     }),
                                     selected: _selectedBackend == kind,
                                     onSelected: (_) =>

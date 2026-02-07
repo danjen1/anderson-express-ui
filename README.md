@@ -1,117 +1,54 @@
 # cleaning_demo
 
-Flutter UI for testing Anderson Express backends.
+Flutter UI for the Rust backend.
 
-## Run with Backend Toggle
+## Run
 
-Use `BACKEND` to choose active API routing (`rust`, `python`, `vapor`).
-Use `API_BASE_URL` to override host/port.
+Use `API_BASE_URL` to override host/port (defaults to `http://localhost:9000`).
 
 ```bash
-# Rust
 flutter run -d chrome \
   --web-port=3000 \
-  --dart-define=BACKEND=rust \
   --dart-define=API_BASE_URL=http://localhost:9000
-
-# Python
-flutter run -d chrome \
-  --web-port=3000 \
-  --dart-define=BACKEND=python \
-  --dart-define=API_BASE_URL=http://localhost:8000
-
-# Vapor
-flutter run -d chrome \
-  --web-port=3000 \
-  --dart-define=BACKEND=vapor \
-  --dart-define=API_BASE_URL=http://localhost:9001
 ```
 
-Default endpoints if `API_BASE_URL` is omitted:
-
+Default endpoint if `API_BASE_URL` is omitted:
 - Rust: `http://localhost:9000` (`/healthz`, `/api/v1/employees`)
-- Python: `http://localhost:8000` (`/healthz`, `/api/v1/employees`)
-- Vapor: `http://localhost:9001` (`/healthz`, `/api/v1/employees`)
 
-Employee routes require bearer auth on all three backends. Get tokens with:
+Token endpoint:
 
 ```bash
 curl -X POST http://localhost:9000/api/v1/auth/token -H 'Content-Type: application/x-www-form-urlencoded' --data 'username=admin@andersonexpress.com&password=dev-password'
-curl -X POST http://localhost:8000/api/v1/auth/token -H 'Content-Type: application/x-www-form-urlencoded' --data 'username=admin@andersonexpress.com&password=dev-password'
-curl -X POST http://localhost:9001/api/v1/auth/token -H 'Content-Type: application/x-www-form-urlencoded' --data 'username=admin@andersonexpress.com&password=dev-password'
 ```
 
 In-app QA flow:
-- Open `QA Smoke` from the System Status page.
-- Pick backend (`Rust`, `Python`, or `Vapor`), then run `Fetch Token`, `Run Employee Smoke`, `Run Client Smoke`, `Run Location Smoke`, or `Run Cleaner Smoke`.
+- Open `QA Smoke` from System Status.
+- Run `Fetch Token`, `Run Employee Smoke`, `Run Client Smoke`, `Run Location Smoke`, or `Run Cleaner Smoke`.
 
-In-app admin locations CRUD:
-- Open `Locations` from the System Status page.
-- Fetch a token, then list/create/update/delete locations against the active backend.
+In-app dashboards:
+- `Locations`: list/create/update/delete locations.
+- `Clients`: list/create/update/delete clients.
+- `Cleaner`: assigned jobs + job tasks.
+- `Jobs`: create jobs, assign employees, inspect tasks/assignments.
 
-In-app admin clients CRUD:
-- Open `Clients` from the System Status page.
-- Fetch a token, then list/create/update/delete clients against the active backend.
-
-Runtime backend switch (no relaunch required):
+Runtime host switch (no relaunch required):
 - Open `System Status`.
-- Choose backend (`Rust`, `Python`, `Vapor`), set host (for example `archlinux`), and click `Apply`.
-- The active backend banner is shown globally in app bars.
-- Admin, Clients, Locations, Cleaner, and QA Smoke pages use this active backend setting.
+- Set host (for example `archlinux`) and click `Apply`.
 
-In-app cleaner dashboard:
-- Open `Cleaner` from the System Status page.
-- Use cleaner credentials (`john@andersonexpress.com` / `worker123`) and fetch token.
-- Cleaner only sees assigned jobs and their tasks for the active backend.
-
-In-app jobs dashboard (admin):
-- Open `Jobs` from the System Status page.
-- Use admin credentials and fetch token.
-- Create jobs, assign employees, and inspect job tasks/assignments against the active backend.
-
-Invite/register/login workflow (dev):
-- Admin creates an employee or client in the Admin/Clients page.
-- UI now shows an `Invite Ready` dialog and can open `Register Invite`.
-- `Register Invite` calls `POST /api/v1/auth/register` to set credentials.
-- Login page supports:
-  - `Login` (real token fetch)
-  - `Register Invite`
-  - `Development Bypass` (kept for local speed)
-
-OAuth token input behavior:
-- Token fields are now compact and hidden by default behind a visibility toggle,
-  so long JWTs stay out of the way during normal CRUD flows.
-
-Authorization behavior mirrored across all 3 backends:
-- Admin: full CRUD on employees/clients/locations/cleaning/jobs.
-- Cleaner user: assigned jobs + job tasks only.
-- Client user: own locations only.
-
-## Chrome/Web against Linux backend host
-
-If Chrome runs on a different machine than your backend, pass the backend host IP:
+If Flutter runs on a different machine than the backend:
 
 ```bash
 flutter run -d chrome \
   --web-port=3000 \
-  --dart-define=BACKEND=rust \
   --dart-define=API_BASE_URL=http://<linux-host-ip>:9000
 ```
 
-Do the same for Python (`:8000`) and Vapor (`:9001`).
-
-If Flutter is running on a different machine than the APIs, set host once:
+Or set host once:
 
 ```bash
 flutter run -d chrome \
   --web-port=3000 \
-  --dart-define=BACKEND=rust \
   --dart-define=BACKEND_HOST=archlinux
 ```
 
-This makes the app target:
-- Rust: `http://archlinux:9000`
-- Python: `http://archlinux:8000`
-- Vapor: `http://archlinux:9001`
-
-Invite links use `FRONTEND_REGISTER_URL` from backend env (default `http://localhost:3000/#/register`), so `--web-port=3000` is required for those links to open correctly.
+Invite links use `FRONTEND_REGISTER_URL` from backend env (default `http://localhost:3000/#/register`), so `--web-port=3000` is required for invite links to open correctly.

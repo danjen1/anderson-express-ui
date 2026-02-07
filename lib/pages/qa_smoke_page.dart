@@ -17,7 +17,7 @@ class QaSmokePage extends StatefulWidget {
 }
 
 class _QaSmokePageState extends State<QaSmokePage> {
-  BackendKind _backendKind = BackendConfig.fromEnvironment().kind;
+  final BackendKind _backendKind = BackendKind.rust;
   final _baseUrlController = TextEditingController();
   final _emailController = TextEditingController(
     text: 'admin@andersonexpress.com',
@@ -43,11 +43,7 @@ class _QaSmokePageState extends State<QaSmokePage> {
   }
 
   BackendConfig _defaultConfig(BackendKind kind) {
-    return switch (kind) {
-      BackendKind.rust => ApiService.rustConfig,
-      BackendKind.python => ApiService.pythonConfig,
-      BackendKind.vapor => ApiService.vaporConfig,
-    };
+    return ApiService.rustConfig;
   }
 
   BackendConfig _activeConfig() {
@@ -358,32 +354,13 @@ class _QaSmokePageState extends State<QaSmokePage> {
         padding: const EdgeInsets.all(16),
         child: Column(
           children: [
-            DropdownButtonFormField<BackendKind>(
-              initialValue: _backendKind,
+            TextFormField(
+              initialValue: 'Rust',
+              readOnly: true,
               decoration: const InputDecoration(
                 labelText: 'Backend',
                 border: OutlineInputBorder(),
               ),
-              items: const [
-                DropdownMenuItem(value: BackendKind.rust, child: Text('Rust')),
-                DropdownMenuItem(
-                  value: BackendKind.python,
-                  child: Text('Python'),
-                ),
-                DropdownMenuItem(
-                  value: BackendKind.vapor,
-                  child: Text('Vapor'),
-                ),
-              ],
-              onChanged: _running
-                  ? null
-                  : (value) {
-                      if (value == null) return;
-                      setState(() {
-                        _backendKind = value;
-                        _baseUrlController.text = _defaultConfig(value).baseUrl;
-                      });
-                    },
             ),
             const SizedBox(height: 12),
             TextField(
