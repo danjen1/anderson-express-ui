@@ -144,7 +144,7 @@ class ApiService {
           headers: _headers(bearerToken),
           body: jsonEncode(input.toJson()),
         )
-        .timeout(const Duration(seconds: 8));
+        .timeout(const Duration(seconds: 20));
 
     _throwIfError(response, fallbackMessage: 'Failed to create employee');
     final data = jsonDecode(response.body) as Map<String, dynamic>;
@@ -221,7 +221,7 @@ class ApiService {
           headers: _headers(bearerToken),
           body: jsonEncode(input.toJson()),
         )
-        .timeout(const Duration(seconds: 8));
+        .timeout(const Duration(seconds: 20));
 
     _throwIfError(response, fallbackMessage: 'Failed to create client');
     final data = jsonDecode(response.body) as Map<String, dynamic>;

@@ -141,6 +141,14 @@ class _HomePageState extends State<HomePage> {
         api.checkHealth(_healthConfigFor(BackendKind.vapor)),
       ]);
 
+      if (!mounted) return;
+      setState(() {
+        rustOk = results[0];
+        pythonOk = results[1];
+        vaporOk = results[2];
+        lastChecked = DateTime.now();
+      });
+
       final token = _session?.token ?? '';
       List<Job> adminPending = const [];
       List<Job> cleanerJobs = const [];
@@ -164,14 +172,10 @@ class _HomePageState extends State<HomePage> {
 
       if (!mounted) return;
       setState(() {
-        rustOk = results[0];
-        pythonOk = results[1];
-        vaporOk = results[2];
         _adminPendingJobs = adminPending;
         _cleanerJobs = cleanerJobs;
         _clientLocations = clientLocations;
         _clientPendingJobs = clientPending;
-        lastChecked = DateTime.now();
       });
     } catch (loadError) {
       if (!mounted) return;
