@@ -9,6 +9,8 @@ import '../services/backend_runtime.dart';
 import '../utils/error_text.dart';
 import '../widgets/backend_banner.dart';
 import '../widgets/demo_mode_notice.dart';
+import '../widgets/profile_menu_button.dart';
+import '../widgets/theme_toggle_button.dart';
 
 class ClientsPage extends StatefulWidget {
   const ClientsPage({super.key});
@@ -241,19 +243,13 @@ class _ClientsPageState extends State<ClientsPage> {
         title: const Text('Anderson Express Cleaning Service'),
         bottom: const BackendBanner(),
         actions: [
-          IconButton(
-            onPressed: () {
-              AuthSession.clear();
-              Navigator.pushReplacementNamed(context, '/');
-            },
-            icon: const Icon(Icons.logout),
-            tooltip: 'Logout',
-          ),
+          const ThemeToggleButton(),
           IconButton(
             onPressed: _loading ? null : _loadClients,
             icon: const Icon(Icons.refresh),
             tooltip: 'Refresh',
           ),
+          const ProfileMenuButton(),
         ],
       ),
       floatingActionButton: FloatingActionButton.extended(

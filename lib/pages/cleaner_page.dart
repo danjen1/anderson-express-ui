@@ -8,6 +8,8 @@ import '../services/auth_session.dart';
 import '../services/backend_runtime.dart';
 import '../utils/error_text.dart';
 import '../widgets/backend_banner.dart';
+import '../widgets/profile_menu_button.dart';
+import '../widgets/theme_toggle_button.dart';
 
 class CleanerPage extends StatefulWidget {
   const CleanerPage({super.key});
@@ -154,19 +156,13 @@ class _CleanerPageState extends State<CleanerPage> {
         title: const Text('Anderson Express Cleaning Service'),
         bottom: const BackendBanner(),
         actions: [
-          IconButton(
-            onPressed: () {
-              AuthSession.clear();
-              Navigator.pushReplacementNamed(context, '/');
-            },
-            icon: const Icon(Icons.logout),
-            tooltip: 'Logout',
-          ),
+          const ThemeToggleButton(),
           IconButton(
             onPressed: _loading ? null : _loadAssignedJobs,
             icon: const Icon(Icons.refresh),
             tooltip: 'Refresh',
           ),
+          const ProfileMenuButton(),
         ],
       ),
       body: SafeArea(

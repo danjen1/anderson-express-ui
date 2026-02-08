@@ -11,6 +11,7 @@ import '../services/api_service.dart';
 import '../services/auth_session.dart';
 import '../utils/date_format.dart';
 import '../widgets/backend_banner.dart';
+import '../widgets/profile_menu_button.dart';
 import '../widgets/theme_toggle_button.dart';
 
 class HomePage extends StatefulWidget {
@@ -901,18 +902,11 @@ class _HomePageState extends State<HomePage> {
         actions: [
           const ThemeToggleButton(),
           IconButton(
-            onPressed: () {
-              AuthSession.clear();
-              Navigator.pushReplacementNamed(context, '/');
-            },
-            icon: const Icon(Icons.logout),
-            tooltip: 'Logout',
-          ),
-          IconButton(
             onPressed: _loadDashboard,
             icon: const Icon(Icons.refresh),
             tooltip: 'Refresh',
           ),
+          const ProfileMenuButton(),
         ],
       ),
       body: SafeArea(

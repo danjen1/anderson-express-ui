@@ -231,6 +231,19 @@ class ApiService {
     return Client.fromJson(data);
   }
 
+  Future<Client> getClient(String clientId, {String? bearerToken}) async {
+    final response = await http
+        .get(
+          Uri.parse('${_backend.baseUrl}/api/v1/clients/$clientId'),
+          headers: _headers(bearerToken),
+        )
+        .timeout(const Duration(seconds: 8));
+
+    _throwIfError(response, fallbackMessage: 'Failed to fetch client');
+    final data = jsonDecode(response.body) as Map<String, dynamic>;
+    return Client.fromJson(data);
+  }
+
   Future<Client> updateClient(
     String clientId,
     ClientUpdateInput input, {

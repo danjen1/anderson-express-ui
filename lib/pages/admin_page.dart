@@ -19,6 +19,8 @@ import '../utils/date_format.dart';
 import '../utils/error_text.dart';
 import '../widgets/backend_banner.dart';
 import '../widgets/demo_mode_notice.dart';
+import '../widgets/profile_menu_button.dart';
+import '../widgets/theme_toggle_button.dart';
 
 enum _AdminSection {
   dashboard,
@@ -28,6 +30,7 @@ enum _AdminSection {
   employees,
   locations,
   reports,
+  knowledgeBase,
 }
 
 enum _EmployeeFilter { all, active, inactive }
@@ -1198,6 +1201,38 @@ class _AdminPageState extends State<AdminPage> {
     );
   }
 
+  TextStyle get _tableHeaderStyle =>
+      const TextStyle(fontWeight: FontWeight.w800);
+
+  DataColumn _tableColumn(String label) {
+    return DataColumn(label: Text(label, style: _tableHeaderStyle));
+  }
+
+  Widget _centeredSectionBody(Widget child) {
+    return Center(
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(maxWidth: 1240),
+        child: child,
+      ),
+    );
+  }
+
+  String _clientNameById(int clientId) {
+    for (final client in _clients) {
+      if (int.tryParse(client.id) == clientId) {
+        return client.name;
+      }
+    }
+    return 'Client $clientId';
+  }
+
+  void _openJobsOverdue() {
+    setState(() {
+      _selectedSection = _AdminSection.jobs;
+      _jobFilter = _JobFilter.overdue;
+    });
+  }
+
   Widget _buildSidebar() {
     Widget navTile({
       required _AdminSection section,
@@ -1263,6 +1298,11 @@ class _AdminPageState extends State<AdminPage> {
             icon: Icons.assessment_outlined,
             title: 'Reports',
           ),
+          navTile(
+            section: _AdminSection.knowledgeBase,
+            icon: Icons.menu_book_outlined,
+            title: 'Knowledge Base',
+          ),
           const Divider(height: 24),
           navTile(
             section: _AdminSection.dashboard,
@@ -1295,6 +1335,15 @@ class _AdminPageState extends State<AdminPage> {
     final activeEmployees = _employees
         .where((e) => e.status.trim().toLowerCase() == 'active')
         .length;
+    final overdueJobs = _jobs.where(_isOverdue).toList()
+      ..sort((a, b) => a.scheduledDate.compareTo(b.scheduledDate));
+    final utilizationAssigned = activeEmployees == 0
+        ? 0.0
+        : (_totalAssignedJobs / activeEmployees).clamp(0, 8) / 8;
+    final utilizationCompleted = activeEmployees == 0
+        ? 0.0
+        : (_totalCompletedJobs / activeEmployees).clamp(0, 8) / 8;
+
     return ListView(
       children: [
         _buildSectionHeader(
@@ -1356,22 +1405,87 @@ class _AdminPageState extends State<AdminPage> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
+                const Text('Per-Employee Utilization (Placeholder)'),
+                const SizedBox(height: 8),
+                Text(
+                  'Data source wiring pending: current bars use high-level averages.',
+                  style: TextStyle(color: Theme.of(context).hintColor),
+                ),
+                const SizedBox(height: 12),
+                Text('Assigned capacity'),
+                const SizedBox(height: 6),
+                LinearProgressIndicator(value: utilizationAssigned),
+                const SizedBox(height: 10),
+                Text('Completed throughput'),
+                const SizedBox(height: 6),
+                LinearProgressIndicator(value: utilizationCompleted),
+              ],
+            ),
+          ),
+        ),
+        const SizedBox(height: 12),
+        Card(
+          child: Padding(
+            padding: const EdgeInsets.all(14),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
                 const Text(
-                  'Suggested next scaffolds',
+                  'Quick Late-Job List',
                   style: TextStyle(fontWeight: FontWeight.w700),
                 ),
                 const SizedBox(height: 8),
-                Text(
-                  '1. Add per-employee utilization chart (assigned vs completed in period).',
-                  style: TextStyle(color: Theme.of(context).hintColor),
+                if (overdueJobs.isEmpty)
+                  Text(
+                    'No overdue jobs right now.',
+                    style: TextStyle(color: Theme.of(context).hintColor),
+                  )
+                else
+                  ...overdueJobs
+                      .take(5)
+                      .map(
+                        (job) => ListTile(
+                          dense: true,
+                          contentPadding: EdgeInsets.zero,
+                          title: Text(job.jobNumber),
+                          subtitle: Text(
+                            '${job.clientName ?? 'Unknown client'} • ${formatDateMdy(job.scheduledDate)}',
+                          ),
+                        ),
+                      ),
+                const SizedBox(height: 6),
+                Align(
+                  alignment: Alignment.centerRight,
+                  child: OutlinedButton.icon(
+                    onPressed: _openJobsOverdue,
+                    icon: const Icon(Icons.open_in_new),
+                    label: const Text('Open Overdue Jobs'),
+                  ),
                 ),
-                Text(
-                  '2. Add quick late-job list with drill-down into Jobs workspace.',
-                  style: TextStyle(color: Theme.of(context).hintColor),
+              ],
+            ),
+          ),
+        ),
+        const SizedBox(height: 12),
+        Card(
+          child: Padding(
+            padding: const EdgeInsets.all(14),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text(
+                  'Reporting Stubs',
+                  style: TextStyle(fontWeight: FontWeight.w700),
                 ),
-                Text(
-                  '3. Add report export stubs (CSV/PDF) in Reports section.',
-                  style: TextStyle(color: Theme.of(context).hintColor),
+                const SizedBox(height: 8),
+                Wrap(
+                  spacing: 8,
+                  runSpacing: 8,
+                  children: const [
+                    Chip(label: Text('Operations Summary (Stub)')),
+                    Chip(label: Text('Payroll Window Export (Stub)')),
+                    Chip(label: Text('Client Service Recap (Stub)')),
+                  ],
                 ),
               ],
             ),
@@ -1390,90 +1504,101 @@ class _AdminPageState extends State<AdminPage> {
           'Employees',
           'Create, edit, delete, and filter employees by status.',
         ),
-        Row(
-          children: [
-            Wrap(
-              spacing: 8,
+        Expanded(
+          child: _centeredSectionBody(
+            Column(
               children: [
-                ChoiceChip(
-                  label: const Text('All'),
-                  selected: _employeeFilter == _EmployeeFilter.all,
-                  onSelected: (_) =>
-                      setState(() => _employeeFilter = _EmployeeFilter.all),
+                Row(
+                  children: [
+                    Wrap(
+                      spacing: 8,
+                      children: [
+                        ChoiceChip(
+                          label: const Text('Active'),
+                          selected: _employeeFilter == _EmployeeFilter.active,
+                          onSelected: (_) => setState(
+                            () => _employeeFilter = _EmployeeFilter.active,
+                          ),
+                        ),
+                        ChoiceChip(
+                          label: const Text('Inactive'),
+                          selected: _employeeFilter == _EmployeeFilter.inactive,
+                          onSelected: (_) => setState(
+                            () => _employeeFilter = _EmployeeFilter.inactive,
+                          ),
+                        ),
+                        ChoiceChip(
+                          label: const Text('All'),
+                          selected: _employeeFilter == _EmployeeFilter.all,
+                          onSelected: (_) => setState(
+                            () => _employeeFilter = _EmployeeFilter.all,
+                          ),
+                        ),
+                      ],
+                    ),
+                    const Spacer(),
+                    FilledButton.icon(
+                      onPressed: AppEnv.isDemoMode ? null : _showCreateDialog,
+                      icon: const Icon(Icons.person_add),
+                      label: const Text('Create Employee'),
+                    ),
+                  ],
                 ),
-                ChoiceChip(
-                  label: const Text('Active'),
-                  selected: _employeeFilter == _EmployeeFilter.active,
-                  onSelected: (_) =>
-                      setState(() => _employeeFilter = _EmployeeFilter.active),
-                ),
-                ChoiceChip(
-                  label: const Text('Inactive'),
-                  selected: _employeeFilter == _EmployeeFilter.inactive,
-                  onSelected: (_) => setState(
-                    () => _employeeFilter = _EmployeeFilter.inactive,
+                const SizedBox(height: 12),
+                Expanded(
+                  child: Card(
+                    child: SingleChildScrollView(
+                      scrollDirection: Axis.horizontal,
+                      child: SingleChildScrollView(
+                        child: DataTable(
+                          columns: [
+                            _tableColumn('Employee #'),
+                            _tableColumn('Name'),
+                            _tableColumn('Status'),
+                            _tableColumn('Email'),
+                            _tableColumn('Phone'),
+                            _tableColumn('Actions'),
+                          ],
+                          rows: rows
+                              .map(
+                                (employee) => DataRow(
+                                  cells: [
+                                    DataCell(Text(employee.employeeNumber)),
+                                    DataCell(Text(employee.name)),
+                                    DataCell(Text(employee.status)),
+                                    DataCell(Text(employee.email ?? '—')),
+                                    DataCell(Text(employee.phoneNumber ?? '—')),
+                                    DataCell(
+                                      Row(
+                                        children: [
+                                          IconButton(
+                                            icon: const Icon(Icons.edit),
+                                            tooltip: 'Edit',
+                                            onPressed: AppEnv.isDemoMode
+                                                ? null
+                                                : () =>
+                                                      _showEditDialog(employee),
+                                          ),
+                                          IconButton(
+                                            icon: const Icon(Icons.delete),
+                                            tooltip: 'Delete',
+                                            onPressed: AppEnv.isDemoMode
+                                                ? null
+                                                : () => _delete(employee),
+                                          ),
+                                        ],
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              )
+                              .toList(),
+                        ),
+                      ),
+                    ),
                   ),
                 ),
               ],
-            ),
-            const Spacer(),
-            FilledButton.icon(
-              onPressed: AppEnv.isDemoMode ? null : _showCreateDialog,
-              icon: const Icon(Icons.person_add),
-              label: const Text('Create Employee'),
-            ),
-          ],
-        ),
-        const SizedBox(height: 12),
-        Expanded(
-          child: Card(
-            child: SingleChildScrollView(
-              scrollDirection: Axis.horizontal,
-              child: SingleChildScrollView(
-                child: DataTable(
-                  columns: const [
-                    DataColumn(label: Text('Employee #')),
-                    DataColumn(label: Text('Name')),
-                    DataColumn(label: Text('Status')),
-                    DataColumn(label: Text('Email')),
-                    DataColumn(label: Text('Phone')),
-                    DataColumn(label: Text('Actions')),
-                  ],
-                  rows: rows
-                      .map(
-                        (employee) => DataRow(
-                          cells: [
-                            DataCell(Text(employee.employeeNumber)),
-                            DataCell(Text(employee.name)),
-                            DataCell(Text(employee.status)),
-                            DataCell(Text(employee.email ?? '—')),
-                            DataCell(Text(employee.phoneNumber ?? '—')),
-                            DataCell(
-                              Row(
-                                children: [
-                                  IconButton(
-                                    icon: const Icon(Icons.edit),
-                                    tooltip: 'Edit',
-                                    onPressed: AppEnv.isDemoMode
-                                        ? null
-                                        : () => _showEditDialog(employee),
-                                  ),
-                                  IconButton(
-                                    icon: const Icon(Icons.delete),
-                                    tooltip: 'Delete',
-                                    onPressed: AppEnv.isDemoMode
-                                        ? null
-                                        : () => _delete(employee),
-                                  ),
-                                ],
-                              ),
-                            ),
-                          ],
-                        ),
-                      )
-                      .toList(),
-                ),
-              ),
             ),
           ),
         ),
@@ -1490,89 +1615,103 @@ class _AdminPageState extends State<AdminPage> {
           'Clients',
           'Create, edit, delete, and filter clients by status.',
         ),
-        Row(
-          children: [
-            Wrap(
-              spacing: 8,
+        Expanded(
+          child: _centeredSectionBody(
+            Column(
               children: [
-                ChoiceChip(
-                  label: const Text('All'),
-                  selected: _clientFilter == _ClientFilter.all,
-                  onSelected: (_) =>
-                      setState(() => _clientFilter = _ClientFilter.all),
+                Row(
+                  children: [
+                    Wrap(
+                      spacing: 8,
+                      children: [
+                        ChoiceChip(
+                          label: const Text('Active'),
+                          selected: _clientFilter == _ClientFilter.active,
+                          onSelected: (_) => setState(
+                            () => _clientFilter = _ClientFilter.active,
+                          ),
+                        ),
+                        ChoiceChip(
+                          label: const Text('Inactive'),
+                          selected: _clientFilter == _ClientFilter.inactive,
+                          onSelected: (_) => setState(
+                            () => _clientFilter = _ClientFilter.inactive,
+                          ),
+                        ),
+                        ChoiceChip(
+                          label: const Text('All'),
+                          selected: _clientFilter == _ClientFilter.all,
+                          onSelected: (_) =>
+                              setState(() => _clientFilter = _ClientFilter.all),
+                        ),
+                      ],
+                    ),
+                    const Spacer(),
+                    FilledButton.icon(
+                      onPressed: AppEnv.isDemoMode
+                          ? null
+                          : _showCreateClientDialog,
+                      icon: const Icon(Icons.business),
+                      label: const Text('Create Client'),
+                    ),
+                  ],
                 ),
-                ChoiceChip(
-                  label: const Text('Active'),
-                  selected: _clientFilter == _ClientFilter.active,
-                  onSelected: (_) =>
-                      setState(() => _clientFilter = _ClientFilter.active),
-                ),
-                ChoiceChip(
-                  label: const Text('Inactive'),
-                  selected: _clientFilter == _ClientFilter.inactive,
-                  onSelected: (_) =>
-                      setState(() => _clientFilter = _ClientFilter.inactive),
+                const SizedBox(height: 12),
+                Expanded(
+                  child: Card(
+                    child: SingleChildScrollView(
+                      scrollDirection: Axis.horizontal,
+                      child: SingleChildScrollView(
+                        child: DataTable(
+                          columns: [
+                            _tableColumn('Client #'),
+                            _tableColumn('Name'),
+                            _tableColumn('Status'),
+                            _tableColumn('Email'),
+                            _tableColumn('Phone'),
+                            _tableColumn('Actions'),
+                          ],
+                          rows: rows
+                              .map(
+                                (client) => DataRow(
+                                  cells: [
+                                    DataCell(Text(client.clientNumber)),
+                                    DataCell(Text(client.name)),
+                                    DataCell(Text(client.status)),
+                                    DataCell(Text(client.email ?? '—')),
+                                    DataCell(Text(client.phoneNumber ?? '—')),
+                                    DataCell(
+                                      Row(
+                                        children: [
+                                          IconButton(
+                                            icon: const Icon(Icons.edit),
+                                            tooltip: 'Edit',
+                                            onPressed: AppEnv.isDemoMode
+                                                ? null
+                                                : () => _showEditClientDialog(
+                                                    client,
+                                                  ),
+                                          ),
+                                          IconButton(
+                                            icon: const Icon(Icons.delete),
+                                            tooltip: 'Delete',
+                                            onPressed: AppEnv.isDemoMode
+                                                ? null
+                                                : () => _deleteClient(client),
+                                          ),
+                                        ],
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              )
+                              .toList(),
+                        ),
+                      ),
+                    ),
+                  ),
                 ),
               ],
-            ),
-            const Spacer(),
-            FilledButton.icon(
-              onPressed: AppEnv.isDemoMode ? null : _showCreateClientDialog,
-              icon: const Icon(Icons.business),
-              label: const Text('Create Client'),
-            ),
-          ],
-        ),
-        const SizedBox(height: 12),
-        Expanded(
-          child: Card(
-            child: SingleChildScrollView(
-              scrollDirection: Axis.horizontal,
-              child: SingleChildScrollView(
-                child: DataTable(
-                  columns: const [
-                    DataColumn(label: Text('Client #')),
-                    DataColumn(label: Text('Name')),
-                    DataColumn(label: Text('Status')),
-                    DataColumn(label: Text('Email')),
-                    DataColumn(label: Text('Phone')),
-                    DataColumn(label: Text('Actions')),
-                  ],
-                  rows: rows
-                      .map(
-                        (client) => DataRow(
-                          cells: [
-                            DataCell(Text(client.clientNumber)),
-                            DataCell(Text(client.name)),
-                            DataCell(Text(client.status)),
-                            DataCell(Text(client.email ?? '—')),
-                            DataCell(Text(client.phoneNumber ?? '—')),
-                            DataCell(
-                              Row(
-                                children: [
-                                  IconButton(
-                                    icon: const Icon(Icons.edit),
-                                    tooltip: 'Edit',
-                                    onPressed: AppEnv.isDemoMode
-                                        ? null
-                                        : () => _showEditClientDialog(client),
-                                  ),
-                                  IconButton(
-                                    icon: const Icon(Icons.delete),
-                                    tooltip: 'Delete',
-                                    onPressed: AppEnv.isDemoMode
-                                        ? null
-                                        : () => _deleteClient(client),
-                                  ),
-                                ],
-                              ),
-                            ),
-                          ],
-                        ),
-                      )
-                      .toList(),
-                ),
-              ),
             ),
           ),
         ),
@@ -1589,100 +1728,123 @@ class _AdminPageState extends State<AdminPage> {
           'Locations',
           'Create, edit, delete, and filter locations by status.',
         ),
-        Row(
-          children: [
-            Wrap(
-              spacing: 8,
+        Expanded(
+          child: _centeredSectionBody(
+            Column(
               children: [
-                ChoiceChip(
-                  label: const Text('All'),
-                  selected: _locationFilter == _LocationFilter.all,
-                  onSelected: (_) =>
-                      setState(() => _locationFilter = _LocationFilter.all),
+                Row(
+                  children: [
+                    Wrap(
+                      spacing: 8,
+                      children: [
+                        ChoiceChip(
+                          label: const Text('Active'),
+                          selected: _locationFilter == _LocationFilter.active,
+                          onSelected: (_) => setState(
+                            () => _locationFilter = _LocationFilter.active,
+                          ),
+                        ),
+                        ChoiceChip(
+                          label: const Text('Inactive'),
+                          selected: _locationFilter == _LocationFilter.inactive,
+                          onSelected: (_) => setState(
+                            () => _locationFilter = _LocationFilter.inactive,
+                          ),
+                        ),
+                        ChoiceChip(
+                          label: const Text('All'),
+                          selected: _locationFilter == _LocationFilter.all,
+                          onSelected: (_) => setState(
+                            () => _locationFilter = _LocationFilter.all,
+                          ),
+                        ),
+                      ],
+                    ),
+                    const Spacer(),
+                    FilledButton.icon(
+                      onPressed: AppEnv.isDemoMode
+                          ? null
+                          : _showCreateLocationDialog,
+                      icon: const Icon(Icons.add_location_alt),
+                      label: const Text('Create Location'),
+                    ),
+                  ],
                 ),
-                ChoiceChip(
-                  label: const Text('Active'),
-                  selected: _locationFilter == _LocationFilter.active,
-                  onSelected: (_) =>
-                      setState(() => _locationFilter = _LocationFilter.active),
-                ),
-                ChoiceChip(
-                  label: const Text('Inactive'),
-                  selected: _locationFilter == _LocationFilter.inactive,
-                  onSelected: (_) => setState(
-                    () => _locationFilter = _LocationFilter.inactive,
+                const SizedBox(height: 12),
+                Expanded(
+                  child: Card(
+                    child: SingleChildScrollView(
+                      scrollDirection: Axis.horizontal,
+                      child: SingleChildScrollView(
+                        child: DataTable(
+                          columns: [
+                            _tableColumn('Photo'),
+                            _tableColumn('Client'),
+                            _tableColumn('Type'),
+                            _tableColumn('Status'),
+                            _tableColumn('Address'),
+                            _tableColumn('Actions'),
+                          ],
+                          rows: rows
+                              .map(
+                                (location) => DataRow(
+                                  cells: [
+                                    const DataCell(
+                                      CircleAvatar(
+                                        radius: 14,
+                                        child: Icon(Icons.photo, size: 16),
+                                      ),
+                                    ),
+                                    DataCell(
+                                      Text(_clientNameById(location.clientId)),
+                                    ),
+                                    DataCell(Text(location.type)),
+                                    DataCell(Text(location.status)),
+                                    DataCell(
+                                      Text(
+                                        [
+                                              location.address ?? '',
+                                              location.city ?? '',
+                                              location.state ?? '',
+                                              location.zipCode ?? '',
+                                            ]
+                                            .where((e) => e.trim().isNotEmpty)
+                                            .join(', '),
+                                      ),
+                                    ),
+                                    DataCell(
+                                      Row(
+                                        children: [
+                                          IconButton(
+                                            icon: const Icon(Icons.edit),
+                                            tooltip: 'Edit',
+                                            onPressed: AppEnv.isDemoMode
+                                                ? null
+                                                : () => _showEditLocationDialog(
+                                                    location,
+                                                  ),
+                                          ),
+                                          IconButton(
+                                            icon: const Icon(Icons.delete),
+                                            tooltip: 'Delete',
+                                            onPressed: AppEnv.isDemoMode
+                                                ? null
+                                                : () =>
+                                                      _deleteLocation(location),
+                                          ),
+                                        ],
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              )
+                              .toList(),
+                        ),
+                      ),
+                    ),
                   ),
                 ),
               ],
-            ),
-            const Spacer(),
-            FilledButton.icon(
-              onPressed: AppEnv.isDemoMode ? null : _showCreateLocationDialog,
-              icon: const Icon(Icons.add_location_alt),
-              label: const Text('Create Location'),
-            ),
-          ],
-        ),
-        const SizedBox(height: 12),
-        Expanded(
-          child: Card(
-            child: SingleChildScrollView(
-              scrollDirection: Axis.horizontal,
-              child: SingleChildScrollView(
-                child: DataTable(
-                  columns: const [
-                    DataColumn(label: Text('Location #')),
-                    DataColumn(label: Text('Client ID')),
-                    DataColumn(label: Text('Type')),
-                    DataColumn(label: Text('Status')),
-                    DataColumn(label: Text('Address')),
-                    DataColumn(label: Text('Actions')),
-                  ],
-                  rows: rows
-                      .map(
-                        (location) => DataRow(
-                          cells: [
-                            DataCell(Text(location.locationNumber)),
-                            DataCell(Text(location.clientId.toString())),
-                            DataCell(Text(location.type)),
-                            DataCell(Text(location.status)),
-                            DataCell(
-                              Text(
-                                [
-                                  location.address ?? '',
-                                  location.city ?? '',
-                                  location.state ?? '',
-                                  location.zipCode ?? '',
-                                ].where((e) => e.trim().isNotEmpty).join(', '),
-                              ),
-                            ),
-                            DataCell(
-                              Row(
-                                children: [
-                                  IconButton(
-                                    icon: const Icon(Icons.edit),
-                                    tooltip: 'Edit',
-                                    onPressed: AppEnv.isDemoMode
-                                        ? null
-                                        : () =>
-                                              _showEditLocationDialog(location),
-                                  ),
-                                  IconButton(
-                                    icon: const Icon(Icons.delete),
-                                    tooltip: 'Delete',
-                                    onPressed: AppEnv.isDemoMode
-                                        ? null
-                                        : () => _deleteLocation(location),
-                                  ),
-                                ],
-                              ),
-                            ),
-                          ],
-                        ),
-                      )
-                      .toList(),
-                ),
-              ),
             ),
           ),
         ),
@@ -1699,118 +1861,137 @@ class _AdminPageState extends State<AdminPage> {
           'Jobs',
           'Create jobs, link location + cleaning profile, and monitor status.',
         ),
-        Row(
-          children: [
-            Expanded(
-              child: Wrap(
-                spacing: 8,
-                runSpacing: 8,
-                children: [
-                  ChoiceChip(
-                    label: const Text('All'),
-                    selected: _jobFilter == _JobFilter.all,
-                    onSelected: (_) =>
-                        setState(() => _jobFilter = _JobFilter.all),
-                  ),
-                  ChoiceChip(
-                    label: const Text('Pending'),
-                    selected: _jobFilter == _JobFilter.pending,
-                    onSelected: (_) =>
-                        setState(() => _jobFilter = _JobFilter.pending),
-                  ),
-                  ChoiceChip(
-                    label: const Text('Assigned'),
-                    selected: _jobFilter == _JobFilter.assigned,
-                    onSelected: (_) =>
-                        setState(() => _jobFilter = _JobFilter.assigned),
-                  ),
-                  ChoiceChip(
-                    label: const Text('In Progress'),
-                    selected: _jobFilter == _JobFilter.inProgress,
-                    onSelected: (_) =>
-                        setState(() => _jobFilter = _JobFilter.inProgress),
-                  ),
-                  ChoiceChip(
-                    label: const Text('Completed'),
-                    selected: _jobFilter == _JobFilter.completed,
-                    onSelected: (_) =>
-                        setState(() => _jobFilter = _JobFilter.completed),
-                  ),
-                  ChoiceChip(
-                    label: const Text('Overdue'),
-                    selected: _jobFilter == _JobFilter.overdue,
-                    onSelected: (_) =>
-                        setState(() => _jobFilter = _JobFilter.overdue),
-                  ),
-                ],
-              ),
-            ),
-            const SizedBox(width: 8),
-            OutlinedButton.icon(
-              onPressed: () => Navigator.pushNamed(context, '/jobs'),
-              icon: const Icon(Icons.open_in_new),
-              label: const Text('Open Jobs Route'),
-            ),
-            const SizedBox(width: 8),
-            FilledButton.icon(
-              onPressed: AppEnv.isDemoMode ? null : _showCreateJobDialog,
-              icon: const Icon(Icons.add),
-              label: const Text('Create Job'),
-            ),
-          ],
-        ),
-        const SizedBox(height: 12),
         Expanded(
-          child: Card(
-            child: SingleChildScrollView(
-              scrollDirection: Axis.horizontal,
-              child: SingleChildScrollView(
-                child: DataTable(
-                  columns: const [
-                    DataColumn(label: Text('Job #')),
-                    DataColumn(label: Text('Client')),
-                    DataColumn(label: Text('Status')),
-                    DataColumn(label: Text('Scheduled')),
-                    DataColumn(label: Text('Location')),
-                    DataColumn(label: Text('Cleaning Profile')),
-                    DataColumn(label: Text('Actions')),
-                  ],
-                  rows: rows
-                      .map(
-                        (job) => DataRow(
-                          cells: [
-                            DataCell(Text(job.jobNumber)),
-                            DataCell(Text(job.clientName ?? '—')),
-                            DataCell(Text(job.status)),
-                            DataCell(Text(formatDateMdy(job.scheduledDate))),
-                            DataCell(Text(_locationLabel(job.locationId))),
-                            DataCell(Text(_profileLabel(job.profileId))),
-                            DataCell(
-                              Row(
-                                children: [
-                                  IconButton(
-                                    icon: const Icon(Icons.edit),
-                                    tooltip: 'Edit',
-                                    onPressed: AppEnv.isDemoMode
-                                        ? null
-                                        : () => _showEditJobDialog(job),
-                                  ),
-                                  IconButton(
-                                    icon: const Icon(Icons.delete),
-                                    tooltip: 'Delete',
-                                    onPressed: AppEnv.isDemoMode
-                                        ? null
-                                        : () => _deleteJob(job),
-                                  ),
-                                ],
-                              ),
+          child: _centeredSectionBody(
+            Column(
+              children: [
+                Row(
+                  children: [
+                    Expanded(
+                      child: Wrap(
+                        spacing: 8,
+                        runSpacing: 8,
+                        children: [
+                          ChoiceChip(
+                            label: const Text('Pending'),
+                            selected: _jobFilter == _JobFilter.pending,
+                            onSelected: (_) =>
+                                setState(() => _jobFilter = _JobFilter.pending),
+                          ),
+                          ChoiceChip(
+                            label: const Text('Assigned'),
+                            selected: _jobFilter == _JobFilter.assigned,
+                            onSelected: (_) => setState(
+                              () => _jobFilter = _JobFilter.assigned,
                             ),
-                          ],
-                        ),
-                      )
-                      .toList(),
+                          ),
+                          ChoiceChip(
+                            label: const Text('In Progress'),
+                            selected: _jobFilter == _JobFilter.inProgress,
+                            onSelected: (_) => setState(
+                              () => _jobFilter = _JobFilter.inProgress,
+                            ),
+                          ),
+                          ChoiceChip(
+                            label: const Text('Completed'),
+                            selected: _jobFilter == _JobFilter.completed,
+                            onSelected: (_) => setState(
+                              () => _jobFilter = _JobFilter.completed,
+                            ),
+                          ),
+                          ChoiceChip(
+                            label: const Text('Overdue'),
+                            selected: _jobFilter == _JobFilter.overdue,
+                            onSelected: (_) =>
+                                setState(() => _jobFilter = _JobFilter.overdue),
+                          ),
+                          ChoiceChip(
+                            label: const Text('All'),
+                            selected: _jobFilter == _JobFilter.all,
+                            onSelected: (_) =>
+                                setState(() => _jobFilter = _JobFilter.all),
+                          ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    OutlinedButton.icon(
+                      onPressed: () => Navigator.pushNamed(context, '/jobs'),
+                      icon: const Icon(Icons.open_in_new),
+                      label: const Text('Open Jobs Route'),
+                    ),
+                    const SizedBox(width: 8),
+                    FilledButton.icon(
+                      onPressed: AppEnv.isDemoMode
+                          ? null
+                          : _showCreateJobDialog,
+                      icon: const Icon(Icons.add),
+                      label: const Text('Create Job'),
+                    ),
+                  ],
                 ),
-              ),
+                const SizedBox(height: 12),
+                Expanded(
+                  child: Card(
+                    child: SingleChildScrollView(
+                      scrollDirection: Axis.horizontal,
+                      child: SingleChildScrollView(
+                        child: DataTable(
+                          columns: [
+                            _tableColumn('Job #'),
+                            _tableColumn('Client'),
+                            _tableColumn('Status'),
+                            _tableColumn('Scheduled'),
+                            _tableColumn('Location'),
+                            _tableColumn('Cleaning Profile'),
+                            _tableColumn('Actions'),
+                          ],
+                          rows: rows
+                              .map(
+                                (job) => DataRow(
+                                  cells: [
+                                    DataCell(Text(job.jobNumber)),
+                                    DataCell(Text(job.clientName ?? '—')),
+                                    DataCell(Text(job.status)),
+                                    DataCell(
+                                      Text(formatDateMdy(job.scheduledDate)),
+                                    ),
+                                    DataCell(
+                                      Text(_locationLabel(job.locationId)),
+                                    ),
+                                    DataCell(
+                                      Text(_profileLabel(job.profileId)),
+                                    ),
+                                    DataCell(
+                                      Row(
+                                        children: [
+                                          IconButton(
+                                            icon: const Icon(Icons.edit),
+                                            tooltip: 'Edit',
+                                            onPressed: AppEnv.isDemoMode
+                                                ? null
+                                                : () => _showEditJobDialog(job),
+                                          ),
+                                          IconButton(
+                                            icon: const Icon(Icons.delete),
+                                            tooltip: 'Delete',
+                                            onPressed: AppEnv.isDemoMode
+                                                ? null
+                                                : () => _deleteJob(job),
+                                          ),
+                                        ],
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              )
+                              .toList(),
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+              ],
             ),
           ),
         ),
@@ -1858,253 +2039,273 @@ class _AdminPageState extends State<AdminPage> {
         ),
         const SizedBox(height: 12),
         Expanded(
-          child: Row(
-            children: [
-              Expanded(
-                flex: 2,
-                child: Card(
-                  child: SingleChildScrollView(
-                    scrollDirection: Axis.horizontal,
+          child: _centeredSectionBody(
+            Row(
+              children: [
+                Expanded(
+                  flex: 3,
+                  child: Card(
                     child: SingleChildScrollView(
-                      child: DataTable(
-                        columns: const [
-                          DataColumn(label: Text('Profile')),
-                          DataColumn(label: Text('Location')),
-                          DataColumn(label: Text('Notes')),
-                          DataColumn(label: Text('Select')),
-                          DataColumn(label: Text('Actions')),
-                        ],
-                        rows: _cleaningProfiles
-                            .map(
-                              (profile) => DataRow(
-                                selected:
-                                    profile.id == _selectedCleaningProfileId,
-                                cells: [
-                                  DataCell(Text(profile.name)),
-                                  DataCell(
-                                    Text(_locationLabel(profile.locationId)),
-                                  ),
-                                  DataCell(Text(profile.notes ?? '—')),
-                                  DataCell(
-                                    OutlinedButton(
-                                      onPressed:
+                      scrollDirection: Axis.horizontal,
+                      child: SingleChildScrollView(
+                        child: DataTable(
+                          columns: [
+                            _tableColumn('Profile'),
+                            _tableColumn('Location'),
+                            _tableColumn('Notes'),
+                            _tableColumn('Select'),
+                            _tableColumn('Actions'),
+                          ],
+                          rows: _cleaningProfiles
+                              .map(
+                                (profile) => DataRow(
+                                  selected:
+                                      profile.id == _selectedCleaningProfileId,
+                                  cells: [
+                                    DataCell(Text(profile.name)),
+                                    DataCell(
+                                      Text(_locationLabel(profile.locationId)),
+                                    ),
+                                    DataCell(Text(profile.notes ?? '—')),
+                                    DataCell(
+                                      OutlinedButton(
+                                        onPressed:
+                                            profile.id ==
+                                                _selectedCleaningProfileId
+                                            ? null
+                                            : () => _selectCleaningProfile(
+                                                profile.id,
+                                              ),
+                                        child: Text(
                                           profile.id ==
-                                              _selectedCleaningProfileId
-                                          ? null
-                                          : () => _selectCleaningProfile(
-                                              profile.id,
-                                            ),
-                                      child: Text(
-                                        profile.id == _selectedCleaningProfileId
-                                            ? 'Selected'
-                                            : 'Select',
+                                                  _selectedCleaningProfileId
+                                              ? 'Selected'
+                                              : 'Select',
+                                        ),
                                       ),
                                     ),
-                                  ),
-                                  DataCell(
-                                    Row(
-                                      children: [
-                                        IconButton(
-                                          icon: const Icon(Icons.edit),
-                                          tooltip: 'Edit',
-                                          onPressed: AppEnv.isDemoMode
-                                              ? null
-                                              : () =>
-                                                    _showEditCleaningProfileDialog(
-                                                      profile,
-                                                    ),
-                                        ),
-                                        IconButton(
-                                          icon: const Icon(Icons.delete),
-                                          tooltip: 'Delete',
-                                          onPressed: AppEnv.isDemoMode
-                                              ? null
-                                              : () => _deleteCleaningProfile(
-                                                  profile,
-                                                ),
-                                        ),
-                                      ],
+                                    DataCell(
+                                      Row(
+                                        children: [
+                                          IconButton(
+                                            icon: const Icon(Icons.edit),
+                                            tooltip: 'Edit',
+                                            onPressed: AppEnv.isDemoMode
+                                                ? null
+                                                : () =>
+                                                      _showEditCleaningProfileDialog(
+                                                        profile,
+                                                      ),
+                                          ),
+                                          IconButton(
+                                            icon: const Icon(Icons.delete),
+                                            tooltip: 'Delete',
+                                            onPressed: AppEnv.isDemoMode
+                                                ? null
+                                                : () => _deleteCleaningProfile(
+                                                    profile,
+                                                  ),
+                                          ),
+                                        ],
+                                      ),
                                     ),
-                                  ),
-                                ],
-                              ),
-                            )
-                            .toList(),
+                                  ],
+                                ),
+                              )
+                              .toList(),
+                        ),
                       ),
                     ),
                   ),
                 ),
-              ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: Column(
-                  children: [
-                    Expanded(
-                      child: Card(
-                        child: Padding(
-                          padding: const EdgeInsets.all(12),
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              const Text(
-                                'Task Definitions',
-                                style: TextStyle(fontWeight: FontWeight.w700),
-                              ),
-                              const SizedBox(height: 8),
-                              Expanded(
-                                child: ListView.builder(
-                                  itemCount: _taskDefinitions.length,
-                                  itemBuilder: (context, index) {
-                                    final item = _taskDefinitions[index];
-                                    return ListTile(
-                                      dense: true,
-                                      contentPadding: EdgeInsets.zero,
-                                      title: Text(
-                                        '${item.code} • ${item.name}',
-                                      ),
-                                      subtitle: Text(item.category),
-                                    );
-                                  },
+                const SizedBox(width: 12),
+                Expanded(
+                  flex: 2,
+                  child: Column(
+                    children: [
+                      Expanded(
+                        flex: 2,
+                        child: Card(
+                          child: Padding(
+                            padding: const EdgeInsets.all(12),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  _selectedCleaningProfileId == null
+                                      ? 'Profile Tasks'
+                                      : 'Profile Tasks (${_selectedProfileTasks.length})',
+                                  style: const TextStyle(
+                                    fontWeight: FontWeight.w700,
+                                  ),
                                 ),
-                              ),
-                            ],
-                          ),
-                        ),
-                      ),
-                    ),
-                    const SizedBox(height: 12),
-                    Expanded(
-                      child: Card(
-                        child: Padding(
-                          padding: const EdgeInsets.all(12),
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(
-                                _selectedCleaningProfileId == null
-                                    ? 'Profile Tasks'
-                                    : 'Profile Tasks (${_selectedProfileTasks.length})',
-                                style: TextStyle(fontWeight: FontWeight.w700),
-                              ),
-                              const SizedBox(height: 8),
-                              Expanded(
-                                child: _selectedCleaningProfileId == null
-                                    ? Center(
-                                        child: Text(
-                                          'Select a profile to manage linked tasks',
-                                          style: TextStyle(
-                                            color: Theme.of(context).hintColor,
+                                const SizedBox(height: 8),
+                                Expanded(
+                                  child: _selectedCleaningProfileId == null
+                                      ? Center(
+                                          child: Text(
+                                            'Select a profile to manage linked tasks',
+                                            style: TextStyle(
+                                              color: Theme.of(
+                                                context,
+                                              ).hintColor,
+                                            ),
                                           ),
-                                        ),
-                                      )
-                                    : _loadingProfileTasks
-                                    ? const Center(
-                                        child: CircularProgressIndicator(),
-                                      )
-                                    : ListView.builder(
-                                        itemCount: _selectedProfileTasks.length,
-                                        itemBuilder: (context, index) {
-                                          final item =
-                                              _selectedProfileTasks[index];
-                                          final metadata =
-                                              item.taskMetadata ?? const {};
-                                          return ListTile(
-                                            dense: true,
-                                            contentPadding: EdgeInsets.zero,
-                                            title: Text(
-                                              _taskDefinitionLabel(
-                                                item.taskDefinitionId,
+                                        )
+                                      : _loadingProfileTasks
+                                      ? const Center(
+                                          child: CircularProgressIndicator(),
+                                        )
+                                      : ListView.builder(
+                                          itemCount:
+                                              _selectedProfileTasks.length,
+                                          itemBuilder: (context, index) {
+                                            final item =
+                                                _selectedProfileTasks[index];
+                                            final metadata =
+                                                item.taskMetadata ?? const {};
+                                            return ListTile(
+                                              dense: true,
+                                              contentPadding: EdgeInsets.zero,
+                                              title: Text(
+                                                _taskDefinitionLabel(
+                                                  item.taskDefinitionId,
+                                                ),
                                               ),
-                                            ),
-                                            subtitle: Text(
-                                              'Order: ${item.displayOrder ?? '—'} • Metadata: ${metadata.isEmpty ? '{}' : metadata}',
-                                            ),
-                                            trailing: Row(
-                                              mainAxisSize: MainAxisSize.min,
-                                              children: [
-                                                Text(
-                                                  item.required ? 'Req' : 'Opt',
-                                                ),
-                                                IconButton(
-                                                  icon: const Icon(Icons.edit),
-                                                  tooltip: 'Edit',
-                                                  onPressed: AppEnv.isDemoMode
-                                                      ? null
-                                                      : () =>
-                                                            _showEditProfileTaskDialog(
-                                                              item,
-                                                            ),
-                                                ),
-                                                IconButton(
-                                                  icon: const Icon(
-                                                    Icons.delete,
+                                              subtitle: Text(
+                                                'Order: ${item.displayOrder ?? '—'} • Metadata: ${metadata.isEmpty ? '{}' : metadata}',
+                                              ),
+                                              trailing: Row(
+                                                mainAxisSize: MainAxisSize.min,
+                                                children: [
+                                                  Text(
+                                                    item.required
+                                                        ? 'Req'
+                                                        : 'Opt',
                                                   ),
-                                                  tooltip: 'Delete',
-                                                  onPressed: AppEnv.isDemoMode
-                                                      ? null
-                                                      : () =>
-                                                            _deleteProfileTask(
-                                                              item,
-                                                            ),
-                                                ),
-                                              ],
-                                            ),
-                                          );
-                                        },
-                                      ),
-                              ),
-                            ],
+                                                  IconButton(
+                                                    icon: const Icon(
+                                                      Icons.edit,
+                                                    ),
+                                                    tooltip: 'Edit',
+                                                    onPressed: AppEnv.isDemoMode
+                                                        ? null
+                                                        : () =>
+                                                              _showEditProfileTaskDialog(
+                                                                item,
+                                                              ),
+                                                  ),
+                                                  IconButton(
+                                                    icon: const Icon(
+                                                      Icons.delete,
+                                                    ),
+                                                    tooltip: 'Delete',
+                                                    onPressed: AppEnv.isDemoMode
+                                                        ? null
+                                                        : () =>
+                                                              _deleteProfileTask(
+                                                                item,
+                                                              ),
+                                                  ),
+                                                ],
+                                              ),
+                                            );
+                                          },
+                                        ),
+                                ),
+                              ],
+                            ),
                           ),
                         ),
                       ),
-                    ),
-                    const SizedBox(height: 12),
-                    Expanded(
-                      child: Card(
-                        child: Padding(
-                          padding: const EdgeInsets.all(12),
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              const Text(
-                                'Task Rules',
-                                style: TextStyle(fontWeight: FontWeight.w700),
-                              ),
-                              const SizedBox(height: 8),
-                              Expanded(
-                                child: ListView.builder(
-                                  itemCount: _taskRules.length,
-                                  itemBuilder: (context, index) {
-                                    final item = _taskRules[index];
-                                    return ListTile(
-                                      dense: true,
-                                      contentPadding: EdgeInsets.zero,
-                                      title: Text(
-                                        _taskDefinitionLabel(
-                                          item.taskDefinitionId,
+                      const SizedBox(height: 12),
+                      Expanded(
+                        child: Card(
+                          child: Padding(
+                            padding: const EdgeInsets.all(12),
+                            child: Row(
+                              children: [
+                                Expanded(
+                                  child: Column(
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.start,
+                                    children: [
+                                      const Text(
+                                        'Task Definitions',
+                                        style: TextStyle(
+                                          fontWeight: FontWeight.w700,
                                         ),
                                       ),
-                                      subtitle: Text(
-                                        item.appliesWhen.isEmpty
-                                            ? '{}'
-                                            : item.appliesWhen.toString(),
+                                      const SizedBox(height: 8),
+                                      Expanded(
+                                        child: ListView.builder(
+                                          itemCount: _taskDefinitions.length,
+                                          itemBuilder: (context, index) {
+                                            final item =
+                                                _taskDefinitions[index];
+                                            return ListTile(
+                                              dense: true,
+                                              contentPadding: EdgeInsets.zero,
+                                              title: Text(
+                                                '${item.code} • ${item.name}',
+                                              ),
+                                              subtitle: Text(item.category),
+                                            );
+                                          },
+                                        ),
                                       ),
-                                      trailing: Text(
-                                        item.required ? 'Req' : 'Opt',
-                                      ),
-                                    );
-                                  },
+                                    ],
+                                  ),
                                 ),
-                              ),
-                            ],
+                                const VerticalDivider(),
+                                Expanded(
+                                  child: Column(
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.start,
+                                    children: [
+                                      const Text(
+                                        'Task Rules',
+                                        style: TextStyle(
+                                          fontWeight: FontWeight.w700,
+                                        ),
+                                      ),
+                                      const SizedBox(height: 8),
+                                      Expanded(
+                                        child: ListView.builder(
+                                          itemCount: _taskRules.length,
+                                          itemBuilder: (context, index) {
+                                            final item = _taskRules[index];
+                                            return ListTile(
+                                              dense: true,
+                                              contentPadding: EdgeInsets.zero,
+                                              title: Text(
+                                                _taskDefinitionLabel(
+                                                  item.taskDefinitionId,
+                                                ),
+                                              ),
+                                              subtitle: Text(
+                                                item.appliesWhen.isEmpty
+                                                    ? '{}'
+                                                    : item.appliesWhen
+                                                          .toString(),
+                                              ),
+                                            );
+                                          },
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              ],
+                            ),
                           ),
                         ),
                       ),
-                    ),
-                  ],
+                    ],
+                  ),
                 ),
-              ),
-            ],
+              ],
+            ),
           ),
         ),
       ],
@@ -2160,92 +2361,122 @@ class _AdminPageState extends State<AdminPage> {
           bodyText:
               'Placeholder: report templates for operations, payroll windows, and client service summaries.',
         );
+      case _AdminSection.knowledgeBase:
+        return _buildCrudScaffoldSection(
+          title: 'Knowledge Base',
+          subtitle:
+              'Reference guides and SOP content for field + office teams.',
+          actions: [
+            FilledButton.icon(
+              onPressed: () => Navigator.pushNamed(context, '/knowledge-base'),
+              icon: const Icon(Icons.open_in_new),
+              label: const Text('Open Knowledge Base'),
+            ),
+          ],
+          bodyText:
+              'Use this area for cleaning technique guides, product standards, and role-based checklists.',
+        );
     }
   }
 
   @override
   Widget build(BuildContext context) {
+    final baseTheme = Theme.of(context);
+    final adminTheme = baseTheme.copyWith(
+      filledButtonTheme: FilledButtonThemeData(
+        style: FilledButton.styleFrom(
+          backgroundColor: const Color.fromRGBO(41, 98, 255, 1),
+          foregroundColor: Colors.white,
+        ),
+      ),
+      outlinedButtonTheme: OutlinedButtonThemeData(
+        style: OutlinedButton.styleFrom(
+          foregroundColor: const Color.fromRGBO(31, 63, 122, 1),
+          side: const BorderSide(color: Color.fromRGBO(106, 142, 214, 1)),
+        ),
+      ),
+    );
+
     return Scaffold(
       appBar: AppBar(
         title: const Text('Anderson Express Cleaning Service'),
         bottom: const BackendBanner(),
         actions: [
-          IconButton(
-            onPressed: () {
-              AuthSession.clear();
-              Navigator.pushReplacementNamed(context, '/');
-            },
-            icon: const Icon(Icons.logout),
-            tooltip: 'Logout',
-          ),
+          const ThemeToggleButton(),
           IconButton(
             onPressed: _loading ? null : _loadAdminData,
             icon: const Icon(Icons.refresh),
             tooltip: 'Refresh',
           ),
+          const ProfileMenuButton(),
         ],
       ),
-      body: Row(
-        children: [
-          _buildSidebar(),
-          Expanded(
-            child: Padding(
-              padding: const EdgeInsets.all(16),
-              child: Column(
-                children: [
-                  if (BackendRuntime.allowBackendOverride) ...[
-                    Row(
-                      children: [
-                        Expanded(
-                          child: TextField(
-                            controller: _hostController,
-                            decoration: const InputDecoration(
-                              labelText: 'Backend Host',
-                              border: OutlineInputBorder(),
+      body: Theme(
+        data: adminTheme,
+        child: SelectionArea(
+          child: Row(
+            children: [
+              _buildSidebar(),
+              Expanded(
+                child: Padding(
+                  padding: const EdgeInsets.all(16),
+                  child: Column(
+                    children: [
+                      if (BackendRuntime.allowBackendOverride) ...[
+                        Row(
+                          children: [
+                            Expanded(
+                              child: TextField(
+                                controller: _hostController,
+                                decoration: const InputDecoration(
+                                  labelText: 'Backend Host',
+                                  border: OutlineInputBorder(),
+                                ),
+                              ),
                             ),
+                            const SizedBox(width: 8),
+                            FilledButton.icon(
+                              onPressed: _applyBackendSelection,
+                              icon: const Icon(Icons.check),
+                              label: const Text('Apply'),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 12),
+                      ],
+                      if (AppEnv.isDemoMode) ...[
+                        const DemoModeNotice(
+                          message:
+                              'Demo mode is enabled: destructive actions are disabled in preview.',
+                        ),
+                        const SizedBox(height: 12),
+                      ],
+                      if (_error != null)
+                        Container(
+                          width: double.infinity,
+                          margin: const EdgeInsets.only(bottom: 12),
+                          padding: const EdgeInsets.all(12),
+                          decoration: BoxDecoration(
+                            color: Colors.red.shade50,
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                          child: Text(
+                            _error!,
+                            style: TextStyle(color: Colors.red.shade700),
                           ),
                         ),
-                        const SizedBox(width: 8),
-                        FilledButton.icon(
-                          onPressed: _applyBackendSelection,
-                          icon: const Icon(Icons.check),
-                          label: const Text('Apply'),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 12),
-                  ],
-                  if (AppEnv.isDemoMode) ...[
-                    const DemoModeNotice(
-                      message:
-                          'Demo mode is enabled: destructive actions are disabled in preview.',
-                    ),
-                    const SizedBox(height: 12),
-                  ],
-                  if (_error != null)
-                    Container(
-                      width: double.infinity,
-                      margin: const EdgeInsets.only(bottom: 12),
-                      padding: const EdgeInsets.all(12),
-                      decoration: BoxDecoration(
-                        color: Colors.red.shade50,
-                        borderRadius: BorderRadius.circular(8),
+                      Expanded(
+                        child: _loading
+                            ? const Center(child: CircularProgressIndicator())
+                            : _buildSectionContent(),
                       ),
-                      child: Text(
-                        _error!,
-                        style: TextStyle(color: Colors.red.shade700),
-                      ),
-                    ),
-                  Expanded(
-                    child: _loading
-                        ? const Center(child: CircularProgressIndicator())
-                        : _buildSectionContent(),
+                    ],
                   ),
-                ],
+                ),
               ),
-            ),
+            ],
           ),
-        ],
+        ),
       ),
     );
   }

@@ -8,6 +8,8 @@ import 'pages/admin_page.dart';
 import 'pages/clients_page.dart';
 import 'pages/jobs_page.dart';
 import 'pages/locations_page.dart';
+import 'pages/knowledge_base_page.dart';
+import 'pages/profile_page.dart';
 import 'pages/qa_smoke_page.dart';
 import 'services/theme_controller.dart';
 
@@ -71,6 +73,16 @@ class MyApp extends StatelessWidget {
       case "/qa-smoke":
         return MaterialPageRoute(
           builder: (_) => QaSmokePage(),
+          settings: settings,
+        );
+      case "/knowledge-base":
+        return MaterialPageRoute(
+          builder: (_) => KnowledgeBasePage(),
+          settings: settings,
+        );
+      case "/profile":
+        return MaterialPageRoute(
+          builder: (_) => ProfilePage(),
           settings: settings,
         );
       default:
