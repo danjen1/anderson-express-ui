@@ -85,3 +85,26 @@ class JobCreateInput {
     };
   }
 }
+
+class JobUpdateInput {
+  const JobUpdateInput({
+    required this.profileId,
+    required this.scheduledDate,
+    required this.status,
+    this.notes,
+  });
+
+  final int profileId;
+  final String scheduledDate;
+  final String status;
+  final String? notes;
+
+  Map<String, dynamic> toJson() {
+    return {
+      'profile_id': profileId,
+      'scheduled_date': scheduledDate,
+      'status': status,
+      'notes': notes,
+    };
+  }
+}

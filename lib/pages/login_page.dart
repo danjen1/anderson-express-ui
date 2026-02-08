@@ -101,7 +101,8 @@ class _LoginPageState extends State<LoginPage> {
         ),
       );
       if (!mounted) return;
-      Navigator.pushReplacementNamed(context, '/home');
+      final nextRoute = user.isAdmin ? '/admin' : '/home';
+      Navigator.pushReplacementNamed(context, nextRoute);
     } catch (error) {
       if (!mounted) return;
       setState(() {

@@ -1,10 +1,16 @@
+import 'dart:convert';
+
 import 'package:flutter/material.dart';
 
 import '../models/backend_config.dart';
+import '../models/cleaning_profile.dart';
 import '../models/client.dart';
 import '../models/employee.dart';
 import '../models/job.dart';
 import '../models/location.dart';
+import '../models/profile_task.dart';
+import '../models/task_definition.dart';
+import '../models/task_rule.dart';
 import '../services/api_service.dart';
 import '../services/app_env.dart';
 import '../services/auth_session.dart';
@@ -30,6 +36,8 @@ enum _ClientFilter { all, active, inactive }
 
 enum _LocationFilter { all, active, inactive }
 
+enum _JobFilter { all, pending, assigned, inProgress, completed, overdue }
+
 class AdminPage extends StatefulWidget {
   const AdminPage({super.key});
 
@@ -50,10 +58,17 @@ class _AdminPageState extends State<AdminPage> {
   List<Job> _jobs = const [];
   List<Client> _clients = const [];
   List<Location> _locations = const [];
+  List<CleaningProfile> _cleaningProfiles = const [];
+  List<TaskDefinition> _taskDefinitions = const [];
+  List<TaskRule> _taskRules = const [];
+  List<ProfileTask> _selectedProfileTasks = const [];
   _AdminSection _selectedSection = _AdminSection.dashboard;
   _EmployeeFilter _employeeFilter = _EmployeeFilter.all;
   _ClientFilter _clientFilter = _ClientFilter.all;
   _LocationFilter _locationFilter = _LocationFilter.all;
+  _JobFilter _jobFilter = _JobFilter.all;
+  String? _selectedCleaningProfileId;
+  bool _loadingProfileTasks = false;
 
   String? get _token => AuthSession.current?.token.trim();
 
@@ -101,7 +116,7 @@ class _AdminPageState extends State<AdminPage> {
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(content: Text('Backend set to ${next.label} (${next.baseUrl})')),
     );
-    Navigator.pushReplacementNamed(context, '/home');
+    Navigator.pushReplacementNamed(context, '/admin');
   }
 
   Future<void> _loadAdminData() async {
@@ -123,16 +138,29 @@ class _AdminPageState extends State<AdminPage> {
       final jobsFuture = _api.listJobs(bearerToken: token);
       final clientsFuture = _api.listClients(bearerToken: token);
       final locationsFuture = _api.listLocations(bearerToken: token);
+      final profilesFuture = _api.listCleaningProfiles(bearerToken: token);
+      final taskDefsFuture = _api.listTaskDefinitions(bearerToken: token);
+      final taskRulesFuture = _api.listTaskRules(bearerToken: token);
       final results = await Future.wait([
         employeesFuture,
         jobsFuture,
         clientsFuture,
         locationsFuture,
+        profilesFuture,
+        taskDefsFuture,
+        taskRulesFuture,
       ]);
       final employees = results[0] as List<Employee>;
       final jobs = results[1] as List<Job>;
       final clients = results[2] as List<Client>;
       final locations = results[3] as List<Location>;
+      final profiles = results[4] as List<CleaningProfile>;
+      final taskDefinitions = results[5] as List<TaskDefinition>;
+      final taskRules = results[6] as List<TaskRule>;
+      final previousSelected = _selectedCleaningProfileId;
+      final nextSelected = profiles.any((p) => p.id == previousSelected)
+          ? previousSelected
+          : (profiles.isNotEmpty ? profiles.first.id : null);
 
       if (!mounted) return;
       setState(() {
@@ -140,7 +168,17 @@ class _AdminPageState extends State<AdminPage> {
         _jobs = jobs;
         _clients = clients;
         _locations = locations;
+        _cleaningProfiles = profiles;
+        _taskDefinitions = taskDefinitions;
+        _taskRules = taskRules;
+        _selectedCleaningProfileId = nextSelected;
+        if (nextSelected == null) {
+          _selectedProfileTasks = const [];
+        }
       });
+      if (nextSelected != null) {
+        await _loadProfileTasks(nextSelected, setLoading: false);
+      }
     } catch (error) {
       if (!mounted) return;
       setState(() {
@@ -509,6 +547,505 @@ class _AdminPageState extends State<AdminPage> {
     }
   }
 
+  Future<void> _showCreateJobDialog() async {
+    if (AppEnv.isDemoMode) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Demo mode: create/edit/delete actions are disabled'),
+        ),
+      );
+      return;
+    }
+    if (_locations.isEmpty || _cleaningProfiles.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text(
+            'Create at least one location and cleaning profile before creating a job.',
+          ),
+        ),
+      );
+      return;
+    }
+
+    final result = await showDialog<JobCreateInput>(
+      context: context,
+      builder: (context) => _JobEditorDialog(
+        locations: _locations,
+        cleaningProfiles: _cleaningProfiles,
+      ),
+    );
+    if (result == null) return;
+
+    try {
+      await _api.createJob(result, bearerToken: _token);
+      await _loadAdminData();
+      if (!mounted) return;
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('Job created')));
+    } catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(userFacingError(error))));
+    }
+  }
+
+  Future<void> _showEditJobDialog(Job job) async {
+    if (AppEnv.isDemoMode) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Demo mode: create/edit/delete actions are disabled'),
+        ),
+      );
+      return;
+    }
+    if (_cleaningProfiles.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Create a cleaning profile first')),
+      );
+      return;
+    }
+
+    final result = await showDialog<JobUpdateInput>(
+      context: context,
+      builder: (context) => _JobEditorDialog(
+        locations: _locations,
+        cleaningProfiles: _cleaningProfiles,
+        isCreate: false,
+        selectedProfileId: job.profileId,
+        scheduledDate: formatDateMdy(job.scheduledDate),
+        status: job.status.toLowerCase(),
+        notes: job.notes ?? '',
+      ),
+    );
+    if (result == null) return;
+
+    try {
+      await _api.updateJob(job.id, result, bearerToken: _token);
+      await _loadAdminData();
+      if (!mounted) return;
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('Job updated')));
+    } catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(userFacingError(error))));
+    }
+  }
+
+  Future<void> _deleteJob(Job job) async {
+    if (AppEnv.isDemoMode) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Demo mode: create/edit/delete actions are disabled'),
+        ),
+      );
+      return;
+    }
+
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Delete job'),
+        content: Text('Delete ${job.jobNumber}?'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text('Delete'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true) return;
+
+    try {
+      final message = await _api.deleteJob(job.id, bearerToken: _token);
+      await _loadAdminData();
+      if (!mounted) return;
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(message)));
+    } catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(userFacingError(error))));
+    }
+  }
+
+  Future<void> _showCreateCleaningProfileDialog() async {
+    if (AppEnv.isDemoMode) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Demo mode: create/edit/delete actions are disabled'),
+        ),
+      );
+      return;
+    }
+    if (_locations.isEmpty) {
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('Create a location first')));
+      return;
+    }
+
+    final result = await showDialog<CleaningProfileCreateInput>(
+      context: context,
+      builder: (context) => _CleaningProfileEditorDialog(locations: _locations),
+    );
+    if (result == null) return;
+
+    try {
+      await _api.createCleaningProfile(result, bearerToken: _token);
+      await _loadAdminData();
+      if (!mounted) return;
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('Cleaning profile created')));
+    } catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(userFacingError(error))));
+    }
+  }
+
+  Future<void> _showEditCleaningProfileDialog(CleaningProfile profile) async {
+    if (AppEnv.isDemoMode) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Demo mode: create/edit/delete actions are disabled'),
+        ),
+      );
+      return;
+    }
+
+    final result = await showDialog<CleaningProfileUpdateInput>(
+      context: context,
+      builder: (context) => _CleaningProfileEditorDialog(
+        locations: _locations,
+        isCreate: false,
+        selectedLocationId: profile.locationId,
+        name: profile.name,
+        notes: profile.notes ?? '',
+      ),
+    );
+    if (result == null) return;
+
+    try {
+      await _api.updateCleaningProfile(profile.id, result, bearerToken: _token);
+      await _loadAdminData();
+      if (!mounted) return;
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('Cleaning profile updated')));
+    } catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(userFacingError(error))));
+    }
+  }
+
+  Future<void> _deleteCleaningProfile(CleaningProfile profile) async {
+    if (AppEnv.isDemoMode) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Demo mode: create/edit/delete actions are disabled'),
+        ),
+      );
+      return;
+    }
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Delete cleaning profile'),
+        content: Text('Delete ${profile.name}?'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text('Delete'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true) return;
+
+    try {
+      final message = await _api.deleteCleaningProfile(
+        profile.id,
+        bearerToken: _token,
+      );
+      await _loadAdminData();
+      if (!mounted) return;
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(message)));
+    } catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(userFacingError(error))));
+    }
+  }
+
+  Future<void> _loadProfileTasks(
+    String profileId, {
+    bool setLoading = true,
+  }) async {
+    if (setLoading && mounted) {
+      setState(() => _loadingProfileTasks = true);
+    }
+    try {
+      final tasks = await _api.listProfileTasks(profileId, bearerToken: _token);
+      if (!mounted) return;
+      setState(() {
+        _selectedProfileTasks = tasks;
+      });
+    } catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(userFacingError(error))));
+    } finally {
+      if (setLoading && mounted) {
+        setState(() => _loadingProfileTasks = false);
+      }
+    }
+  }
+
+  Future<void> _selectCleaningProfile(String profileId) async {
+    setState(() {
+      _selectedCleaningProfileId = profileId;
+      _selectedProfileTasks = const [];
+      _loadingProfileTasks = true;
+    });
+    await _loadProfileTasks(profileId, setLoading: false);
+    if (mounted) {
+      setState(() => _loadingProfileTasks = false);
+    }
+  }
+
+  Future<void> _showAddProfileTaskDialog() async {
+    if (AppEnv.isDemoMode) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Demo mode: create/edit/delete actions are disabled'),
+        ),
+      );
+      return;
+    }
+    if (_selectedCleaningProfileId == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Select a cleaning profile first')),
+      );
+      return;
+    }
+    if (_taskDefinitions.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Create task definitions first')),
+      );
+      return;
+    }
+
+    final result = await showDialog<ProfileTaskCreateInput>(
+      context: context,
+      builder: (context) =>
+          _ProfileTaskEditorDialog(taskDefinitions: _taskDefinitions),
+    );
+    if (result == null) return;
+
+    try {
+      await _api.createProfileTask(
+        _selectedCleaningProfileId!,
+        result,
+        bearerToken: _token,
+      );
+      await _loadProfileTasks(_selectedCleaningProfileId!);
+      if (!mounted) return;
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('Profile task linked')));
+    } catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(userFacingError(error))));
+    }
+  }
+
+  Future<void> _showEditProfileTaskDialog(ProfileTask profileTask) async {
+    if (AppEnv.isDemoMode) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Demo mode: create/edit/delete actions are disabled'),
+        ),
+      );
+      return;
+    }
+    if (_selectedCleaningProfileId == null) return;
+
+    final result = await showDialog<ProfileTaskUpdateInput>(
+      context: context,
+      builder: (context) => _ProfileTaskEditorDialog(
+        taskDefinitions: _taskDefinitions,
+        isCreate: false,
+        selectedTaskDefinitionId: profileTask.taskDefinitionId,
+        requiredValue: profileTask.required,
+        displayOrderValue: profileTask.displayOrder,
+        taskMetadataValue: profileTask.taskMetadata ?? const {},
+      ),
+    );
+    if (result == null) return;
+
+    try {
+      await _api.updateProfileTask(
+        _selectedCleaningProfileId!,
+        profileTask.id,
+        result,
+        bearerToken: _token,
+      );
+      await _loadProfileTasks(_selectedCleaningProfileId!);
+      if (!mounted) return;
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('Profile task updated')));
+    } catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(userFacingError(error))));
+    }
+  }
+
+  Future<void> _deleteProfileTask(ProfileTask profileTask) async {
+    if (AppEnv.isDemoMode) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Demo mode: create/edit/delete actions are disabled'),
+        ),
+      );
+      return;
+    }
+    if (_selectedCleaningProfileId == null) return;
+
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Unlink profile task'),
+        content: const Text('Remove this task from the selected profile?'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text('Remove'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true) return;
+
+    try {
+      final message = await _api.deleteProfileTask(
+        _selectedCleaningProfileId!,
+        profileTask.id,
+        bearerToken: _token,
+      );
+      await _loadProfileTasks(_selectedCleaningProfileId!);
+      if (!mounted) return;
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(message)));
+    } catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(userFacingError(error))));
+    }
+  }
+
+  Future<void> _showCreateTaskDefinitionDialog() async {
+    if (AppEnv.isDemoMode) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Demo mode: create/edit/delete actions are disabled'),
+        ),
+      );
+      return;
+    }
+    final result = await showDialog<TaskDefinitionCreateInput>(
+      context: context,
+      builder: (context) => const _TaskDefinitionEditorDialog(),
+    );
+    if (result == null) return;
+
+    try {
+      await _api.createTaskDefinition(result, bearerToken: _token);
+      await _loadAdminData();
+      if (!mounted) return;
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('Task definition created')));
+    } catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(userFacingError(error))));
+    }
+  }
+
+  Future<void> _showCreateTaskRuleDialog() async {
+    if (AppEnv.isDemoMode) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Demo mode: create/edit/delete actions are disabled'),
+        ),
+      );
+      return;
+    }
+    if (_taskDefinitions.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Create a task definition first')),
+      );
+      return;
+    }
+
+    final result = await showDialog<TaskRuleCreateInput>(
+      context: context,
+      builder: (context) =>
+          _TaskRuleEditorDialog(taskDefinitions: _taskDefinitions),
+    );
+    if (result == null) return;
+
+    try {
+      await _api.createTaskRule(result, bearerToken: _token);
+      await _loadAdminData();
+      if (!mounted) return;
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('Task rule created')));
+    } catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(userFacingError(error))));
+    }
+  }
+
   List<Employee> get _filteredEmployees {
     return _employees.where((employee) {
       final status = employee.status.trim().toLowerCase();
@@ -551,6 +1088,67 @@ class _AdminPageState extends State<AdminPage> {
     }).toList();
   }
 
+  bool _isOverdue(Job job) {
+    final status = job.status.trim().toLowerCase();
+    if (status == 'completed' ||
+        status == 'canceled' ||
+        status == 'cancelled') {
+      return false;
+    }
+    final parsed = parseFlexibleDate(job.scheduledDate);
+    if (parsed == null) return false;
+    final now = DateTime.now();
+    final startOfToday = DateTime(now.year, now.month, now.day);
+    return parsed.isBefore(startOfToday);
+  }
+
+  List<Job> get _filteredJobs {
+    return _jobs.where((job) {
+      final status = job.status.trim().toLowerCase();
+      switch (_jobFilter) {
+        case _JobFilter.pending:
+          return status == 'pending';
+        case _JobFilter.assigned:
+          return status == 'assigned';
+        case _JobFilter.inProgress:
+          return status == 'in_progress';
+        case _JobFilter.completed:
+          return status == 'completed';
+        case _JobFilter.overdue:
+          return _isOverdue(job);
+        case _JobFilter.all:
+          return true;
+      }
+    }).toList();
+  }
+
+  String _locationLabel(int locationId) {
+    for (final location in _locations) {
+      if (int.tryParse(location.id) == locationId) {
+        return location.locationNumber;
+      }
+    }
+    return 'Location $locationId';
+  }
+
+  String _profileLabel(int profileId) {
+    for (final profile in _cleaningProfiles) {
+      if (int.tryParse(profile.id) == profileId) {
+        return profile.name;
+      }
+    }
+    return 'Profile $profileId';
+  }
+
+  String _taskDefinitionLabel(int taskDefinitionId) {
+    for (final definition in _taskDefinitions) {
+      if (int.tryParse(definition.id) == taskDefinitionId) {
+        return '${definition.code} • ${definition.name}';
+      }
+    }
+    return 'Definition $taskDefinitionId';
+  }
+
   int get _totalPendingJobs =>
       _jobs.where((job) => job.status.trim().toLowerCase() == 'pending').length;
 
@@ -567,19 +1165,7 @@ class _AdminPageState extends State<AdminPage> {
       .length;
 
   int get _totalOverdueJobs {
-    final today = DateTime.now();
-    final startOfToday = DateTime(today.year, today.month, today.day);
-    return _jobs.where((job) {
-      final status = job.status.trim().toLowerCase();
-      if (status == 'completed' ||
-          status == 'canceled' ||
-          status == 'cancelled') {
-        return false;
-      }
-      final parsed = parseFlexibleDate(job.scheduledDate);
-      if (parsed == null) return false;
-      return parsed.isBefore(startOfToday);
-    }).length;
+    return _jobs.where(_isOverdue).length;
   }
 
   Widget _metricTile({
@@ -1104,6 +1690,427 @@ class _AdminPageState extends State<AdminPage> {
     );
   }
 
+  Widget _buildJobsSection() {
+    final rows = _filteredJobs;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        _buildSectionHeader(
+          'Jobs',
+          'Create jobs, link location + cleaning profile, and monitor status.',
+        ),
+        Row(
+          children: [
+            Expanded(
+              child: Wrap(
+                spacing: 8,
+                runSpacing: 8,
+                children: [
+                  ChoiceChip(
+                    label: const Text('All'),
+                    selected: _jobFilter == _JobFilter.all,
+                    onSelected: (_) =>
+                        setState(() => _jobFilter = _JobFilter.all),
+                  ),
+                  ChoiceChip(
+                    label: const Text('Pending'),
+                    selected: _jobFilter == _JobFilter.pending,
+                    onSelected: (_) =>
+                        setState(() => _jobFilter = _JobFilter.pending),
+                  ),
+                  ChoiceChip(
+                    label: const Text('Assigned'),
+                    selected: _jobFilter == _JobFilter.assigned,
+                    onSelected: (_) =>
+                        setState(() => _jobFilter = _JobFilter.assigned),
+                  ),
+                  ChoiceChip(
+                    label: const Text('In Progress'),
+                    selected: _jobFilter == _JobFilter.inProgress,
+                    onSelected: (_) =>
+                        setState(() => _jobFilter = _JobFilter.inProgress),
+                  ),
+                  ChoiceChip(
+                    label: const Text('Completed'),
+                    selected: _jobFilter == _JobFilter.completed,
+                    onSelected: (_) =>
+                        setState(() => _jobFilter = _JobFilter.completed),
+                  ),
+                  ChoiceChip(
+                    label: const Text('Overdue'),
+                    selected: _jobFilter == _JobFilter.overdue,
+                    onSelected: (_) =>
+                        setState(() => _jobFilter = _JobFilter.overdue),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(width: 8),
+            OutlinedButton.icon(
+              onPressed: () => Navigator.pushNamed(context, '/jobs'),
+              icon: const Icon(Icons.open_in_new),
+              label: const Text('Open Jobs Route'),
+            ),
+            const SizedBox(width: 8),
+            FilledButton.icon(
+              onPressed: AppEnv.isDemoMode ? null : _showCreateJobDialog,
+              icon: const Icon(Icons.add),
+              label: const Text('Create Job'),
+            ),
+          ],
+        ),
+        const SizedBox(height: 12),
+        Expanded(
+          child: Card(
+            child: SingleChildScrollView(
+              scrollDirection: Axis.horizontal,
+              child: SingleChildScrollView(
+                child: DataTable(
+                  columns: const [
+                    DataColumn(label: Text('Job #')),
+                    DataColumn(label: Text('Client')),
+                    DataColumn(label: Text('Status')),
+                    DataColumn(label: Text('Scheduled')),
+                    DataColumn(label: Text('Location')),
+                    DataColumn(label: Text('Cleaning Profile')),
+                    DataColumn(label: Text('Actions')),
+                  ],
+                  rows: rows
+                      .map(
+                        (job) => DataRow(
+                          cells: [
+                            DataCell(Text(job.jobNumber)),
+                            DataCell(Text(job.clientName ?? '—')),
+                            DataCell(Text(job.status)),
+                            DataCell(Text(formatDateMdy(job.scheduledDate))),
+                            DataCell(Text(_locationLabel(job.locationId))),
+                            DataCell(Text(_profileLabel(job.profileId))),
+                            DataCell(
+                              Row(
+                                children: [
+                                  IconButton(
+                                    icon: const Icon(Icons.edit),
+                                    tooltip: 'Edit',
+                                    onPressed: AppEnv.isDemoMode
+                                        ? null
+                                        : () => _showEditJobDialog(job),
+                                  ),
+                                  IconButton(
+                                    icon: const Icon(Icons.delete),
+                                    tooltip: 'Delete',
+                                    onPressed: AppEnv.isDemoMode
+                                        ? null
+                                        : () => _deleteJob(job),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ],
+                        ),
+                      )
+                      .toList(),
+                ),
+              ),
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildCleaningProfilesSection() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        _buildSectionHeader(
+          'Cleaning Profiles',
+          'Define reusable cleaning profiles and seed task definitions/rules.',
+        ),
+        Wrap(
+          spacing: 8,
+          runSpacing: 8,
+          children: [
+            FilledButton.icon(
+              onPressed: AppEnv.isDemoMode
+                  ? null
+                  : _showCreateCleaningProfileDialog,
+              icon: const Icon(Icons.add_task),
+              label: const Text('Create Profile'),
+            ),
+            OutlinedButton.icon(
+              onPressed: AppEnv.isDemoMode
+                  ? null
+                  : _showCreateTaskDefinitionDialog,
+              icon: const Icon(Icons.playlist_add),
+              label: const Text('Create Task Definition'),
+            ),
+            OutlinedButton.icon(
+              onPressed: AppEnv.isDemoMode ? null : _showCreateTaskRuleDialog,
+              icon: const Icon(Icons.rule),
+              label: const Text('Create Task Rule'),
+            ),
+            FilledButton.icon(
+              onPressed: AppEnv.isDemoMode ? null : _showAddProfileTaskDialog,
+              icon: const Icon(Icons.link),
+              label: const Text('Link Task To Selected Profile'),
+            ),
+          ],
+        ),
+        const SizedBox(height: 12),
+        Expanded(
+          child: Row(
+            children: [
+              Expanded(
+                flex: 2,
+                child: Card(
+                  child: SingleChildScrollView(
+                    scrollDirection: Axis.horizontal,
+                    child: SingleChildScrollView(
+                      child: DataTable(
+                        columns: const [
+                          DataColumn(label: Text('Profile')),
+                          DataColumn(label: Text('Location')),
+                          DataColumn(label: Text('Notes')),
+                          DataColumn(label: Text('Select')),
+                          DataColumn(label: Text('Actions')),
+                        ],
+                        rows: _cleaningProfiles
+                            .map(
+                              (profile) => DataRow(
+                                selected:
+                                    profile.id == _selectedCleaningProfileId,
+                                cells: [
+                                  DataCell(Text(profile.name)),
+                                  DataCell(
+                                    Text(_locationLabel(profile.locationId)),
+                                  ),
+                                  DataCell(Text(profile.notes ?? '—')),
+                                  DataCell(
+                                    OutlinedButton(
+                                      onPressed:
+                                          profile.id ==
+                                              _selectedCleaningProfileId
+                                          ? null
+                                          : () => _selectCleaningProfile(
+                                              profile.id,
+                                            ),
+                                      child: Text(
+                                        profile.id == _selectedCleaningProfileId
+                                            ? 'Selected'
+                                            : 'Select',
+                                      ),
+                                    ),
+                                  ),
+                                  DataCell(
+                                    Row(
+                                      children: [
+                                        IconButton(
+                                          icon: const Icon(Icons.edit),
+                                          tooltip: 'Edit',
+                                          onPressed: AppEnv.isDemoMode
+                                              ? null
+                                              : () =>
+                                                    _showEditCleaningProfileDialog(
+                                                      profile,
+                                                    ),
+                                        ),
+                                        IconButton(
+                                          icon: const Icon(Icons.delete),
+                                          tooltip: 'Delete',
+                                          onPressed: AppEnv.isDemoMode
+                                              ? null
+                                              : () => _deleteCleaningProfile(
+                                                  profile,
+                                                ),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            )
+                            .toList(),
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  children: [
+                    Expanded(
+                      child: Card(
+                        child: Padding(
+                          padding: const EdgeInsets.all(12),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              const Text(
+                                'Task Definitions',
+                                style: TextStyle(fontWeight: FontWeight.w700),
+                              ),
+                              const SizedBox(height: 8),
+                              Expanded(
+                                child: ListView.builder(
+                                  itemCount: _taskDefinitions.length,
+                                  itemBuilder: (context, index) {
+                                    final item = _taskDefinitions[index];
+                                    return ListTile(
+                                      dense: true,
+                                      contentPadding: EdgeInsets.zero,
+                                      title: Text(
+                                        '${item.code} • ${item.name}',
+                                      ),
+                                      subtitle: Text(item.category),
+                                    );
+                                  },
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+                    Expanded(
+                      child: Card(
+                        child: Padding(
+                          padding: const EdgeInsets.all(12),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                _selectedCleaningProfileId == null
+                                    ? 'Profile Tasks'
+                                    : 'Profile Tasks (${_selectedProfileTasks.length})',
+                                style: TextStyle(fontWeight: FontWeight.w700),
+                              ),
+                              const SizedBox(height: 8),
+                              Expanded(
+                                child: _selectedCleaningProfileId == null
+                                    ? Center(
+                                        child: Text(
+                                          'Select a profile to manage linked tasks',
+                                          style: TextStyle(
+                                            color: Theme.of(context).hintColor,
+                                          ),
+                                        ),
+                                      )
+                                    : _loadingProfileTasks
+                                    ? const Center(
+                                        child: CircularProgressIndicator(),
+                                      )
+                                    : ListView.builder(
+                                        itemCount: _selectedProfileTasks.length,
+                                        itemBuilder: (context, index) {
+                                          final item =
+                                              _selectedProfileTasks[index];
+                                          final metadata =
+                                              item.taskMetadata ?? const {};
+                                          return ListTile(
+                                            dense: true,
+                                            contentPadding: EdgeInsets.zero,
+                                            title: Text(
+                                              _taskDefinitionLabel(
+                                                item.taskDefinitionId,
+                                              ),
+                                            ),
+                                            subtitle: Text(
+                                              'Order: ${item.displayOrder ?? '—'} • Metadata: ${metadata.isEmpty ? '{}' : metadata}',
+                                            ),
+                                            trailing: Row(
+                                              mainAxisSize: MainAxisSize.min,
+                                              children: [
+                                                Text(
+                                                  item.required ? 'Req' : 'Opt',
+                                                ),
+                                                IconButton(
+                                                  icon: const Icon(Icons.edit),
+                                                  tooltip: 'Edit',
+                                                  onPressed: AppEnv.isDemoMode
+                                                      ? null
+                                                      : () =>
+                                                            _showEditProfileTaskDialog(
+                                                              item,
+                                                            ),
+                                                ),
+                                                IconButton(
+                                                  icon: const Icon(
+                                                    Icons.delete,
+                                                  ),
+                                                  tooltip: 'Delete',
+                                                  onPressed: AppEnv.isDemoMode
+                                                      ? null
+                                                      : () =>
+                                                            _deleteProfileTask(
+                                                              item,
+                                                            ),
+                                                ),
+                                              ],
+                                            ),
+                                          );
+                                        },
+                                      ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+                    Expanded(
+                      child: Card(
+                        child: Padding(
+                          padding: const EdgeInsets.all(12),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              const Text(
+                                'Task Rules',
+                                style: TextStyle(fontWeight: FontWeight.w700),
+                              ),
+                              const SizedBox(height: 8),
+                              Expanded(
+                                child: ListView.builder(
+                                  itemCount: _taskRules.length,
+                                  itemBuilder: (context, index) {
+                                    final item = _taskRules[index];
+                                    return ListTile(
+                                      dense: true,
+                                      contentPadding: EdgeInsets.zero,
+                                      title: Text(
+                                        _taskDefinitionLabel(
+                                          item.taskDefinitionId,
+                                        ),
+                                      ),
+                                      subtitle: Text(
+                                        item.appliesWhen.isEmpty
+                                            ? '{}'
+                                            : item.appliesWhen.toString(),
+                                      ),
+                                      trailing: Text(
+                                        item.required ? 'Req' : 'Opt',
+                                      ),
+                                    );
+                                  },
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+
   Widget _buildCrudScaffoldSection({
     required String title,
     required String subtitle,
@@ -1132,39 +2139,9 @@ class _AdminPageState extends State<AdminPage> {
       case _AdminSection.employees:
         return _buildEmployeesSection();
       case _AdminSection.jobs:
-        return _buildCrudScaffoldSection(
-          title: 'Jobs',
-          subtitle:
-              'Create jobs, attach locations, assign cleaning profiles, and manage assignments.',
-          actions: [
-            FilledButton.icon(
-              onPressed: () => Navigator.pushNamed(context, '/jobs'),
-              icon: const Icon(Icons.open_in_new),
-              label: const Text('Open Jobs Route'),
-            ),
-          ],
-          bodyText:
-              'Scaffold ready. Next step: inline Jobs CRUD table and create modal with profile/location pickers.',
-        );
+        return _buildJobsSection();
       case _AdminSection.cleaningProfiles:
-        return _buildCrudScaffoldSection(
-          title: 'Cleaning Profiles',
-          subtitle: 'Create profiles and attach task definitions/rules.',
-          actions: [
-            FilledButton.icon(
-              onPressed: null,
-              icon: Icon(Icons.add_task),
-              label: Text('Create Profile (Coming Soon)'),
-            ),
-            OutlinedButton.icon(
-              onPressed: null,
-              icon: Icon(Icons.rule),
-              label: Text('Manage Rules (Coming Soon)'),
-            ),
-          ],
-          bodyText:
-              'Placeholder: this will host profile CRUD and task/rule builder incrementally.',
-        );
+        return _buildCleaningProfilesSection();
       case _AdminSection.clients:
         return _buildClientsSection();
       case _AdminSection.locations:
@@ -1737,5 +2714,762 @@ class _LocationEditorDialogState extends State<_LocationEditorDialog> {
   String? _nullable(String value) {
     final trimmed = value.trim();
     return trimmed.isEmpty ? null : trimmed;
+  }
+}
+
+class _JobEditorDialog extends StatefulWidget {
+  const _JobEditorDialog({
+    required this.locations,
+    required this.cleaningProfiles,
+    this.isCreate = true,
+    this.selectedProfileId,
+    this.scheduledDate = '',
+    this.status = 'pending',
+    this.notes = '',
+  });
+
+  final List<Location> locations;
+  final List<CleaningProfile> cleaningProfiles;
+  final bool isCreate;
+  final int? selectedProfileId;
+  final String scheduledDate;
+  final String status;
+  final String notes;
+
+  @override
+  State<_JobEditorDialog> createState() => _JobEditorDialogState();
+}
+
+class _JobEditorDialogState extends State<_JobEditorDialog> {
+  late final TextEditingController _scheduledDate;
+  late final TextEditingController _notes;
+  int? _selectedLocationId;
+  int? _selectedProfileId;
+  late String _status;
+
+  @override
+  void initState() {
+    super.initState();
+    _scheduledDate = TextEditingController(
+      text: widget.scheduledDate.isNotEmpty
+          ? widget.scheduledDate
+          : DateTime.now().toIso8601String().split('T').first,
+    );
+    _notes = TextEditingController(text: widget.notes);
+    _selectedLocationId = int.tryParse(widget.locations.first.id);
+    _selectedProfileId =
+        widget.selectedProfileId ??
+        int.tryParse(widget.cleaningProfiles.first.id);
+    _status = widget.status;
+  }
+
+  @override
+  void dispose() {
+    _scheduledDate.dispose();
+    _notes.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      title: Text(widget.isCreate ? 'Create Job' : 'Edit Job'),
+      content: SizedBox(
+        width: 520,
+        child: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              if (widget.isCreate)
+                DropdownButtonFormField<int>(
+                  initialValue: _selectedLocationId,
+                  decoration: const InputDecoration(
+                    labelText: 'Location',
+                    border: OutlineInputBorder(),
+                  ),
+                  items: widget.locations
+                      .map(
+                        (location) => DropdownMenuItem<int>(
+                          value: int.tryParse(location.id),
+                          child: Text(
+                            '${location.locationNumber} • ${location.type}',
+                          ),
+                        ),
+                      )
+                      .toList(),
+                  onChanged: (value) =>
+                      setState(() => _selectedLocationId = value),
+                ),
+              if (widget.isCreate) const SizedBox(height: 10),
+              DropdownButtonFormField<int>(
+                initialValue: _selectedProfileId,
+                decoration: const InputDecoration(
+                  labelText: 'Cleaning Profile',
+                  border: OutlineInputBorder(),
+                ),
+                items: widget.cleaningProfiles
+                    .map(
+                      (profile) => DropdownMenuItem<int>(
+                        value: int.tryParse(profile.id),
+                        child: Text(profile.name),
+                      ),
+                    )
+                    .toList(),
+                onChanged: (value) =>
+                    setState(() => _selectedProfileId = value),
+              ),
+              const SizedBox(height: 10),
+              TextField(
+                controller: _scheduledDate,
+                decoration: const InputDecoration(
+                  labelText: 'Scheduled Date (YYYY-MM-DD or M-D-YYYY)',
+                  border: OutlineInputBorder(),
+                ),
+              ),
+              if (!widget.isCreate) const SizedBox(height: 10),
+              if (!widget.isCreate)
+                DropdownButtonFormField<String>(
+                  initialValue: _status,
+                  decoration: const InputDecoration(
+                    labelText: 'Status',
+                    border: OutlineInputBorder(),
+                  ),
+                  items: const [
+                    DropdownMenuItem(value: 'pending', child: Text('Pending')),
+                    DropdownMenuItem(
+                      value: 'assigned',
+                      child: Text('Assigned'),
+                    ),
+                    DropdownMenuItem(
+                      value: 'in_progress',
+                      child: Text('In Progress'),
+                    ),
+                    DropdownMenuItem(
+                      value: 'completed',
+                      child: Text('Completed'),
+                    ),
+                    DropdownMenuItem(
+                      value: 'canceled',
+                      child: Text('Canceled'),
+                    ),
+                  ],
+                  onChanged: (value) {
+                    if (value == null) return;
+                    setState(() => _status = value);
+                  },
+                ),
+              if (!widget.isCreate) const SizedBox(height: 10),
+              if (!widget.isCreate)
+                TextField(
+                  controller: _notes,
+                  maxLines: 3,
+                  decoration: const InputDecoration(
+                    labelText: 'Notes (optional)',
+                    border: OutlineInputBorder(),
+                  ),
+                ),
+            ],
+          ),
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(context),
+          child: const Text('Cancel'),
+        ),
+        FilledButton(
+          onPressed: () {
+            if (_selectedProfileId == null) {
+              return;
+            }
+            final normalized = _normalizeDate(_scheduledDate.text);
+            if (normalized == null) {
+              return;
+            }
+            if (widget.isCreate) {
+              if (_selectedLocationId == null) return;
+              Navigator.pop(
+                context,
+                JobCreateInput(
+                  profileId: _selectedProfileId!,
+                  locationId: _selectedLocationId!,
+                  scheduledDate: normalized,
+                ),
+              );
+            } else {
+              Navigator.pop(
+                context,
+                JobUpdateInput(
+                  profileId: _selectedProfileId!,
+                  scheduledDate: normalized,
+                  status: _status,
+                  notes: _notes.text.trim().isEmpty ? null : _notes.text.trim(),
+                ),
+              );
+            }
+          },
+          child: Text(widget.isCreate ? 'Create' : 'Save'),
+        ),
+      ],
+    );
+  }
+
+  String? _normalizeDate(String raw) {
+    final trimmed = raw.trim();
+    if (trimmed.isEmpty) return null;
+    final parsed = parseFlexibleDate(trimmed);
+    if (parsed != null) {
+      final yyyy = parsed.year.toString().padLeft(4, '0');
+      final mm = parsed.month.toString().padLeft(2, '0');
+      final dd = parsed.day.toString().padLeft(2, '0');
+      return '$yyyy-$mm-$dd';
+    }
+
+    final parts = trimmed.split('-');
+    if (parts.length != 3) return null;
+    final month = int.tryParse(parts[0]);
+    final day = int.tryParse(parts[1]);
+    final year = int.tryParse(parts[2]);
+    if (month == null || day == null || year == null) return null;
+    if (month < 1 || month > 12 || day < 1 || day > 31 || year < 2000) {
+      return null;
+    }
+    final yyyy = year.toString().padLeft(4, '0');
+    final mm = month.toString().padLeft(2, '0');
+    final dd = day.toString().padLeft(2, '0');
+    return '$yyyy-$mm-$dd';
+  }
+}
+
+class _CleaningProfileEditorDialog extends StatefulWidget {
+  const _CleaningProfileEditorDialog({
+    required this.locations,
+    this.isCreate = true,
+    this.selectedLocationId,
+    this.name = '',
+    this.notes = '',
+  });
+
+  final List<Location> locations;
+  final bool isCreate;
+  final int? selectedLocationId;
+  final String name;
+  final String notes;
+
+  @override
+  State<_CleaningProfileEditorDialog> createState() =>
+      _CleaningProfileEditorDialogState();
+}
+
+class _CleaningProfileEditorDialogState
+    extends State<_CleaningProfileEditorDialog> {
+  late final TextEditingController _name;
+  late final TextEditingController _notes;
+  int? _selectedLocationId;
+
+  @override
+  void initState() {
+    super.initState();
+    _name = TextEditingController(text: widget.name);
+    _notes = TextEditingController(text: widget.notes);
+    _selectedLocationId =
+        widget.selectedLocationId ?? int.tryParse(widget.locations.first.id);
+  }
+
+  @override
+  void dispose() {
+    _name.dispose();
+    _notes.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      title: Text(
+        widget.isCreate ? 'Create Cleaning Profile' : 'Edit Cleaning Profile',
+      ),
+      content: SizedBox(
+        width: 520,
+        child: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              DropdownButtonFormField<int>(
+                initialValue: _selectedLocationId,
+                decoration: const InputDecoration(
+                  labelText: 'Location',
+                  border: OutlineInputBorder(),
+                ),
+                items: widget.locations
+                    .map(
+                      (location) => DropdownMenuItem<int>(
+                        value: int.tryParse(location.id),
+                        child: Text(location.locationNumber),
+                      ),
+                    )
+                    .toList(),
+                onChanged: (value) =>
+                    setState(() => _selectedLocationId = value),
+              ),
+              const SizedBox(height: 10),
+              TextField(
+                controller: _name,
+                decoration: const InputDecoration(
+                  labelText: 'Profile Name',
+                  border: OutlineInputBorder(),
+                ),
+              ),
+              const SizedBox(height: 10),
+              TextField(
+                controller: _notes,
+                maxLines: 3,
+                decoration: const InputDecoration(
+                  labelText: 'Notes (optional)',
+                  border: OutlineInputBorder(),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(context),
+          child: const Text('Cancel'),
+        ),
+        FilledButton(
+          onPressed: () {
+            if (_selectedLocationId == null || _name.text.trim().isEmpty) {
+              return;
+            }
+            if (widget.isCreate) {
+              Navigator.pop(
+                context,
+                CleaningProfileCreateInput(
+                  locationId: _selectedLocationId!,
+                  name: _name.text.trim(),
+                  notes: _notes.text.trim().isEmpty ? null : _notes.text.trim(),
+                ),
+              );
+            } else {
+              Navigator.pop(
+                context,
+                CleaningProfileUpdateInput(
+                  locationId: _selectedLocationId!,
+                  name: _name.text.trim(),
+                  notes: _notes.text.trim().isEmpty ? null : _notes.text.trim(),
+                ),
+              );
+            }
+          },
+          child: Text(widget.isCreate ? 'Create' : 'Save'),
+        ),
+      ],
+    );
+  }
+}
+
+class _TaskDefinitionEditorDialog extends StatefulWidget {
+  const _TaskDefinitionEditorDialog();
+
+  @override
+  State<_TaskDefinitionEditorDialog> createState() =>
+      _TaskDefinitionEditorDialogState();
+}
+
+class _TaskDefinitionEditorDialogState
+    extends State<_TaskDefinitionEditorDialog> {
+  late final TextEditingController _code;
+  late final TextEditingController _name;
+  late final TextEditingController _category;
+  late final TextEditingController _description;
+
+  @override
+  void initState() {
+    super.initState();
+    _code = TextEditingController();
+    _name = TextEditingController();
+    _category = TextEditingController(text: 'general');
+    _description = TextEditingController();
+  }
+
+  @override
+  void dispose() {
+    _code.dispose();
+    _name.dispose();
+    _category.dispose();
+    _description.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      title: const Text('Create Task Definition'),
+      content: SizedBox(
+        width: 520,
+        child: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              _field(_code, 'Code (e.g. KITCHEN_DUST)'),
+              const SizedBox(height: 10),
+              _field(_name, 'Name'),
+              const SizedBox(height: 10),
+              _field(_category, 'Category'),
+              const SizedBox(height: 10),
+              _field(_description, 'Description (optional)', maxLines: 2),
+            ],
+          ),
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(context),
+          child: const Text('Cancel'),
+        ),
+        FilledButton(
+          onPressed: () {
+            if (_code.text.trim().isEmpty ||
+                _name.text.trim().isEmpty ||
+                _category.text.trim().isEmpty) {
+              return;
+            }
+            Navigator.pop(
+              context,
+              TaskDefinitionCreateInput(
+                code: _code.text.trim(),
+                name: _name.text.trim(),
+                category: _category.text.trim(),
+                description: _description.text.trim().isEmpty
+                    ? null
+                    : _description.text.trim(),
+              ),
+            );
+          },
+          child: const Text('Create'),
+        ),
+      ],
+    );
+  }
+
+  Widget _field(
+    TextEditingController controller,
+    String label, {
+    int maxLines = 1,
+  }) {
+    return TextField(
+      controller: controller,
+      maxLines: maxLines,
+      decoration: InputDecoration(
+        labelText: label,
+        border: const OutlineInputBorder(),
+      ),
+    );
+  }
+}
+
+class _TaskRuleEditorDialog extends StatefulWidget {
+  const _TaskRuleEditorDialog({required this.taskDefinitions});
+
+  final List<TaskDefinition> taskDefinitions;
+
+  @override
+  State<_TaskRuleEditorDialog> createState() => _TaskRuleEditorDialogState();
+}
+
+class _TaskRuleEditorDialogState extends State<_TaskRuleEditorDialog> {
+  late final TextEditingController _appliesWhen;
+  late final TextEditingController _displayOrder;
+  late final TextEditingController _notesTemplate;
+  bool _required = true;
+  int? _selectedTaskDefinitionId;
+
+  @override
+  void initState() {
+    super.initState();
+    _appliesWhen = TextEditingController(text: '{}');
+    _displayOrder = TextEditingController();
+    _notesTemplate = TextEditingController();
+    _selectedTaskDefinitionId = int.tryParse(widget.taskDefinitions.first.id);
+  }
+
+  @override
+  void dispose() {
+    _appliesWhen.dispose();
+    _displayOrder.dispose();
+    _notesTemplate.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      title: const Text('Create Task Rule'),
+      content: SizedBox(
+        width: 560,
+        child: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              DropdownButtonFormField<int>(
+                initialValue: _selectedTaskDefinitionId,
+                decoration: const InputDecoration(
+                  labelText: 'Task Definition',
+                  border: OutlineInputBorder(),
+                ),
+                items: widget.taskDefinitions
+                    .map(
+                      (task) => DropdownMenuItem<int>(
+                        value: int.tryParse(task.id),
+                        child: Text('${task.code} • ${task.name}'),
+                      ),
+                    )
+                    .toList(),
+                onChanged: (value) =>
+                    setState(() => _selectedTaskDefinitionId = value),
+              ),
+              const SizedBox(height: 10),
+              TextField(
+                controller: _appliesWhen,
+                maxLines: 3,
+                decoration: const InputDecoration(
+                  labelText: 'Applies When JSON',
+                  border: OutlineInputBorder(),
+                ),
+              ),
+              const SizedBox(height: 10),
+              TextField(
+                controller: _displayOrder,
+                keyboardType: TextInputType.number,
+                decoration: const InputDecoration(
+                  labelText: 'Display Order (optional)',
+                  border: OutlineInputBorder(),
+                ),
+              ),
+              const SizedBox(height: 10),
+              TextField(
+                controller: _notesTemplate,
+                maxLines: 2,
+                decoration: const InputDecoration(
+                  labelText: 'Notes Template (optional)',
+                  border: OutlineInputBorder(),
+                ),
+              ),
+              const SizedBox(height: 6),
+              CheckboxListTile(
+                contentPadding: EdgeInsets.zero,
+                value: _required,
+                title: const Text('Required'),
+                onChanged: (value) => setState(() => _required = value ?? true),
+              ),
+            ],
+          ),
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(context),
+          child: const Text('Cancel'),
+        ),
+        FilledButton(
+          onPressed: () {
+            if (_selectedTaskDefinitionId == null) return;
+            final applies = _parseAppliesWhen(_appliesWhen.text);
+            if (applies == null) return;
+            Navigator.pop(
+              context,
+              TaskRuleCreateInput(
+                taskDefinitionId: _selectedTaskDefinitionId!,
+                appliesWhen: applies,
+                required: _required,
+                displayOrder: int.tryParse(_displayOrder.text.trim()),
+                notesTemplate: _notesTemplate.text.trim().isEmpty
+                    ? null
+                    : _notesTemplate.text.trim(),
+              ),
+            );
+          },
+          child: const Text('Create'),
+        ),
+      ],
+    );
+  }
+
+  Map<String, dynamic>? _parseAppliesWhen(String raw) {
+    final trimmed = raw.trim();
+    if (trimmed.isEmpty) return {};
+    try {
+      final decoded = jsonDecode(trimmed);
+      if (decoded is Map<String, dynamic>) {
+        return decoded;
+      }
+    } catch (_) {
+      return null;
+    }
+    return null;
+  }
+}
+
+class _ProfileTaskEditorDialog extends StatefulWidget {
+  const _ProfileTaskEditorDialog({
+    required this.taskDefinitions,
+    this.isCreate = true,
+    this.selectedTaskDefinitionId,
+    this.requiredValue = true,
+    this.displayOrderValue,
+    this.taskMetadataValue = const {},
+  });
+
+  final List<TaskDefinition> taskDefinitions;
+  final bool isCreate;
+  final int? selectedTaskDefinitionId;
+  final bool requiredValue;
+  final int? displayOrderValue;
+  final Map<String, dynamic> taskMetadataValue;
+
+  @override
+  State<_ProfileTaskEditorDialog> createState() =>
+      _ProfileTaskEditorDialogState();
+}
+
+class _ProfileTaskEditorDialogState extends State<_ProfileTaskEditorDialog> {
+  late final TextEditingController _displayOrder;
+  late final TextEditingController _taskMetadata;
+  late bool _required;
+  int? _selectedTaskDefinitionId;
+
+  @override
+  void initState() {
+    super.initState();
+    _displayOrder = TextEditingController(
+      text: widget.displayOrderValue?.toString() ?? '',
+    );
+    _taskMetadata = TextEditingController(
+      text: widget.taskMetadataValue.isEmpty
+          ? '{}'
+          : jsonEncode(widget.taskMetadataValue),
+    );
+    _required = widget.requiredValue;
+    _selectedTaskDefinitionId =
+        widget.selectedTaskDefinitionId ??
+        int.tryParse(widget.taskDefinitions.first.id);
+  }
+
+  @override
+  void dispose() {
+    _displayOrder.dispose();
+    _taskMetadata.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      title: Text(widget.isCreate ? 'Link Profile Task' : 'Edit Profile Task'),
+      content: SizedBox(
+        width: 560,
+        child: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              DropdownButtonFormField<int>(
+                initialValue: _selectedTaskDefinitionId,
+                decoration: const InputDecoration(
+                  labelText: 'Task Definition',
+                  border: OutlineInputBorder(),
+                ),
+                items: widget.taskDefinitions
+                    .map(
+                      (task) => DropdownMenuItem<int>(
+                        value: int.tryParse(task.id),
+                        child: Text('${task.code} • ${task.name}'),
+                      ),
+                    )
+                    .toList(),
+                onChanged: widget.isCreate
+                    ? (value) =>
+                          setState(() => _selectedTaskDefinitionId = value)
+                    : null,
+              ),
+              const SizedBox(height: 10),
+              TextField(
+                controller: _displayOrder,
+                keyboardType: TextInputType.number,
+                decoration: const InputDecoration(
+                  labelText: 'Display Order (optional)',
+                  border: OutlineInputBorder(),
+                ),
+              ),
+              const SizedBox(height: 10),
+              TextField(
+                controller: _taskMetadata,
+                maxLines: 3,
+                decoration: const InputDecoration(
+                  labelText: 'Task Metadata JSON',
+                  border: OutlineInputBorder(),
+                ),
+              ),
+              const SizedBox(height: 6),
+              CheckboxListTile(
+                contentPadding: EdgeInsets.zero,
+                value: _required,
+                title: const Text('Required'),
+                onChanged: (value) => setState(() => _required = value ?? true),
+              ),
+            ],
+          ),
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(context),
+          child: const Text('Cancel'),
+        ),
+        FilledButton(
+          onPressed: () {
+            final metadata = _parseMetadata(_taskMetadata.text);
+            if (metadata == null) return;
+            if (widget.isCreate) {
+              if (_selectedTaskDefinitionId == null) return;
+              Navigator.pop(
+                context,
+                ProfileTaskCreateInput(
+                  taskDefinitionId: _selectedTaskDefinitionId!,
+                  required: _required,
+                  displayOrder: int.tryParse(_displayOrder.text.trim()),
+                  taskMetadata: metadata,
+                ),
+              );
+              return;
+            }
+            Navigator.pop(
+              context,
+              ProfileTaskUpdateInput(
+                required: _required,
+                displayOrder: int.tryParse(_displayOrder.text.trim()),
+                taskMetadata: metadata,
+              ),
+            );
+          },
+          child: Text(widget.isCreate ? 'Link' : 'Save'),
+        ),
+      ],
+    );
+  }
+
+  Map<String, dynamic>? _parseMetadata(String raw) {
+    final trimmed = raw.trim();
+    if (trimmed.isEmpty) return {};
+    try {
+      final decoded = jsonDecode(trimmed);
+      if (decoded is Map<String, dynamic>) {
+        return decoded;
+      }
+    } catch (_) {
+      return null;
+    }
+    return null;
   }
 }

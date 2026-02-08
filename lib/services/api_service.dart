@@ -4,12 +4,14 @@ import 'package:http/http.dart' as http;
 
 import '../models/backend_config.dart';
 import '../models/auth_user.dart';
+import '../models/cleaning_profile.dart';
 import '../models/client.dart';
 import '../models/employee.dart';
 import '../models/job.dart';
 import '../models/job_assignment.dart';
 import '../models/job_task.dart';
 import '../models/location.dart';
+import '../models/profile_task.dart';
 import '../models/task_definition.dart';
 import '../models/task_rule.dart';
 import 'backend_runtime.dart';
@@ -390,6 +392,43 @@ class ApiService {
     return Job.fromJson(data);
   }
 
+  Future<Job> updateJob(
+    String jobId,
+    JobUpdateInput input, {
+    String? bearerToken,
+  }) async {
+    final response = await http
+        .patch(
+          Uri.parse('${_backend.baseUrl}/api/v1/jobs/$jobId'),
+          headers: _headers(bearerToken),
+          body: jsonEncode(input.toJson()),
+        )
+        .timeout(const Duration(seconds: 8));
+
+    _throwIfError(response, fallbackMessage: 'Failed to update job');
+    final data = jsonDecode(response.body) as Map<String, dynamic>;
+    return Job.fromJson(data);
+  }
+
+  Future<String> deleteJob(String jobId, {String? bearerToken}) async {
+    final response = await http
+        .delete(
+          Uri.parse('${_backend.baseUrl}/api/v1/jobs/$jobId'),
+          headers: _headers(bearerToken),
+        )
+        .timeout(const Duration(seconds: 8));
+
+    _throwIfError(response, fallbackMessage: 'Failed to delete job');
+    if (response.body.isEmpty) {
+      return 'Job deleted';
+    }
+    final data = jsonDecode(response.body);
+    if (data is Map<String, dynamic> && data['message'] != null) {
+      return data['message'].toString();
+    }
+    return 'Job deleted';
+  }
+
   Future<List<JobTask>> listJobTasks(
     String jobId, {
     String? bearerToken,
@@ -518,6 +557,193 @@ class ApiService {
     return data
         .map((item) => TaskRule.fromJson(item as Map<String, dynamic>))
         .toList();
+  }
+
+  Future<List<CleaningProfile>> listCleaningProfiles({
+    int? locationId,
+    String? bearerToken,
+  }) async {
+    var uri = Uri.parse('${_backend.baseUrl}/api/v1/cleaning/profiles');
+    if (locationId != null) {
+      uri = uri.replace(
+        queryParameters: {'location_id': locationId.toString()},
+      );
+    }
+
+    final response = await http
+        .get(uri, headers: _headers(bearerToken))
+        .timeout(const Duration(seconds: 8));
+
+    _throwIfError(
+      response,
+      fallbackMessage: 'Failed to list cleaning profiles',
+    );
+    final data = jsonDecode(response.body) as List<dynamic>;
+    return data
+        .map((item) => CleaningProfile.fromJson(item as Map<String, dynamic>))
+        .toList();
+  }
+
+  Future<CleaningProfile> createCleaningProfile(
+    CleaningProfileCreateInput input, {
+    String? bearerToken,
+  }) async {
+    final response = await http
+        .post(
+          Uri.parse('${_backend.baseUrl}/api/v1/cleaning/profiles'),
+          headers: _headers(bearerToken),
+          body: jsonEncode(input.toJson()),
+        )
+        .timeout(const Duration(seconds: 8));
+
+    _throwIfError(
+      response,
+      fallbackMessage: 'Failed to create cleaning profile',
+    );
+    final data = jsonDecode(response.body) as Map<String, dynamic>;
+    return CleaningProfile.fromJson(data);
+  }
+
+  Future<CleaningProfile> updateCleaningProfile(
+    String profileId,
+    CleaningProfileUpdateInput input, {
+    String? bearerToken,
+  }) async {
+    final payload = input.toJson();
+    if (payload.isEmpty) {
+      throw Exception('No update fields provided');
+    }
+
+    final response = await http
+        .patch(
+          Uri.parse('${_backend.baseUrl}/api/v1/cleaning/profiles/$profileId'),
+          headers: _headers(bearerToken),
+          body: jsonEncode(payload),
+        )
+        .timeout(const Duration(seconds: 8));
+
+    _throwIfError(
+      response,
+      fallbackMessage: 'Failed to update cleaning profile',
+    );
+    final data = jsonDecode(response.body) as Map<String, dynamic>;
+    return CleaningProfile.fromJson(data);
+  }
+
+  Future<String> deleteCleaningProfile(
+    String profileId, {
+    String? bearerToken,
+  }) async {
+    final response = await http
+        .delete(
+          Uri.parse('${_backend.baseUrl}/api/v1/cleaning/profiles/$profileId'),
+          headers: _headers(bearerToken),
+        )
+        .timeout(const Duration(seconds: 8));
+
+    _throwIfError(
+      response,
+      fallbackMessage: 'Failed to delete cleaning profile',
+    );
+    if (response.body.isEmpty) {
+      return 'Cleaning profile deleted';
+    }
+    final data = jsonDecode(response.body);
+    if (data is Map<String, dynamic> && data['message'] != null) {
+      return data['message'].toString();
+    }
+    return 'Cleaning profile deleted';
+  }
+
+  Future<List<ProfileTask>> listProfileTasks(
+    String profileId, {
+    String? bearerToken,
+  }) async {
+    final response = await http
+        .get(
+          Uri.parse(
+            '${_backend.baseUrl}/api/v1/cleaning/profiles/$profileId/tasks',
+          ),
+          headers: _headers(bearerToken),
+        )
+        .timeout(const Duration(seconds: 8));
+
+    _throwIfError(response, fallbackMessage: 'Failed to list profile tasks');
+    final data = jsonDecode(response.body) as List<dynamic>;
+    return data
+        .map((item) => ProfileTask.fromJson(item as Map<String, dynamic>))
+        .toList();
+  }
+
+  Future<ProfileTask> createProfileTask(
+    String profileId,
+    ProfileTaskCreateInput input, {
+    String? bearerToken,
+  }) async {
+    final response = await http
+        .post(
+          Uri.parse(
+            '${_backend.baseUrl}/api/v1/cleaning/profiles/$profileId/tasks',
+          ),
+          headers: _headers(bearerToken),
+          body: jsonEncode(input.toJson()),
+        )
+        .timeout(const Duration(seconds: 8));
+
+    _throwIfError(response, fallbackMessage: 'Failed to create profile task');
+    final data = jsonDecode(response.body) as Map<String, dynamic>;
+    return ProfileTask.fromJson(data);
+  }
+
+  Future<ProfileTask> updateProfileTask(
+    String profileId,
+    String taskId,
+    ProfileTaskUpdateInput input, {
+    String? bearerToken,
+  }) async {
+    final payload = input.toJson();
+    if (payload.isEmpty) {
+      throw Exception('No update fields provided');
+    }
+
+    final response = await http
+        .patch(
+          Uri.parse(
+            '${_backend.baseUrl}/api/v1/cleaning/profiles/$profileId/tasks/$taskId',
+          ),
+          headers: _headers(bearerToken),
+          body: jsonEncode(payload),
+        )
+        .timeout(const Duration(seconds: 8));
+
+    _throwIfError(response, fallbackMessage: 'Failed to update profile task');
+    final data = jsonDecode(response.body) as Map<String, dynamic>;
+    return ProfileTask.fromJson(data);
+  }
+
+  Future<String> deleteProfileTask(
+    String profileId,
+    String taskId, {
+    String? bearerToken,
+  }) async {
+    final response = await http
+        .delete(
+          Uri.parse(
+            '${_backend.baseUrl}/api/v1/cleaning/profiles/$profileId/tasks/$taskId',
+          ),
+          headers: _headers(bearerToken),
+        )
+        .timeout(const Duration(seconds: 8));
+
+    _throwIfError(response, fallbackMessage: 'Failed to delete profile task');
+    if (response.body.isEmpty) {
+      return 'Profile task deleted';
+    }
+    final data = jsonDecode(response.body);
+    if (data is Map<String, dynamic> && data['message'] != null) {
+      return data['message'].toString();
+    }
+    return 'Profile task deleted';
   }
 
   Future<TaskRule> createTaskRule(
