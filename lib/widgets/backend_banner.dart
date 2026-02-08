@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 
 import '../services/api_service.dart';
+import '../services/app_env.dart';
 import '../services/auth_session.dart';
 import '../services/backend_runtime.dart';
 
@@ -139,6 +140,26 @@ class _BackendBannerState extends State<BackendBanner> {
                     bg: const Color.fromRGBO(230, 225, 243, 1),
                     fg: const Color.fromRGBO(56, 44, 89, 1),
                   ),
+                  const SizedBox(width: 8),
+                  _chip(
+                    label: 'Env: ${AppEnv.environment}',
+                    bg: const Color.fromRGBO(214, 238, 229, 1),
+                    fg: const Color.fromRGBO(24, 86, 62, 1),
+                  ),
+                  if (AppEnv.isDemoMode) ...[
+                    const SizedBox(width: 8),
+                    _chip(
+                      label: 'Demo Preview',
+                      bg: const Color.fromRGBO(255, 241, 208, 1),
+                      fg: const Color.fromRGBO(122, 82, 8, 1),
+                    ),
+                    const SizedBox(width: 8),
+                    _chip(
+                      label: 'Features in progress',
+                      bg: const Color.fromRGBO(245, 234, 238, 1),
+                      fg: const Color.fromRGBO(120, 57, 80, 1),
+                    ),
+                  ],
                 ],
               ),
             );

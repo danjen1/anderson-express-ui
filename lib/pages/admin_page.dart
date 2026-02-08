@@ -3,9 +3,12 @@ import 'package:flutter/material.dart';
 import '../models/backend_config.dart';
 import '../models/employee.dart';
 import '../services/api_service.dart';
+import '../services/app_env.dart';
 import '../services/auth_session.dart';
 import '../services/backend_runtime.dart';
+import '../utils/error_text.dart';
 import '../widgets/backend_banner.dart';
+import '../widgets/demo_mode_notice.dart';
 
 class AdminPage extends StatefulWidget {
   const AdminPage({super.key});
@@ -96,7 +99,7 @@ class _AdminPageState extends State<AdminPage> {
     } catch (error) {
       if (!mounted) return;
       setState(() {
-        _error = error.toString();
+        _error = userFacingError(error);
       });
     } finally {
       if (mounted) {
@@ -108,6 +111,14 @@ class _AdminPageState extends State<AdminPage> {
   }
 
   Future<void> _showCreateDialog() async {
+    if (AppEnv.isDemoMode) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Demo mode: create/edit/delete actions are disabled'),
+        ),
+      );
+      return;
+    }
     final session = AuthSession.current;
     if (session == null || !session.user.isAdmin) {
       ScaffoldMessenger.of(
@@ -138,11 +149,19 @@ class _AdminPageState extends State<AdminPage> {
       if (!mounted) return;
       ScaffoldMessenger.of(
         context,
-      ).showSnackBar(SnackBar(content: Text(error.toString())));
+      ).showSnackBar(SnackBar(content: Text(userFacingError(error))));
     }
   }
 
   Future<void> _showEditDialog(Employee employee) async {
+    if (AppEnv.isDemoMode) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Demo mode: create/edit/delete actions are disabled'),
+        ),
+      );
+      return;
+    }
     final result = await showDialog<EmployeeUpdateInput>(
       context: context,
       builder: (context) => _EmployeeEditorDialog(
@@ -170,11 +189,19 @@ class _AdminPageState extends State<AdminPage> {
       if (!mounted) return;
       ScaffoldMessenger.of(
         context,
-      ).showSnackBar(SnackBar(content: Text(error.toString())));
+      ).showSnackBar(SnackBar(content: Text(userFacingError(error))));
     }
   }
 
   Future<void> _delete(Employee employee) async {
+    if (AppEnv.isDemoMode) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Demo mode: create/edit/delete actions are disabled'),
+        ),
+      );
+      return;
+    }
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
@@ -209,7 +236,7 @@ class _AdminPageState extends State<AdminPage> {
       if (!mounted) return;
       ScaffoldMessenger.of(
         context,
-      ).showSnackBar(SnackBar(content: Text(error.toString())));
+      ).showSnackBar(SnackBar(content: Text(userFacingError(error))));
     }
   }
 
@@ -236,7 +263,7 @@ class _AdminPageState extends State<AdminPage> {
         ],
       ),
       floatingActionButton: FloatingActionButton.extended(
-        onPressed: _showCreateDialog,
+        onPressed: AppEnv.isDemoMode ? null : _showCreateDialog,
         icon: const Icon(Icons.person_add),
         label: const Text('Add Employee'),
       ),
@@ -282,6 +309,13 @@ class _AdminPageState extends State<AdminPage> {
                     label: const Text('Apply'),
                   ),
                 ],
+              ),
+              const SizedBox(height: 12),
+            ],
+            if (AppEnv.isDemoMode) ...[
+              const DemoModeNotice(
+                message:
+                    'Demo mode: employee management is read-only in preview.',
               ),
               const SizedBox(height: 12),
             ],
@@ -331,11 +365,15 @@ class _AdminPageState extends State<AdminPage> {
                               spacing: 8,
                               children: [
                                 IconButton(
-                                  onPressed: () => _showEditDialog(employee),
+                                  onPressed: AppEnv.isDemoMode
+                                      ? null
+                                      : () => _showEditDialog(employee),
                                   icon: const Icon(Icons.edit),
                                 ),
                                 IconButton(
-                                  onPressed: () => _delete(employee),
+                                  onPressed: AppEnv.isDemoMode
+                                      ? null
+                                      : () => _delete(employee),
                                   icon: const Icon(Icons.delete),
                                 ),
                               ],

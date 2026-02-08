@@ -6,9 +6,12 @@ import '../models/job.dart';
 import '../models/job_assignment.dart';
 import '../models/job_task.dart';
 import '../services/api_service.dart';
+import '../services/app_env.dart';
 import '../services/auth_session.dart';
 import '../services/backend_runtime.dart';
+import '../utils/error_text.dart';
 import '../widgets/backend_banner.dart';
+import '../widgets/demo_mode_notice.dart';
 
 class JobsPage extends StatefulWidget {
   const JobsPage({super.key});
@@ -123,7 +126,7 @@ class _JobsPageState extends State<JobsPage> {
       await _loadSelectedJobDetails();
     } catch (error) {
       if (!mounted) return;
-      setState(() => _error = error.toString());
+      setState(() => _error = userFacingError(error));
     } finally {
       if (mounted) {
         setState(() => _loading = false);
@@ -150,11 +153,17 @@ class _JobsPageState extends State<JobsPage> {
       });
     } catch (error) {
       if (!mounted) return;
-      setState(() => _error = error.toString());
+      setState(() => _error = userFacingError(error));
     }
   }
 
   Future<void> _createJob() async {
+    if (AppEnv.isDemoMode) {
+      setState(
+        () => _error = 'Demo mode: create/edit/delete actions are disabled',
+      );
+      return;
+    }
     final token = _token;
     if (token == null || token.isEmpty) {
       setState(() => _error = 'Login required');
@@ -172,11 +181,17 @@ class _JobsPageState extends State<JobsPage> {
       await _loadJobs();
     } catch (error) {
       if (!mounted) return;
-      setState(() => _error = error.toString());
+      setState(() => _error = userFacingError(error));
     }
   }
 
   Future<void> _assignEmployee() async {
+    if (AppEnv.isDemoMode) {
+      setState(
+        () => _error = 'Demo mode: create/edit/delete actions are disabled',
+      );
+      return;
+    }
     final token = _token;
     final jobId = _selectedJobId;
     final employeeId = _selectedEmployeeId;
@@ -192,7 +207,7 @@ class _JobsPageState extends State<JobsPage> {
       await _loadSelectedJobDetails();
     } catch (error) {
       if (!mounted) return;
-      setState(() => _error = error.toString());
+      setState(() => _error = userFacingError(error));
     }
   }
 
@@ -261,6 +276,13 @@ class _JobsPageState extends State<JobsPage> {
             ),
           ],
           const SizedBox(height: 12),
+          if (AppEnv.isDemoMode) ...[
+            const DemoModeNotice(
+              message:
+                  'Demo mode: job creation and assignment actions are read-only in preview.',
+            ),
+            const SizedBox(height: 12),
+          ],
           const Text(
             'Create Job (admin only)',
             style: TextStyle(fontWeight: FontWeight.bold),
@@ -299,7 +321,7 @@ class _JobsPageState extends State<JobsPage> {
               ),
               const SizedBox(width: 8),
               FilledButton(
-                onPressed: _loading ? null : _createJob,
+                onPressed: _loading || AppEnv.isDemoMode ? null : _createJob,
                 child: const Text('Create'),
               ),
             ],
@@ -353,7 +375,9 @@ class _JobsPageState extends State<JobsPage> {
               ),
               const SizedBox(width: 8),
               FilledButton(
-                onPressed: _loading ? null : _assignEmployee,
+                onPressed: _loading || AppEnv.isDemoMode
+                    ? null
+                    : _assignEmployee,
                 child: const Text('Assign'),
               ),
             ],

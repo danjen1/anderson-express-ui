@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../services/api_service.dart';
+import '../utils/error_text.dart';
 import '../widgets/backend_banner.dart';
 import '../widgets/theme_toggle_button.dart';
 
@@ -74,7 +75,7 @@ class _RegisterPageState extends State<RegisterPage> {
       if (!mounted) return;
       ScaffoldMessenger.of(
         context,
-      ).showSnackBar(SnackBar(content: Text(error.toString())));
+      ).showSnackBar(SnackBar(content: Text(userFacingError(error))));
     } finally {
       if (mounted) setState(() => _loading = false);
     }

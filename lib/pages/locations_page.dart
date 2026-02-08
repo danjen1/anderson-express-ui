@@ -3,9 +3,12 @@ import 'package:flutter/material.dart';
 import '../models/backend_config.dart';
 import '../models/location.dart';
 import '../services/api_service.dart';
+import '../services/app_env.dart';
 import '../services/auth_session.dart';
 import '../services/backend_runtime.dart';
+import '../utils/error_text.dart';
 import '../widgets/backend_banner.dart';
+import '../widgets/demo_mode_notice.dart';
 
 class LocationsPage extends StatefulWidget {
   const LocationsPage({super.key});
@@ -106,7 +109,7 @@ class _LocationsPageState extends State<LocationsPage> {
     } catch (error) {
       if (!mounted) return;
       setState(() {
-        _error = error.toString();
+        _error = userFacingError(error);
       });
     } finally {
       if (mounted) {
@@ -118,6 +121,14 @@ class _LocationsPageState extends State<LocationsPage> {
   }
 
   Future<void> _showCreateDialog() async {
+    if (AppEnv.isDemoMode) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Demo mode: create/edit/delete actions are disabled'),
+        ),
+      );
+      return;
+    }
     if (!_isAdmin) {
       ScaffoldMessenger.of(
         context,
@@ -142,11 +153,19 @@ class _LocationsPageState extends State<LocationsPage> {
       if (!mounted) return;
       ScaffoldMessenger.of(
         context,
-      ).showSnackBar(SnackBar(content: Text(error.toString())));
+      ).showSnackBar(SnackBar(content: Text(userFacingError(error))));
     }
   }
 
   Future<void> _showEditDialog(Location location) async {
+    if (AppEnv.isDemoMode) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Demo mode: create/edit/delete actions are disabled'),
+        ),
+      );
+      return;
+    }
     final result = await showDialog<LocationUpdateInput>(
       context: context,
       builder: (context) => _LocationEditorDialog(
@@ -172,11 +191,19 @@ class _LocationsPageState extends State<LocationsPage> {
       if (!mounted) return;
       ScaffoldMessenger.of(
         context,
-      ).showSnackBar(SnackBar(content: Text(error.toString())));
+      ).showSnackBar(SnackBar(content: Text(userFacingError(error))));
     }
   }
 
   Future<void> _delete(Location location) async {
+    if (AppEnv.isDemoMode) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Demo mode: create/edit/delete actions are disabled'),
+        ),
+      );
+      return;
+    }
     if (!_isAdmin) {
       ScaffoldMessenger.of(
         context,
@@ -219,7 +246,7 @@ class _LocationsPageState extends State<LocationsPage> {
       if (!mounted) return;
       ScaffoldMessenger.of(
         context,
-      ).showSnackBar(SnackBar(content: Text(error.toString())));
+      ).showSnackBar(SnackBar(content: Text(userFacingError(error))));
     }
   }
 
@@ -246,7 +273,7 @@ class _LocationsPageState extends State<LocationsPage> {
         ],
       ),
       floatingActionButton: FloatingActionButton.extended(
-        onPressed: _isAdmin ? _showCreateDialog : null,
+        onPressed: _isAdmin && !AppEnv.isDemoMode ? _showCreateDialog : null,
         icon: const Icon(Icons.add_location_alt),
         label: const Text('Add Location'),
       ),
@@ -292,6 +319,13 @@ class _LocationsPageState extends State<LocationsPage> {
                     label: const Text('Apply'),
                   ),
                 ],
+              ),
+              const SizedBox(height: 12),
+            ],
+            if (AppEnv.isDemoMode) ...[
+              const DemoModeNotice(
+                message:
+                    'Demo mode: location management is read-only in preview.',
               ),
               const SizedBox(height: 12),
             ],
@@ -344,12 +378,16 @@ class _LocationsPageState extends State<LocationsPage> {
                               spacing: 8,
                               children: [
                                 IconButton(
-                                  onPressed: () => _showEditDialog(location),
+                                  onPressed: AppEnv.isDemoMode
+                                      ? null
+                                      : () => _showEditDialog(location),
                                   icon: const Icon(Icons.edit),
                                 ),
                                 if (_isAdmin)
                                   IconButton(
-                                    onPressed: () => _delete(location),
+                                    onPressed: AppEnv.isDemoMode
+                                        ? null
+                                        : () => _delete(location),
                                     icon: const Icon(Icons.delete),
                                   ),
                               ],

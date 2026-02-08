@@ -3,8 +3,10 @@ import 'package:google_fonts/google_fonts.dart';
 
 import '../models/backend_config.dart';
 import '../services/api_service.dart';
+import '../services/app_env.dart';
 import '../services/auth_session.dart';
 import '../services/backend_runtime.dart';
+import '../utils/error_text.dart';
 import '../widgets/backend_banner.dart';
 import '../widgets/theme_toggle_button.dart';
 
@@ -68,6 +70,15 @@ class _LoginPageState extends State<LoginPage> {
     await _login();
   }
 
+  Future<void> _loginAsDemoRole({
+    required String email,
+    required String password,
+  }) async {
+    _emailController.text = email;
+    _passwordController.text = password;
+    await _login();
+  }
+
   Future<void> _login() async {
     if (_loading || !_canSubmit) return;
     final api = ApiService();
@@ -94,7 +105,7 @@ class _LoginPageState extends State<LoginPage> {
     } catch (error) {
       if (!mounted) return;
       setState(() {
-        _inlineError = error.toString().replaceFirst('Exception: ', '');
+        _inlineError = userFacingError(error);
       });
     } finally {
       if (mounted) setState(() => _loading = false);
@@ -272,6 +283,75 @@ class _LoginPageState extends State<LoginPage> {
                               child: const Text('Open invite registration'),
                             ),
                           ),
+                          if (AppEnv.isDemoMode) ...[
+                            const SizedBox(height: 12),
+                            Container(
+                              width: double.infinity,
+                              padding: const EdgeInsets.all(10),
+                              decoration: BoxDecoration(
+                                color: const Color.fromRGBO(255, 248, 230, 1),
+                                borderRadius: BorderRadius.circular(10),
+                                border: Border.all(
+                                  color: const Color.fromRGBO(236, 214, 158, 1),
+                                ),
+                              ),
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  const Text(
+                                    'Demo login shortcuts',
+                                    style: TextStyle(
+                                      fontWeight: FontWeight.w700,
+                                    ),
+                                  ),
+                                  const SizedBox(height: 8),
+                                  Wrap(
+                                    spacing: 8,
+                                    runSpacing: 8,
+                                    children: [
+                                      OutlinedButton.icon(
+                                        onPressed: _loading
+                                            ? null
+                                            : () => _loginAsDemoRole(
+                                                email:
+                                                    'admin@andersonexpress.com',
+                                                password: 'dev-password',
+                                              ),
+                                        icon: const Icon(
+                                          Icons.admin_panel_settings,
+                                        ),
+                                        label: const Text('Login as Admin'),
+                                      ),
+                                      OutlinedButton.icon(
+                                        onPressed: _loading
+                                            ? null
+                                            : () => _loginAsDemoRole(
+                                                email:
+                                                    'john@andersonexpress.com',
+                                                password: 'worker123',
+                                              ),
+                                        icon: const Icon(Icons.badge_outlined),
+                                        label: const Text('Login as Employee'),
+                                      ),
+                                      OutlinedButton.icon(
+                                        onPressed: _loading
+                                            ? null
+                                            : () => _loginAsDemoRole(
+                                                email:
+                                                    'contact@techstartup.com',
+                                                password: 'client123',
+                                              ),
+                                        icon: const Icon(
+                                          Icons.business_outlined,
+                                        ),
+                                        label: const Text('Login as Client'),
+                                      ),
+                                    ],
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ],
                           const SizedBox(height: 6),
                           ExpansionTile(
                             tilePadding: EdgeInsets.zero,

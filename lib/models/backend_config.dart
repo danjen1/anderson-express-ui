@@ -1,3 +1,5 @@
+import '../config/api_config.dart';
+
 enum BackendKind { rust, python, vapor }
 
 class BackendConfig {
@@ -47,11 +49,22 @@ class BackendConfig {
       defaultValue: '',
     );
 
+    final trimmedOverride = overrideUrl.trim();
+    if (trimmedOverride.isNotEmpty) {
+      return forKind(
+        BackendKind.rust,
+        scheme: 'https',
+        overrideUrl: trimmedOverride,
+      );
+    }
+    final trimmedHost = hostOverride.trim();
+    if (trimmedHost.isNotEmpty) {
+      return forKind(BackendKind.rust, host: trimmedHost, scheme: 'http');
+    }
     return forKind(
       BackendKind.rust,
-      host: hostOverride.isNotEmpty ? hostOverride : 'localhost',
-      scheme: 'http',
-      overrideUrl: overrideUrl,
+      scheme: 'https',
+      overrideUrl: ApiConfig.baseUrl,
     );
   }
 

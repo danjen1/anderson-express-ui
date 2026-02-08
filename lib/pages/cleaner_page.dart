@@ -6,6 +6,7 @@ import '../models/job_task.dart';
 import '../services/api_service.dart';
 import '../services/auth_session.dart';
 import '../services/backend_runtime.dart';
+import '../utils/error_text.dart';
 import '../widgets/backend_banner.dart';
 
 class CleanerPage extends StatefulWidget {
@@ -104,7 +105,7 @@ class _CleanerPageState extends State<CleanerPage> {
       await _loadSelectedJobTasks();
     } catch (error) {
       if (!mounted) return;
-      setState(() => _error = error.toString());
+      setState(() => _error = userFacingError(error));
     } finally {
       if (mounted) {
         setState(() => _loading = false);
@@ -124,7 +125,7 @@ class _CleanerPageState extends State<CleanerPage> {
       setState(() => _tasks = tasks);
     } catch (error) {
       if (!mounted) return;
-      setState(() => _error = error.toString());
+      setState(() => _error = userFacingError(error));
     }
   }
 
@@ -142,7 +143,7 @@ class _CleanerPageState extends State<CleanerPage> {
       await _loadSelectedJobTasks();
     } catch (error) {
       if (!mounted) return;
-      setState(() => _error = error.toString());
+      setState(() => _error = userFacingError(error));
     }
   }
 

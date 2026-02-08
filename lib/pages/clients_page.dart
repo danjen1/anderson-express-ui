@@ -3,9 +3,12 @@ import 'package:flutter/material.dart';
 import '../models/backend_config.dart';
 import '../models/client.dart';
 import '../services/api_service.dart';
+import '../services/app_env.dart';
 import '../services/auth_session.dart';
 import '../services/backend_runtime.dart';
+import '../utils/error_text.dart';
 import '../widgets/backend_banner.dart';
+import '../widgets/demo_mode_notice.dart';
 
 class ClientsPage extends StatefulWidget {
   const ClientsPage({super.key});
@@ -96,7 +99,7 @@ class _ClientsPageState extends State<ClientsPage> {
     } catch (error) {
       if (!mounted) return;
       setState(() {
-        _error = error.toString();
+        _error = userFacingError(error);
       });
     } finally {
       if (mounted) {
@@ -108,6 +111,14 @@ class _ClientsPageState extends State<ClientsPage> {
   }
 
   Future<void> _showCreateDialog() async {
+    if (AppEnv.isDemoMode) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Demo mode: create/edit/delete actions are disabled'),
+        ),
+      );
+      return;
+    }
     final session = AuthSession.current;
     if (session == null || !session.user.isAdmin) {
       ScaffoldMessenger.of(
@@ -137,11 +148,19 @@ class _ClientsPageState extends State<ClientsPage> {
       if (!mounted) return;
       ScaffoldMessenger.of(
         context,
-      ).showSnackBar(SnackBar(content: Text(error.toString())));
+      ).showSnackBar(SnackBar(content: Text(userFacingError(error))));
     }
   }
 
   Future<void> _showEditDialog(Client client) async {
+    if (AppEnv.isDemoMode) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Demo mode: create/edit/delete actions are disabled'),
+        ),
+      );
+      return;
+    }
     final result = await showDialog<ClientUpdateInput>(
       context: context,
       builder: (context) => _ClientEditorDialog(
@@ -168,11 +187,19 @@ class _ClientsPageState extends State<ClientsPage> {
       if (!mounted) return;
       ScaffoldMessenger.of(
         context,
-      ).showSnackBar(SnackBar(content: Text(error.toString())));
+      ).showSnackBar(SnackBar(content: Text(userFacingError(error))));
     }
   }
 
   Future<void> _delete(Client client) async {
+    if (AppEnv.isDemoMode) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Demo mode: create/edit/delete actions are disabled'),
+        ),
+      );
+      return;
+    }
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
@@ -203,7 +230,7 @@ class _ClientsPageState extends State<ClientsPage> {
       if (!mounted) return;
       ScaffoldMessenger.of(
         context,
-      ).showSnackBar(SnackBar(content: Text(error.toString())));
+      ).showSnackBar(SnackBar(content: Text(userFacingError(error))));
     }
   }
 
@@ -230,7 +257,7 @@ class _ClientsPageState extends State<ClientsPage> {
         ],
       ),
       floatingActionButton: FloatingActionButton.extended(
-        onPressed: _showCreateDialog,
+        onPressed: AppEnv.isDemoMode ? null : _showCreateDialog,
         icon: const Icon(Icons.business),
         label: const Text('Add Client'),
       ),
@@ -275,6 +302,13 @@ class _ClientsPageState extends State<ClientsPage> {
                     label: const Text('Apply'),
                   ),
                 ],
+              ),
+              const SizedBox(height: 12),
+            ],
+            if (AppEnv.isDemoMode) ...[
+              const DemoModeNotice(
+                message:
+                    'Demo mode: client management is read-only in preview.',
               ),
               const SizedBox(height: 12),
             ],
@@ -324,11 +358,15 @@ class _ClientsPageState extends State<ClientsPage> {
                               spacing: 8,
                               children: [
                                 IconButton(
-                                  onPressed: () => _showEditDialog(client),
+                                  onPressed: AppEnv.isDemoMode
+                                      ? null
+                                      : () => _showEditDialog(client),
                                   icon: const Icon(Icons.edit),
                                 ),
                                 IconButton(
-                                  onPressed: () => _delete(client),
+                                  onPressed: AppEnv.isDemoMode
+                                      ? null
+                                      : () => _delete(client),
                                   icon: const Icon(Icons.delete),
                                 ),
                               ],
