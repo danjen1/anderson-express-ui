@@ -8,6 +8,7 @@ import '../services/auth_session.dart';
 import '../services/backend_runtime.dart';
 import '../utils/error_text.dart';
 import '../widgets/backend_banner.dart';
+import '../widgets/brand_app_bar_title.dart';
 import '../widgets/profile_menu_button.dart';
 import '../widgets/theme_toggle_button.dart';
 
@@ -19,6 +20,9 @@ class CleanerPage extends StatefulWidget {
 }
 
 class _CleanerPageState extends State<CleanerPage> {
+  static const Color _lightSecondary = Color(0xFFA8D6F7);
+  static const Color _darkBg = Color(0xFF2C2C2C);
+
   late BackendKind _selectedBackend;
   late final TextEditingController _hostController;
 
@@ -151,10 +155,11 @@ class _CleanerPageState extends State<CleanerPage> {
 
   @override
   Widget build(BuildContext context) {
+    final dark = Theme.of(context).brightness == Brightness.dark;
     return Scaffold(
+      bottomNavigationBar: const SafeArea(top: false, child: BackendBanner()),
       appBar: AppBar(
-        title: const Text('Anderson Express Cleaning Service'),
-        bottom: const BackendBanner(),
+        title: const BrandAppBarTitle(),
         actions: [
           const ThemeToggleButton(),
           IconButton(
@@ -165,111 +170,123 @@ class _CleanerPageState extends State<CleanerPage> {
           const ProfileMenuButton(),
         ],
       ),
-      body: SafeArea(
-        child: ListView(
-          padding: const EdgeInsets.all(16),
-          children: [
-            Text(
-              'Cleaner users only see jobs assigned to them, including each job\'s task list.',
-              style: Theme.of(context).textTheme.bodySmall,
-            ),
-            if (BackendRuntime.allowBackendOverride) ...[
+      body: Container(
+        decoration: BoxDecoration(
+          gradient: LinearGradient(
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+            colors: dark
+                ? const [_darkBg, _darkBg, Color(0xFF36343B)]
+                : const [Colors.white, _lightSecondary, Color(0xFFE7F3FB)],
+            stops: const [0.0, 0.55, 1.0],
+          ),
+        ),
+        child: SafeArea(
+          child: ListView(
+            padding: const EdgeInsets.all(16),
+            children: [
+              Text(
+                'Cleaner users only see jobs assigned to them, including each job\'s task list.',
+                style: Theme.of(context).textTheme.bodySmall,
+              ),
+              if (BackendRuntime.allowBackendOverride) ...[
+                const SizedBox(height: 12),
+                Wrap(
+                  spacing: 8,
+                  runSpacing: 8,
+                  children: const [BackendKind.rust]
+                      .map(
+                        (kind) => ChoiceChip(
+                          label: Text(switch (kind) {
+                            BackendKind.rust => 'Rust',
+                            _ => 'Rust',
+                          }),
+                          selected: _selectedBackend == kind,
+                          onSelected: (_) =>
+                              setState(() => _selectedBackend = kind),
+                        ),
+                      )
+                      .toList(),
+                ),
+                const SizedBox(height: 8),
+                Row(
+                  children: [
+                    Expanded(
+                      child: TextField(
+                        controller: _hostController,
+                        decoration: const InputDecoration(
+                          labelText: 'Backend Host',
+                          border: OutlineInputBorder(),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    FilledButton.icon(
+                      onPressed: _applyBackendSelection,
+                      icon: const Icon(Icons.check),
+                      label: const Text('Apply'),
+                    ),
+                  ],
+                ),
+              ],
+              if (_error != null) ...[
+                const SizedBox(height: 10),
+                Text(_error!, style: TextStyle(color: Colors.red.shade700)),
+              ],
               const SizedBox(height: 12),
-              Wrap(
-                spacing: 8,
-                runSpacing: 8,
-                children: const [BackendKind.rust]
+              DropdownButtonFormField<String>(
+                initialValue: _selectedJobId,
+                decoration: const InputDecoration(
+                  labelText: 'Assigned Job',
+                  border: OutlineInputBorder(),
+                ),
+                items: _jobs
                     .map(
-                      (kind) => ChoiceChip(
-                        label: Text(switch (kind) {
-                          BackendKind.rust => 'Rust',
-                          _ => 'Rust',
-                        }),
-                        selected: _selectedBackend == kind,
-                        onSelected: (_) =>
-                            setState(() => _selectedBackend = kind),
+                      (job) => DropdownMenuItem(
+                        value: job.id,
+                        child: Text('${job.jobNumber} • ${job.status}'),
                       ),
                     )
                     .toList(),
+                onChanged: (value) async {
+                  if (value == null) return;
+                  setState(() => _selectedJobId = value);
+                  await _loadSelectedJobTasks();
+                },
               ),
-              const SizedBox(height: 8),
-              Row(
-                children: [
-                  Expanded(
-                    child: TextField(
-                      controller: _hostController,
-                      decoration: const InputDecoration(
-                        labelText: 'Backend Host',
-                        border: OutlineInputBorder(),
+              const SizedBox(height: 12),
+              _loading
+                  ? const Center(child: CircularProgressIndicator())
+                  : Container(
+                      decoration: BoxDecoration(
+                        border: Border.all(color: Colors.black12),
+                        borderRadius: BorderRadius.circular(8),
                       ),
-                    ),
-                  ),
-                  const SizedBox(width: 8),
-                  FilledButton.icon(
-                    onPressed: _applyBackendSelection,
-                    icon: const Icon(Icons.check),
-                    label: const Text('Apply'),
-                  ),
-                ],
-              ),
-            ],
-            if (_error != null) ...[
-              const SizedBox(height: 10),
-              Text(_error!, style: TextStyle(color: Colors.red.shade700)),
-            ],
-            const SizedBox(height: 12),
-            DropdownButtonFormField<String>(
-              initialValue: _selectedJobId,
-              decoration: const InputDecoration(
-                labelText: 'Assigned Job',
-                border: OutlineInputBorder(),
-              ),
-              items: _jobs
-                  .map(
-                    (job) => DropdownMenuItem(
-                      value: job.id,
-                      child: Text('${job.jobNumber} • ${job.status}'),
-                    ),
-                  )
-                  .toList(),
-              onChanged: (value) async {
-                if (value == null) return;
-                setState(() => _selectedJobId = value);
-                await _loadSelectedJobTasks();
-              },
-            ),
-            const SizedBox(height: 12),
-            _loading
-                ? const Center(child: CircularProgressIndicator())
-                : Container(
-                    decoration: BoxDecoration(
-                      border: Border.all(color: Colors.black12),
-                      borderRadius: BorderRadius.circular(8),
-                    ),
-                    child: _tasks.isEmpty
-                        ? const Padding(
-                            padding: EdgeInsets.all(12),
-                            child: Text('No tasks for selected job'),
-                          )
-                        : Column(
-                            children: _tasks
-                                .map(
-                                  (task) => CheckboxListTile(
-                                    value: task.completed,
-                                    onChanged: (nextValue) {
-                                      if (nextValue == null) return;
-                                      _toggleTaskComplete(task, nextValue);
-                                    },
-                                    title: Text(task.name),
-                                    subtitle: Text(
-                                      '${task.category} • required=${task.required}',
+                      child: _tasks.isEmpty
+                          ? const Padding(
+                              padding: EdgeInsets.all(12),
+                              child: Text('No tasks for selected job'),
+                            )
+                          : Column(
+                              children: _tasks
+                                  .map(
+                                    (task) => CheckboxListTile(
+                                      value: task.completed,
+                                      onChanged: (nextValue) {
+                                        if (nextValue == null) return;
+                                        _toggleTaskComplete(task, nextValue);
+                                      },
+                                      title: Text(task.name),
+                                      subtitle: Text(
+                                        '${task.category} • required=${task.required}',
+                                      ),
                                     ),
-                                  ),
-                                )
-                                .toList(),
-                          ),
-                  ),
-          ],
+                                  )
+                                  .toList(),
+                            ),
+                    ),
+            ],
+          ),
         ),
       ),
     );

@@ -8,6 +8,7 @@ import '../services/auth_session.dart';
 import '../services/backend_runtime.dart';
 import '../utils/error_text.dart';
 import '../widgets/backend_banner.dart';
+import '../widgets/brand_app_bar_title.dart';
 import '../widgets/demo_mode_notice.dart';
 import '../widgets/profile_menu_button.dart';
 import '../widgets/theme_toggle_button.dart';
@@ -256,7 +257,7 @@ class _LocationsPageState extends State<LocationsPage> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Anderson Express Cleaning Service'),
+        title: const BrandAppBarTitle(),
         bottom: const BackendBanner(),
         actions: [
           const ThemeToggleButton(),

@@ -15,6 +15,7 @@ class Job {
     this.locationLatitude,
     this.locationLongitude,
     this.completedAt,
+    this.estimatedDurationMinutes,
     this.actualDurationMinutes,
     this.notes,
   });
@@ -34,6 +35,7 @@ class Job {
   final double? locationLatitude;
   final double? locationLongitude;
   final String? completedAt;
+  final int? estimatedDurationMinutes;
   final int? actualDurationMinutes;
   final String? notes;
 
@@ -58,6 +60,9 @@ class Job {
           ? null
           : double.tryParse(json['location_longitude'].toString()),
       completedAt: json['completed_at']?.toString(),
+      estimatedDurationMinutes: json['estimated_duration_minutes'] == null
+          ? null
+          : int.tryParse(json['estimated_duration_minutes'].toString()),
       actualDurationMinutes: json['actual_duration_minutes'] == null
           ? null
           : int.tryParse(json['actual_duration_minutes'].toString()),
@@ -71,17 +76,20 @@ class JobCreateInput {
     required this.profileId,
     required this.locationId,
     required this.scheduledDate,
+    this.estimatedDurationMinutes,
   });
 
   final int profileId;
   final int locationId;
   final String scheduledDate;
+  final int? estimatedDurationMinutes;
 
   Map<String, dynamic> toJson() {
     return {
       'profile_id': profileId,
       'location_id': locationId,
       'scheduled_date': scheduledDate,
+      'estimated_duration_minutes': estimatedDurationMinutes,
     };
   }
 }
@@ -91,12 +99,14 @@ class JobUpdateInput {
     required this.profileId,
     required this.scheduledDate,
     required this.status,
+    this.estimatedDurationMinutes,
     this.notes,
   });
 
   final int profileId;
   final String scheduledDate;
   final String status;
+  final int? estimatedDurationMinutes;
   final String? notes;
 
   Map<String, dynamic> toJson() {
@@ -104,6 +114,7 @@ class JobUpdateInput {
       'profile_id': profileId,
       'scheduled_date': scheduledDate,
       'status': status,
+      'estimated_duration_minutes': estimatedDurationMinutes,
       'notes': notes,
     };
   }

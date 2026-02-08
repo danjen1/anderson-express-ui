@@ -18,6 +18,7 @@ import '../services/backend_runtime.dart';
 import '../utils/date_format.dart';
 import '../utils/error_text.dart';
 import '../widgets/backend_banner.dart';
+import '../widgets/brand_app_bar_title.dart';
 import '../widgets/demo_mode_notice.dart';
 import '../widgets/profile_menu_button.dart';
 import '../widgets/theme_toggle_button.dart';
@@ -74,6 +75,13 @@ class _AdminPageState extends State<AdminPage> {
   bool _loadingProfileTasks = false;
 
   String? get _token => AuthSession.current?.token.trim();
+
+  String _formatCoordinateStatus(double? latitude, double? longitude) {
+    if (latitude != null && longitude != null) {
+      return 'Coordinates saved (${latitude.toStringAsFixed(5)}, ${longitude.toStringAsFixed(5)})';
+    }
+    return 'Coordinates unavailable. Check address details.';
+  }
 
   @override
   void initState() {
@@ -220,7 +228,7 @@ class _AdminPageState extends State<AdminPage> {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(
-            'Employee created. Invitation email requested for ${created.email ?? result.email}.',
+            'Employee created. Invitation email requested for ${created.email ?? result.email}. ${_formatCoordinateStatus(created.latitude, created.longitude)}',
           ),
         ),
       );
@@ -258,12 +266,20 @@ class _AdminPageState extends State<AdminPage> {
     if (result == null) return;
 
     try {
-      await _api.updateEmployee(employee.id, result, bearerToken: _token);
+      final updated = await _api.updateEmployee(
+        employee.id,
+        result,
+        bearerToken: _token,
+      );
       await _loadAdminData();
       if (!mounted) return;
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(const SnackBar(content: Text('Employee updated')));
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            'Employee updated. ${_formatCoordinateStatus(updated.latitude, updated.longitude)}',
+          ),
+        ),
+      );
     } catch (error) {
       if (!mounted) return;
       ScaffoldMessenger.of(
@@ -449,12 +465,16 @@ class _AdminPageState extends State<AdminPage> {
     if (result == null) return;
 
     try {
-      await _api.createLocation(result, bearerToken: _token);
+      final created = await _api.createLocation(result, bearerToken: _token);
       await _loadAdminData();
       if (!mounted) return;
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(const SnackBar(content: Text('Location created')));
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            'Location created. ${_formatCoordinateStatus(created.latitude, created.longitude)}',
+          ),
+        ),
+      );
     } catch (error) {
       if (!mounted) return;
       ScaffoldMessenger.of(
@@ -488,12 +508,20 @@ class _AdminPageState extends State<AdminPage> {
     if (result == null) return;
 
     try {
-      await _api.updateLocation(location.id, result, bearerToken: _token);
+      final updated = await _api.updateLocation(
+        location.id,
+        result,
+        bearerToken: _token,
+      );
       await _loadAdminData();
       if (!mounted) return;
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(const SnackBar(content: Text('Location updated')));
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            'Location updated. ${_formatCoordinateStatus(updated.latitude, updated.longitude)}',
+          ),
+        ),
+      );
     } catch (error) {
       if (!mounted) return;
       ScaffoldMessenger.of(
@@ -2326,7 +2354,7 @@ class _AdminPageState extends State<AdminPage> {
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Anderson Express Cleaning Service'),
+        title: const BrandAppBarTitle(),
         bottom: const BackendBanner(),
         actions: [
           const ThemeToggleButton(),
@@ -2490,6 +2518,26 @@ class _EmployeeEditorDialogState extends State<_EmployeeEditorDialog> {
               _field(_state, 'State'),
               const SizedBox(height: 10),
               _field(_zipCode, 'Zip Code'),
+              const SizedBox(height: 10),
+              Container(
+                width: double.infinity,
+                padding: const EdgeInsets.all(10),
+                decoration: BoxDecoration(
+                  color: Theme.of(context).brightness == Brightness.dark
+                      ? const Color(0xFF2F313A)
+                      : const Color(0xFFEAF4FA),
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(
+                    color: Theme.of(context).brightness == Brightness.dark
+                        ? const Color(0xFF4A4D5A)
+                        : const Color(0xFFA8D6F7),
+                  ),
+                ),
+                child: const Text(
+                  'Coordinates are auto-filled from address on save when not provided.',
+                  style: TextStyle(fontSize: 12),
+                ),
+              ),
             ],
           ),
         ),
@@ -2635,6 +2683,26 @@ class _ClientEditorDialogState extends State<_ClientEditorDialog> {
               _field(_state, 'State'),
               const SizedBox(height: 10),
               _field(_zipCode, 'Zip Code'),
+              const SizedBox(height: 10),
+              Container(
+                width: double.infinity,
+                padding: const EdgeInsets.all(10),
+                decoration: BoxDecoration(
+                  color: Theme.of(context).brightness == Brightness.dark
+                      ? const Color(0xFF2F313A)
+                      : const Color(0xFFEAF4FA),
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(
+                    color: Theme.of(context).brightness == Brightness.dark
+                        ? const Color(0xFF4A4D5A)
+                        : const Color(0xFFA8D6F7),
+                  ),
+                ),
+                child: const Text(
+                  'Coordinates are auto-filled from address on save when not provided.',
+                  style: TextStyle(fontSize: 12),
+                ),
+              ),
             ],
           ),
         ),

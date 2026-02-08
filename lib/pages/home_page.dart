@@ -12,8 +12,23 @@ import '../services/api_service.dart';
 import '../services/auth_session.dart';
 import '../utils/date_format.dart';
 import '../widgets/backend_banner.dart';
+import '../widgets/brand_app_bar_title.dart';
+import '../widgets/employee/employee_dashboard_cards.dart';
+import '../widgets/employee/employee_job_card.dart';
 import '../widgets/profile_menu_button.dart';
 import '../widgets/theme_toggle_button.dart';
+
+DateTimeRange _currentWeekRange() {
+  final now = DateTime.now();
+  final daysSinceSunday = now.weekday % DateTime.daysPerWeek;
+  final start = DateTime(
+    now.year,
+    now.month,
+    now.day,
+  ).subtract(Duration(days: daysSinceSunday));
+  final end = start.add(const Duration(days: 6));
+  return DateTimeRange(start: start, end: end);
+}
 
 class HomePage extends StatefulWidget {
   const HomePage({super.key});
@@ -23,13 +38,22 @@ class HomePage extends StatefulWidget {
 }
 
 class _HomePageState extends State<HomePage> {
+  static const Color _lightPrimary = Color(0xFF296273);
+  static const Color _lightSecondary = Color(0xFFA8D6F7);
+  static const Color _lightAccent = Color(0xFF442E6F);
+  static const Color _lightCta = Color(0xFFEE7E32);
+  static const Color _darkBg = Color(0xFF2C2C2C);
+  static const Color _darkText = Color(0xFFE4E4E4);
+  static const Color _darkAccent1 = Color(0xFFA8DADC);
+  static const Color _darkAccent2 = Color(0xFFFFC1CC);
+
   bool loading = true;
   String? error;
   List<Job> _adminPendingJobs = const [];
   List<Job> _cleanerJobs = const [];
   List<Location> _employeeLocations = const [];
   Employee? _employeeProfile;
-  DateTime _completedSince = DateTime.now().subtract(const Duration(days: 30));
+  DateTimeRange _employeeDateRange = _currentWeekRange();
   List<Location> _clientLocations = const [];
   List<Job> _clientJobs = const [];
   List<Job> _clientPendingJobs = const [];
@@ -197,10 +221,21 @@ class _HomePageState extends State<HomePage> {
     required String title,
     required String empty,
     required List<Widget> children,
+    Color? cardColor,
+    Color? borderColor,
+    Color? titleColor,
+    Color? emptyColor,
   }) {
     return SizedBox(
       width: double.infinity,
       child: Card(
+        color: cardColor,
+        shape: borderColor == null
+            ? null
+            : RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(12),
+                side: BorderSide(color: borderColor),
+              ),
         child: Padding(
           padding: const EdgeInsets.all(16),
           child: Column(
@@ -208,15 +243,19 @@ class _HomePageState extends State<HomePage> {
             children: [
               Text(
                 title,
-                style: const TextStyle(
+                style: TextStyle(
                   fontWeight: FontWeight.w800,
                   fontSize: 18,
                   letterSpacing: 0.2,
+                  color: titleColor,
                 ),
               ),
               const SizedBox(height: 10),
               if (children.isEmpty)
-                Text(empty, style: const TextStyle(color: Colors.black54)),
+                Text(
+                  empty,
+                  style: TextStyle(color: emptyColor ?? Colors.black54),
+                ),
               ...children,
             ],
           ),
@@ -242,13 +281,16 @@ class _HomePageState extends State<HomePage> {
   }
 
   List<Job> get _employeeAssignedJobs {
-    final jobs = _cleanerJobs
-        .where(
-          (job) =>
-              !_isCompletedStatus(job.status) &&
-              !_isCancelledStatus(job.status),
-        )
-        .toList();
+    final jobs = _cleanerJobs.where((job) {
+      if (_isCompletedStatus(job.status) || _isCancelledStatus(job.status)) {
+        return false;
+      }
+      final status = job.status.trim().toLowerCase();
+      return status == 'assigned' ||
+          status == 'in_progress' ||
+          status == 'in-progress' ||
+          status == 'in progress';
+    }).toList();
     jobs.sort((a, b) {
       final ad = _parseJobDate(a.scheduledDate);
       final bd = _parseJobDate(b.scheduledDate);
@@ -262,16 +304,23 @@ class _HomePageState extends State<HomePage> {
 
   List<Job> get _employeeCompletedJobs {
     final start = DateTime(
-      _completedSince.year,
-      _completedSince.month,
-      _completedSince.day,
+      _employeeDateRange.start.year,
+      _employeeDateRange.start.month,
+      _employeeDateRange.start.day,
+    );
+    final end = DateTime(
+      _employeeDateRange.end.year,
+      _employeeDateRange.end.month,
+      _employeeDateRange.end.day,
+      23,
+      59,
+      59,
     );
     final jobs = _cleanerJobs.where((job) {
       if (!_isCompletedStatus(job.status)) return false;
       final date = _parseJobDate(job.completedAt ?? job.scheduledDate);
       if (date == null) return true;
-      final normalized = DateTime(date.year, date.month, date.day);
-      return !normalized.isBefore(start);
+      return !date.isBefore(start) && !date.isAfter(end);
     }).toList();
     jobs.sort((a, b) {
       final ad = _parseJobDate(a.scheduledDate);
@@ -282,6 +331,27 @@ class _HomePageState extends State<HomePage> {
       return bd.compareTo(ad);
     });
     return jobs;
+  }
+
+  List<Job> get _employeeAssignedJobsInRange {
+    final start = DateTime(
+      _employeeDateRange.start.year,
+      _employeeDateRange.start.month,
+      _employeeDateRange.start.day,
+    );
+    final end = DateTime(
+      _employeeDateRange.end.year,
+      _employeeDateRange.end.month,
+      _employeeDateRange.end.day,
+      23,
+      59,
+      59,
+    );
+    return _employeeAssignedJobs.where((job) {
+      final date = _parseJobDate(job.scheduledDate);
+      if (date == null) return true;
+      return !date.isBefore(start) && !date.isAfter(end);
+    }).toList();
   }
 
   Location? _locationForJob(Job job) {
@@ -310,6 +380,10 @@ class _HomePageState extends State<HomePage> {
   }
 
   String _distanceHintForJob(Job job) {
+    final preciseMiles = _distanceMilesForJob(job);
+    if (preciseMiles != null) {
+      return '${preciseMiles.toStringAsFixed(1)} mi away';
+    }
     final location = _locationForJob(job);
     final employee = _employeeProfile;
     if (location == null || employee == null) {
@@ -350,6 +424,25 @@ class _HomePageState extends State<HomePage> {
     return 'Distance unavailable';
   }
 
+  double? _distanceMilesForJob(Job job) {
+    final location = _locationForJob(job);
+    final employee = _employeeProfile;
+    if (location == null || employee == null) {
+      return null;
+    }
+    final locationLat = location.latitude;
+    final locationLon = location.longitude;
+    final employeeLat = employee.latitude;
+    final employeeLon = employee.longitude;
+    if (locationLat == null ||
+        locationLon == null ||
+        employeeLat == null ||
+        employeeLon == null) {
+      return null;
+    }
+    return _haversineMiles(employeeLat, employeeLon, locationLat, locationLon);
+  }
+
   double _haversineMiles(double lat1, double lon1, double lat2, double lon2) {
     const earthRadiusMiles = 3958.8;
     final dLat = _toRadians(lat2 - lat1);
@@ -378,17 +471,37 @@ class _HomePageState extends State<HomePage> {
     return computed.clamp(220.0, 320.0);
   }
 
-  Future<void> _pickCompletedSinceDate() async {
+  Future<void> _pickEmployeeStartDate() async {
     final now = DateTime.now();
     final picked = await showDatePicker(
       context: context,
-      initialDate: _completedSince,
+      initialDate: _employeeDateRange.start,
       firstDate: DateTime(now.year - 2),
-      lastDate: now,
+      lastDate: now.add(const Duration(days: 365)),
     );
     if (picked == null) return;
     setState(() {
-      _completedSince = picked;
+      final end = picked.isAfter(_employeeDateRange.end)
+          ? picked
+          : _employeeDateRange.end;
+      _employeeDateRange = DateTimeRange(start: picked, end: end);
+    });
+  }
+
+  Future<void> _pickEmployeeEndDate() async {
+    final now = DateTime.now();
+    final picked = await showDatePicker(
+      context: context,
+      initialDate: _employeeDateRange.end,
+      firstDate: DateTime(now.year - 2),
+      lastDate: now.add(const Duration(days: 365)),
+    );
+    if (picked == null) return;
+    setState(() {
+      final start = picked.isBefore(_employeeDateRange.start)
+          ? picked
+          : _employeeDateRange.start;
+      _employeeDateRange = DateTimeRange(start: start, end: picked);
     });
   }
 
@@ -470,15 +583,18 @@ class _HomePageState extends State<HomePage> {
     Color? bg,
     Color? fg,
   }) {
-    final tileFg = fg ?? const Color.fromRGBO(36, 36, 36, 1);
+    final dark = Theme.of(context).brightness == Brightness.dark;
+    final tileFg = fg ?? (dark ? _darkText : _lightAccent);
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+      constraints: const BoxConstraints(minWidth: 170),
+      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 10),
       decoration: BoxDecoration(
-        color: bg ?? const Color.fromRGBO(248, 248, 251, 1),
+        color: bg ?? (dark ? const Color(0xFF3A3A3A) : _lightSecondary),
         borderRadius: BorderRadius.circular(10),
       ),
       child: Row(
-        mainAxisSize: MainAxisSize.min,
+        mainAxisSize: MainAxisSize.max,
+        mainAxisAlignment: MainAxisAlignment.center,
         children: [
           if (icon != null) ...[
             Icon(icon, size: 16, color: tileFg),
@@ -605,262 +721,76 @@ class _HomePageState extends State<HomePage> {
   }
 
   Widget _buildCleanerLanding() {
-    final assigned = _employeeAssignedJobs;
+    final dark = Theme.of(context).brightness == Brightness.dark;
+    final assigned = _employeeAssignedJobsInRange;
     final completed = _employeeCompletedJobs;
-    final today = DateTime.now();
-    final overdue = assigned.where((job) {
-      final date = _parseJobDate(job.scheduledDate);
-      if (date == null) return false;
-      return date.isBefore(DateTime(today.year, today.month, today.day));
-    }).length;
-    final nextJobDate = assigned.isNotEmpty
-        ? _parseJobDate(assigned.first.scheduledDate)
-        : null;
-    final locationCount = {for (final job in assigned) job.locationId}.length;
     final employeeDisplayName =
         (_employeeProfile?.name.trim().isNotEmpty ?? false)
         ? _employeeProfile!.name.trim()
         : 'Employee';
-
-    Widget employeeJobCard(
-      Job job, {
-      required bool completedCard,
-      required double cardWidth,
-    }) {
-      final clientName = (job.clientName?.trim().isNotEmpty ?? false)
-          ? job.clientName!.trim()
-          : 'Client unavailable';
-      final locationType = (job.locationType ?? '').trim().toLowerCase();
-      final whoLabel = locationType == 'commercial' ? 'Business' : 'Client';
-      final mapsLabel = _deviceMapLabel();
-      final duration = job.actualDurationMinutes == null
-          ? 'Duration: N/A'
-          : 'Duration: ${job.actualDurationMinutes! ~/ 60}h ${job.actualDurationMinutes! % 60}m';
-      final primaryDate = completedCard
-          ? formatDateMdy(job.completedAt ?? job.scheduledDate)
-          : formatDateMdy(job.scheduledDate);
-      final dateLabel = completedCard ? 'Completed' : 'Scheduled';
-      final isCompact = MediaQuery.sizeOf(context).width < 480;
-      final statusLabel = job.status.replaceAll('_', ' ').toUpperCase();
-      final statusNormalized = job.status.trim().toLowerCase();
-      final statusChipColor = switch (statusNormalized) {
-        'pending' => const Color.fromRGBO(255, 247, 224, 1),
-        'assigned' => const Color.fromRGBO(232, 241, 255, 1),
-        _ => const Color.fromRGBO(240, 243, 249, 1),
-      };
-      final statusTextColor = switch (statusNormalized) {
-        'pending' => const Color.fromRGBO(138, 92, 8, 1),
-        'assigned' => const Color.fromRGBO(34, 73, 140, 1),
-        _ => const Color.fromRGBO(67, 76, 98, 1),
-      };
-
-      return SizedBox(
-        width: cardWidth,
-        height: isCompact ? 248 : 260,
-        child: Card(
-          margin: EdgeInsets.zero,
-          child: Padding(
-            padding: EdgeInsets.all(isCompact ? 10 : 12),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  '$whoLabel: $clientName',
-                  style: const TextStyle(fontWeight: FontWeight.w700),
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                ),
-                const SizedBox(height: 4),
-                Text(
-                  job.jobNumber,
-                  style: const TextStyle(fontSize: 12, color: Colors.black87),
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                ),
-                const SizedBox(height: 4),
-                Text(
-                  '$dateLabel: $primaryDate',
-                  style: const TextStyle(fontSize: 12),
-                ),
-                const SizedBox(height: 4),
-                Text(
-                  duration,
-                  style: const TextStyle(
-                    fontSize: 14,
-                    fontWeight: FontWeight.w700,
-                    color: Color.fromRGBO(22, 67, 121, 1),
-                  ),
-                ),
-                if ((job.locationAddress?.trim().isNotEmpty ?? false) ||
-                    (job.locationCity?.trim().isNotEmpty ?? false) ||
-                    (job.locationState?.trim().isNotEmpty ?? false) ||
-                    (job.locationZipCode?.trim().isNotEmpty ?? false))
-                  Text(
-                    [
-                      job.locationAddress?.trim() ?? '',
-                      job.locationCity?.trim() ?? '',
-                      job.locationState?.trim() ?? '',
-                      job.locationZipCode?.trim() ?? '',
-                    ].where((p) => p.isNotEmpty).join(', '),
-                    style: const TextStyle(fontSize: 12),
-                    maxLines: 2,
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                const SizedBox(height: 6),
-                Wrap(
-                  spacing: 6,
-                  runSpacing: 6,
-                  children: [
-                    Chip(
-                      backgroundColor: statusChipColor,
-                      label: Text(
-                        statusLabel,
-                        style: TextStyle(
-                          fontSize: 11,
-                          fontWeight: FontWeight.w700,
-                          color: statusTextColor,
-                        ),
-                      ),
-                    ),
-                    if (!completedCard)
-                      Chip(
-                        avatar: const Icon(Icons.near_me_outlined, size: 14),
-                        label: Text(_distanceHintForJob(job)),
-                        labelStyle: const TextStyle(fontSize: 11),
-                        visualDensity: VisualDensity.compact,
-                      ),
-                  ],
-                ),
-                const SizedBox(height: 6),
-                Wrap(
-                  spacing: 6,
-                  runSpacing: 4,
-                  children: [
-                    if (!completedCard)
-                      FilledButton.icon(
-                        onPressed: () => _openJobInMaps(job),
-                        icon: const Icon(Icons.map, size: 16),
-                        label: Text(mapsLabel),
-                        style: FilledButton.styleFrom(
-                          backgroundColor: const Color.fromRGBO(41, 98, 255, 1),
-                          foregroundColor: Colors.white,
-                          padding: EdgeInsets.symmetric(
-                            horizontal: isCompact ? 7 : 8,
-                            vertical: isCompact ? 3 : 4,
-                          ),
-                          textStyle: TextStyle(fontSize: isCompact ? 11 : 12),
-                        ),
-                      ),
-                    OutlinedButton.icon(
-                      onPressed: () => Navigator.pushNamed(context, '/cleaner'),
-                      icon: const Icon(Icons.chevron_right, size: 16),
-                      label: const Text('Details'),
-                      style: OutlinedButton.styleFrom(
-                        padding: EdgeInsets.symmetric(
-                          horizontal: isCompact ? 7 : 8,
-                          vertical: isCompact ? 3 : 4,
-                        ),
-                        textStyle: TextStyle(fontSize: isCompact ? 11 : 12),
-                      ),
-                    ),
-                  ],
-                ),
-                const Spacer(),
-              ],
-            ),
-          ),
-        ),
-      );
-    }
+    final assignedMinutes = assigned
+        .where((j) => j.estimatedDurationMinutes != null)
+        .fold<int>(0, (sum, j) => sum + (j.estimatedDurationMinutes ?? 0));
+    final completedMinutes = completed
+        .where((j) => j.actualDurationMinutes != null)
+        .fold<int>(0, (sum, j) => sum + (j.actualDurationMinutes ?? 0));
+    final completedDistanceMiles = completed.fold<double>(0, (sum, job) {
+      final miles = _distanceMilesForJob(job);
+      return miles == null ? sum : sum + miles;
+    });
+    final sectionCardBg = dark ? const Color(0xFF2F313A) : null;
+    final sectionBorder = dark ? const Color(0xFF4A4D5A) : null;
+    final sectionTitleColor = dark ? _darkAccent1 : null;
+    final sectionEmptyColor = dark ? const Color(0xFFBFC3CC) : null;
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Text(
           'Welcome, $employeeDisplayName',
-          style: const TextStyle(
+          style: TextStyle(
             fontSize: 22,
             fontWeight: FontWeight.w800,
-            color: Color.fromRGBO(21, 80, 58, 1),
+            color: dark ? _darkAccent1 : _lightPrimary,
           ),
         ),
         const SizedBox(height: 10),
-        SizedBox(
-          width: double.infinity,
-          child: Card(
-            child: Padding(
-              padding: const EdgeInsets.all(16),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  const Text(
-                    'Employee Dashboard',
-                    style: TextStyle(fontWeight: FontWeight.w700),
-                  ),
-                  const SizedBox(height: 10),
-                  Wrap(
-                    spacing: 10,
-                    runSpacing: 10,
-                    children: [
-                      _metricTile(
-                        label: 'Assigned',
-                        value: assigned.length.toString(),
-                        icon: Icons.assignment,
-                        bg: const Color.fromRGBO(255, 249, 224, 1),
-                        fg: const Color.fromRGBO(138, 92, 8, 1),
-                      ),
-                      _metricTile(
-                        label: 'Completed',
-                        value: completed.length.toString(),
-                        icon: Icons.check_circle_outline,
-                        bg: const Color.fromRGBO(227, 241, 233, 1),
-                        fg: const Color.fromRGBO(22, 89, 56, 1),
-                      ),
-                      _metricTile(
-                        label: 'Overdue',
-                        value: overdue.toString(),
-                        icon: Icons.warning_amber_outlined,
-                        bg: const Color.fromRGBO(255, 232, 238, 1),
-                        fg: const Color.fromRGBO(156, 42, 74, 1),
-                      ),
-                      _metricTile(
-                        label: 'Unique Locations',
-                        value: locationCount.toString(),
-                        icon: Icons.location_on_outlined,
-                        bg: const Color.fromRGBO(236, 244, 240, 1),
-                        fg: const Color.fromRGBO(45, 87, 73, 1),
-                      ),
-                      _metricTile(
-                        label: 'Next Job',
-                        value: nextJobDate == null
-                            ? 'None'
-                            : formatDateMdy(
-                                '${nextJobDate.year}-${nextJobDate.month.toString().padLeft(2, '0')}-${nextJobDate.day.toString().padLeft(2, '0')}',
-                              ),
-                        icon: Icons.event,
-                        bg: const Color.fromRGBO(233, 246, 241, 1),
-                        fg: const Color.fromRGBO(29, 102, 76, 1),
-                      ),
-                      _metricTile(
-                        label: 'Duration',
-                        value: assigned.isEmpty
-                            ? 'N/A'
-                            : '${assigned.where((j) => j.actualDurationMinutes != null).fold<int>(0, (sum, j) => sum + (j.actualDurationMinutes ?? 0)) ~/ 60}h ${assigned.where((j) => j.actualDurationMinutes != null).fold<int>(0, (sum, j) => sum + (j.actualDurationMinutes ?? 0)) % 60}m',
-                        icon: Icons.timer_outlined,
-                        bg: const Color.fromRGBO(230, 245, 247, 1),
-                        fg: const Color.fromRGBO(18, 103, 93, 1),
-                      ),
-                    ],
-                  ),
-                ],
-              ),
-            ),
-          ),
+        EmployeeDateRangeCard(
+          dark: dark,
+          range: _employeeDateRange,
+          onPickStart: _pickEmployeeStartDate,
+          onPickEnd: _pickEmployeeEndDate,
+          onResetWeek: () =>
+              setState(() => _employeeDateRange = _currentWeekRange()),
+          cardColor: sectionCardBg,
+          borderColor: sectionBorder,
+        ),
+        const SizedBox(height: 12),
+        EmployeeJobDashboardCard(
+          dark: dark,
+          assignedCount: assigned.length,
+          assignedHours: assigned.isEmpty
+              ? 'N/A'
+              : '${assignedMinutes ~/ 60}h ${assignedMinutes % 60}m',
+          completedCount: completed.length,
+          completedHours: completed.isEmpty
+              ? 'N/A'
+              : '${completedMinutes ~/ 60}h ${completedMinutes % 60}m',
+          totalDistanceMiles: completed.isEmpty
+              ? 'N/A'
+              : '${completedDistanceMiles.toStringAsFixed(1)} mi',
+          cardColor: sectionCardBg,
+          borderColor: sectionBorder,
+          titleColor: sectionTitleColor,
         ),
         const SizedBox(height: 12),
         _cardList(
-          title: 'YOUR ASSIGNED JOBS',
+          title: 'Assigned Jobs',
           empty: 'No jobs assigned',
+          cardColor: sectionCardBg,
+          borderColor: sectionBorder,
+          titleColor: sectionTitleColor,
+          emptyColor: sectionEmptyColor,
           children: [
             if (assigned.isNotEmpty)
               LayoutBuilder(
@@ -871,10 +801,17 @@ class _HomePageState extends State<HomePage> {
                     runSpacing: 10,
                     children: assigned
                         .map(
-                          (job) => employeeJobCard(
-                            job,
+                          (job) => EmployeeJobCard(
+                            job: job,
                             completedCard: false,
                             cardWidth: cardWidth,
+                            primaryDateLabel:
+                                'Scheduled: ${formatDateMdy(job.scheduledDate)}',
+                            distanceLabel: _distanceHintForJob(job),
+                            mapsLabel: _deviceMapLabel(),
+                            onOpenMaps: () => _openJobInMaps(job),
+                            onOpenDetails: () =>
+                                Navigator.pushNamed(context, '/cleaner'),
                           ),
                         )
                         .toList(),
@@ -884,47 +821,13 @@ class _HomePageState extends State<HomePage> {
           ],
         ),
         const SizedBox(height: 12),
-        SizedBox(
-          width: double.infinity,
-          child: Card(
-            child: Padding(
-              padding: const EdgeInsets.all(16),
-              child: Wrap(
-                spacing: 10,
-                runSpacing: 10,
-                crossAxisAlignment: WrapCrossAlignment.center,
-                children: [
-                  const Icon(Icons.filter_alt_outlined),
-                  Text(
-                    'Completed jobs since ${_completedSince.month}-${_completedSince.day}-${_completedSince.year}',
-                  ),
-                  TextButton(
-                    onPressed: () {
-                      setState(() {
-                        _completedSince = DateTime.now().subtract(
-                          const Duration(days: 30),
-                        );
-                      });
-                    },
-                    child: const Text('Last 30 days'),
-                  ),
-                  FilledButton.tonal(
-                    onPressed: _pickCompletedSinceDate,
-                    style: FilledButton.styleFrom(
-                      backgroundColor: const Color.fromRGBO(226, 241, 236, 1),
-                      foregroundColor: const Color.fromRGBO(29, 92, 70, 1),
-                    ),
-                    child: const Text('Pick date'),
-                  ),
-                ],
-              ),
-            ),
-          ),
-        ),
-        const SizedBox(height: 12),
         _cardList(
-          title: 'COMPLETED JOBS',
-          empty: 'No completed jobs in selected period',
+          title: 'Completed Jobs',
+          empty: 'No completed jobs in selected range',
+          cardColor: sectionCardBg,
+          borderColor: sectionBorder,
+          titleColor: sectionTitleColor,
+          emptyColor: sectionEmptyColor,
           children: [
             if (completed.isNotEmpty)
               LayoutBuilder(
@@ -935,10 +838,16 @@ class _HomePageState extends State<HomePage> {
                     runSpacing: 10,
                     children: completed
                         .map(
-                          (job) => employeeJobCard(
-                            job,
+                          (job) => EmployeeJobCard(
+                            job: job,
                             completedCard: true,
                             cardWidth: cardWidth,
+                            primaryDateLabel:
+                                'Completed: ${formatDateMdy(job.completedAt ?? job.scheduledDate)}',
+                            distanceLabel: _distanceHintForJob(job),
+                            onOpenMaps: () => _openJobInMaps(job),
+                            onOpenDetails: () =>
+                                Navigator.pushNamed(context, '/cleaner'),
                           ),
                         )
                         .toList(),
@@ -1151,10 +1060,12 @@ class _HomePageState extends State<HomePage> {
 
   @override
   Widget build(BuildContext context) {
+    final dark = Theme.of(context).brightness == Brightness.dark;
+    final showEmployeeSurface = _isEmployee;
     return Scaffold(
+      bottomNavigationBar: const SafeArea(top: false, child: BackendBanner()),
       appBar: AppBar(
-        title: const Text('Anderson Express Cleaning Service'),
-        bottom: const BackendBanner(),
+        title: const BrandAppBarTitle(),
         actions: [
           const ThemeToggleButton(),
           IconButton(
@@ -1165,33 +1076,55 @@ class _HomePageState extends State<HomePage> {
           const ProfileMenuButton(),
         ],
       ),
-      body: SafeArea(
-        child: loading
-            ? const Center(child: CircularProgressIndicator())
-            : RefreshIndicator(
-                onRefresh: _loadDashboard,
-                child: SelectionArea(
-                  child: ListView(
-                    padding: const EdgeInsets.all(16),
-                    children: [
-                      if (error != null)
-                        Card(
-                          color: Colors.red.shade50,
-                          child: Padding(
-                            padding: const EdgeInsets.all(12),
-                            child: Text(
-                              error!,
-                              style: TextStyle(color: Colors.red.shade700),
+      body: Container(
+        decoration: showEmployeeSurface
+            ? BoxDecoration(
+                gradient: LinearGradient(
+                  begin: Alignment.topLeft,
+                  end: Alignment.bottomRight,
+                  colors: dark
+                      ? const [_darkBg, Color(0xFF26262B), Color(0xFF30303A)]
+                      : const [
+                          Colors.white,
+                          _lightSecondary,
+                          Color(0xFFE7F3FB),
+                        ],
+                  stops: const [0.0, 0.55, 1.0],
+                ),
+              )
+            : null,
+        child: SafeArea(
+          child: loading
+              ? const Center(child: CircularProgressIndicator())
+              : RefreshIndicator(
+                  onRefresh: _loadDashboard,
+                  child: SelectionArea(
+                    child: ListView(
+                      padding: const EdgeInsets.all(16),
+                      children: [
+                        if (error != null)
+                          Card(
+                            color: dark
+                                ? const Color(0xFF3A2F30)
+                                : const Color(0xFFFDECE9),
+                            child: Padding(
+                              padding: const EdgeInsets.all(12),
+                              child: Text(
+                                error!,
+                                style: TextStyle(
+                                  color: dark ? _darkAccent2 : _lightCta,
+                                ),
+                              ),
                             ),
                           ),
-                        ),
-                      if (_isAdmin) _buildAdminLanding(),
-                      if (_isEmployee) _buildCleanerLanding(),
-                      if (_isClient) _buildClientLanding(),
-                    ],
+                        if (_isAdmin) _buildAdminLanding(),
+                        if (_isEmployee) _buildCleanerLanding(),
+                        if (_isClient) _buildClientLanding(),
+                      ],
+                    ),
                   ),
                 ),
-              ),
+        ),
       ),
     );
   }

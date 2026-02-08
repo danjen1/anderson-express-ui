@@ -9,6 +9,7 @@ import '../models/task_rule.dart';
 import '../services/api_service.dart';
 import '../services/auth_session.dart';
 import '../widgets/backend_banner.dart';
+import '../widgets/brand_app_bar_title.dart';
 
 class QaSmokePage extends StatefulWidget {
   const QaSmokePage({super.key});
@@ -348,7 +349,7 @@ class _QaSmokePageState extends State<QaSmokePage> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Anderson Express Cleaning Service'),
+        title: const BrandAppBarTitle(),
         bottom: const BackendBanner(),
         actions: [
           IconButton(

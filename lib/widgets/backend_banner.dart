@@ -18,6 +18,15 @@ class BackendBanner extends StatefulWidget implements PreferredSizeWidget {
 }
 
 class _BackendBannerState extends State<BackendBanner> {
+  static const Color _lightPrimary = Color(0xFF296273);
+  static const Color _lightSecondary = Color(0xFFA8D6F7);
+  static const Color _lightAccent = Color(0xFF442E6F);
+  static const Color _lightNature = Color(0xFF49A07D);
+  static const Color _darkBg = Color(0xFF2C2C2C);
+  static const Color _darkText = Color(0xFFE4E4E4);
+  static const Color _darkAccent2 = Color(0xFFFFC1CC);
+  static const Color _darkCta = Color(0xFFB39CD0);
+
   final ApiService _api = ApiService();
   Timer? _healthTimer;
   bool _rustOnline = false;
@@ -80,83 +89,82 @@ class _BackendBannerState extends State<BackendBanner> {
             final role = _roleLabel(session);
             final email = session?.loginEmail?.trim();
             final userLabel = email == null || email.isEmpty ? 'none' : email;
+            final dark = Theme.of(context).brightness == Brightness.dark;
+            final bannerBg = dark ? _darkBg : _lightPrimary;
+            final borderColor = dark ? _darkCta : _lightAccent;
+            final chipBg = dark ? const Color(0xFF3A3A3A) : _lightSecondary;
+            final chipFg = dark ? _darkText : _lightAccent;
+            final statusBadBg = dark
+                ? const Color(0xFF4A3236)
+                : const Color(0xFFB42318);
+            final statusBadFg = dark ? _darkAccent2 : Colors.white;
+            final logoBg = dark ? const Color(0xFF3A3A3A) : Colors.white;
 
             return Container(
               height: widget.preferredSize.height,
               width: double.infinity,
               padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
               decoration: BoxDecoration(
-                color: const Color.fromRGBO(104, 88, 147, 1),
+                color: bannerBg,
                 border: Border(
-                  top: const BorderSide(color: Color.fromRGBO(79, 67, 114, 1)),
-                  bottom: const BorderSide(
-                    color: Color.fromRGBO(79, 67, 114, 1),
-                  ),
+                  top: BorderSide(color: borderColor),
+                  bottom: BorderSide(color: borderColor),
                 ),
               ),
-              child: ListView(
+              child: SingleChildScrollView(
                 scrollDirection: Axis.horizontal,
-                children: [
-                  Container(
-                    width: 30,
-                    height: 30,
-                    decoration: BoxDecoration(
-                      borderRadius: BorderRadius.circular(8),
-                      color: const Color.fromRGBO(230, 225, 243, 1),
-                    ),
-                    child: Padding(
-                      padding: const EdgeInsets.all(3),
-                      child: Image.asset(
-                        'assets/images/logo.png',
-                        fit: BoxFit.contain,
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.center,
+                  children: [
+                    Container(
+                      width: 30,
+                      height: 30,
+                      decoration: BoxDecoration(
+                        borderRadius: BorderRadius.circular(8),
+                        color: logoBg,
+                      ),
+                      child: Padding(
+                        padding: const EdgeInsets.all(3),
+                        child: Image.asset(
+                          'assets/images/logo.png',
+                          fit: BoxFit.contain,
+                        ),
                       ),
                     ),
-                  ),
-                  const SizedBox(width: 8),
-                  _chip(
-                    label: _rustOnline ? 'Rust: Online' : 'Rust: Offline',
-                    bg: _rustOnline
-                        ? const Color.fromRGBO(230, 225, 243, 1)
-                        : Colors.red.shade100,
-                    fg: _rustOnline
-                        ? const Color.fromRGBO(56, 44, 89, 1)
-                        : Colors.red.shade900,
-                  ),
-                  const SizedBox(width: 8),
-                  _chip(
-                    label: 'Host: ${config.baseUrl}',
-                    bg: const Color.fromRGBO(230, 225, 243, 1),
-                    fg: const Color.fromRGBO(56, 44, 89, 1),
-                  ),
-                  const SizedBox(width: 8),
-                  _chip(
-                    label: 'Role: $role',
-                    bg: const Color.fromRGBO(230, 225, 243, 1),
-                    fg: const Color.fromRGBO(56, 44, 89, 1),
-                  ),
-                  const SizedBox(width: 8),
-                  _chip(
-                    label: 'User: $userLabel',
-                    bg: const Color.fromRGBO(230, 225, 243, 1),
-                    fg: const Color.fromRGBO(56, 44, 89, 1),
-                  ),
-                  const SizedBox(width: 8),
-                  _chip(
-                    label: AppEnv.isDemoMode
-                        ? 'Env: ${AppEnv.environment} (Demo)'
-                        : 'Env: ${AppEnv.environment}',
-                    bg: const Color.fromRGBO(230, 225, 243, 1),
-                    fg: const Color.fromRGBO(56, 44, 89, 1),
-                  ),
-                  if (AppEnv.isDemoMode) ...[
                     const SizedBox(width: 8),
                     _chip(
-                      label: 'Features in progress',
-                      bg: const Color.fromRGBO(230, 225, 243, 1),
-                      fg: const Color.fromRGBO(56, 44, 89, 1),
+                      label: _rustOnline ? 'Rust: Online' : 'Rust: Offline',
+                      bg: _rustOnline ? chipBg : statusBadBg,
+                      fg: _rustOnline ? chipFg : statusBadFg,
                     ),
+                    const SizedBox(width: 8),
+                    _chip(
+                      label: 'Host: ${config.baseUrl}',
+                      bg: chipBg,
+                      fg: chipFg,
+                    ),
+                    const SizedBox(width: 8),
+                    _chip(label: 'Role: $role', bg: chipBg, fg: chipFg),
+                    const SizedBox(width: 8),
+                    _chip(label: 'User: $userLabel', bg: chipBg, fg: chipFg),
+                    const SizedBox(width: 8),
+                    _chip(
+                      label: AppEnv.isDemoMode
+                          ? 'Env: ${AppEnv.environment} (Demo)'
+                          : 'Env: ${AppEnv.environment}',
+                      bg: chipBg,
+                      fg: chipFg,
+                    ),
+                    if (AppEnv.isDemoMode) ...[
+                      const SizedBox(width: 8),
+                      _chip(
+                        label: 'Features in progress',
+                        bg: dark ? _darkCta : _lightNature,
+                        fg: dark ? _darkBg : Colors.white,
+                      ),
+                    ],
                   ],
-                ],
+                ),
               ),
             );
           },

@@ -171,10 +171,10 @@ class MyApp extends StatelessWidget {
           ),
           darkTheme: ThemeData(
             colorScheme: darkScheme,
-            scaffoldBackgroundColor: const Color.fromRGBO(16, 21, 20, 1),
+            scaffoldBackgroundColor: const Color(0xFF1F1F1F),
             appBarTheme: const AppBarTheme(
-              backgroundColor: Color.fromRGBO(20, 26, 24, 1),
-              foregroundColor: Color.fromRGBO(184, 232, 209, 1),
+              backgroundColor: Color(0xFF1F1F1F),
+              foregroundColor: Color(0xFFE4E4E4),
               elevation: 0,
               centerTitle: false,
             ),
