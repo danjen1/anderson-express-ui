@@ -299,7 +299,7 @@ class _LoginPageState extends State<LoginPage> {
                                 crossAxisAlignment: CrossAxisAlignment.start,
                                 children: [
                                   const Text(
-                                    'Demo login shortcuts',
+                                    'Quick Demo Role Access (No Password Entry)',
                                     style: TextStyle(
                                       fontWeight: FontWeight.w700,
                                     ),
@@ -309,7 +309,7 @@ class _LoginPageState extends State<LoginPage> {
                                     spacing: 8,
                                     runSpacing: 8,
                                     children: [
-                                      OutlinedButton.icon(
+                                      OutlinedButton(
                                         onPressed: _loading
                                             ? null
                                             : () => _loginAsDemoRole(
@@ -317,12 +317,20 @@ class _LoginPageState extends State<LoginPage> {
                                                     'admin@andersonexpress.com',
                                                 password: 'dev-password',
                                               ),
-                                        icon: const Icon(
-                                          Icons.admin_panel_settings,
+                                        style: OutlinedButton.styleFrom(
+                                          visualDensity: VisualDensity.compact,
+                                          padding: const EdgeInsets.symmetric(
+                                            horizontal: 10,
+                                            vertical: 6,
+                                          ),
+                                          textStyle: const TextStyle(
+                                            fontSize: 12,
+                                            fontWeight: FontWeight.w700,
+                                          ),
                                         ),
-                                        label: const Text('Login as Admin'),
+                                        child: const Text('Admin'),
                                       ),
-                                      OutlinedButton.icon(
+                                      OutlinedButton(
                                         onPressed: _loading
                                             ? null
                                             : () => _loginAsDemoRole(
@@ -330,10 +338,20 @@ class _LoginPageState extends State<LoginPage> {
                                                     'john@andersonexpress.com',
                                                 password: 'worker123',
                                               ),
-                                        icon: const Icon(Icons.badge_outlined),
-                                        label: const Text('Login as Employee'),
+                                        style: OutlinedButton.styleFrom(
+                                          visualDensity: VisualDensity.compact,
+                                          padding: const EdgeInsets.symmetric(
+                                            horizontal: 10,
+                                            vertical: 6,
+                                          ),
+                                          textStyle: const TextStyle(
+                                            fontSize: 12,
+                                            fontWeight: FontWeight.w700,
+                                          ),
+                                        ),
+                                        child: const Text('Employee'),
                                       ),
-                                      OutlinedButton.icon(
+                                      OutlinedButton(
                                         onPressed: _loading
                                             ? null
                                             : () => _loginAsDemoRole(
@@ -341,10 +359,18 @@ class _LoginPageState extends State<LoginPage> {
                                                     'contact@techstartup.com',
                                                 password: 'client123',
                                               ),
-                                        icon: const Icon(
-                                          Icons.business_outlined,
+                                        style: OutlinedButton.styleFrom(
+                                          visualDensity: VisualDensity.compact,
+                                          padding: const EdgeInsets.symmetric(
+                                            horizontal: 10,
+                                            vertical: 6,
+                                          ),
+                                          textStyle: const TextStyle(
+                                            fontSize: 12,
+                                            fontWeight: FontWeight.w700,
+                                          ),
                                         ),
-                                        label: const Text('Login as Client'),
+                                        child: const Text('Client'),
                                       ),
                                     ],
                                   ),
