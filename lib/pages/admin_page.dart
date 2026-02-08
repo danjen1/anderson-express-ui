@@ -66,10 +66,10 @@ class _AdminPageState extends State<AdminPage> {
   List<TaskRule> _taskRules = const [];
   List<ProfileTask> _selectedProfileTasks = const [];
   _AdminSection _selectedSection = _AdminSection.dashboard;
-  _EmployeeFilter _employeeFilter = _EmployeeFilter.all;
-  _ClientFilter _clientFilter = _ClientFilter.all;
-  _LocationFilter _locationFilter = _LocationFilter.all;
-  _JobFilter _jobFilter = _JobFilter.all;
+  _EmployeeFilter _employeeFilter = _EmployeeFilter.active;
+  _ClientFilter _clientFilter = _ClientFilter.active;
+  _LocationFilter _locationFilter = _LocationFilter.active;
+  _JobFilter _jobFilter = _JobFilter.pending;
   String? _selectedCleaningProfileId;
   bool _loadingProfileTasks = false;
 
@@ -2393,6 +2393,15 @@ class _AdminPageState extends State<AdminPage> {
         style: OutlinedButton.styleFrom(
           foregroundColor: const Color.fromRGBO(31, 63, 122, 1),
           side: const BorderSide(color: Color.fromRGBO(106, 142, 214, 1)),
+        ),
+      ),
+      chipTheme: baseTheme.chipTheme.copyWith(
+        backgroundColor: const Color.fromRGBO(238, 243, 252, 1),
+        selectedColor: const Color.fromRGBO(205, 220, 246, 1),
+        side: const BorderSide(color: Color.fromRGBO(154, 181, 228, 1)),
+        labelStyle: const TextStyle(
+          color: Color.fromRGBO(31, 63, 122, 1),
+          fontWeight: FontWeight.w600,
         ),
       ),
     );

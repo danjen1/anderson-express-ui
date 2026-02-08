@@ -6,6 +6,7 @@ import 'package:url_launcher/url_launcher.dart';
 
 import '../models/employee.dart';
 import '../models/job.dart';
+import '../models/job_assignment.dart';
 import '../models/location.dart';
 import '../services/api_service.dart';
 import '../services/auth_session.dart';
@@ -30,7 +31,12 @@ class _HomePageState extends State<HomePage> {
   Employee? _employeeProfile;
   DateTime _completedSince = DateTime.now().subtract(const Duration(days: 30));
   List<Location> _clientLocations = const [];
+  List<Job> _clientJobs = const [];
   List<Job> _clientPendingJobs = const [];
+  DateTime _clientCompletedSince = DateTime.now().subtract(
+    const Duration(days: 30),
+  );
+  Map<String, List<JobAssignment>> _clientAssignmentsByJob = const {};
 
   AuthSessionState? get _session => AuthSession.current;
   bool get _isAdmin => _session?.user.isAdmin == true;
@@ -117,7 +123,9 @@ class _HomePageState extends State<HomePage> {
       List<Location> employeeLocations = const [];
       Employee? employeeProfile;
       List<Location> clientLocations = const [];
+      List<Job> clientJobs = const [];
       List<Job> clientPending = const [];
+      Map<String, List<JobAssignment>> clientAssignmentsByJob = const {};
 
       if (_isAdmin) {
         adminPending = await api.listJobs(
@@ -140,10 +148,24 @@ class _HomePageState extends State<HomePage> {
         }
       } else if (_isClient) {
         clientLocations = await api.listLocations(bearerToken: token);
-        clientPending = await api.listJobs(
-          statusFilter: const ['pending'],
-          bearerToken: token,
-        );
+        clientJobs = await api.listJobs(bearerToken: token);
+        clientPending = clientJobs
+            .where((job) => !_isCompletedStatus(job.status))
+            .toList();
+
+        final assignmentsMap = <String, List<JobAssignment>>{};
+        for (final job in clientJobs) {
+          try {
+            final assignments = await api.listJobAssignments(
+              job.id,
+              bearerToken: token,
+            );
+            assignmentsMap[job.id] = assignments;
+          } catch (_) {
+            assignmentsMap[job.id] = const [];
+          }
+        }
+        clientAssignmentsByJob = assignmentsMap;
       }
 
       if (!mounted) return;
@@ -153,7 +175,9 @@ class _HomePageState extends State<HomePage> {
         _employeeLocations = employeeLocations;
         _employeeProfile = employeeProfile;
         _clientLocations = clientLocations;
+        _clientJobs = clientJobs;
         _clientPendingJobs = clientPending;
+        _clientAssignmentsByJob = clientAssignmentsByJob;
       });
     } catch (loadError) {
       if (!mounted) return;
@@ -372,6 +396,77 @@ class _HomePageState extends State<HomePage> {
     setState(() {
       _completedSince = picked;
     });
+  }
+
+  Future<void> _pickClientCompletedSinceDate() async {
+    final now = DateTime.now();
+    final picked = await showDatePicker(
+      context: context,
+      initialDate: _clientCompletedSince,
+      firstDate: DateTime(now.year - 3),
+      lastDate: now,
+    );
+    if (picked == null) return;
+    setState(() {
+      _clientCompletedSince = picked;
+    });
+  }
+
+  List<Job> get _clientCompletedJobs {
+    final start = DateTime(
+      _clientCompletedSince.year,
+      _clientCompletedSince.month,
+      _clientCompletedSince.day,
+    );
+    final jobs = _clientJobs.where((job) {
+      if (!_isCompletedStatus(job.status)) return false;
+      final date = _parseJobDate(job.completedAt ?? job.scheduledDate);
+      if (date == null) return true;
+      final normalized = DateTime(date.year, date.month, date.day);
+      return !normalized.isBefore(start);
+    }).toList();
+    jobs.sort((a, b) {
+      final ad = _parseJobDate(a.completedAt ?? a.scheduledDate);
+      final bd = _parseJobDate(b.completedAt ?? b.scheduledDate);
+      if (ad == null && bd == null) return a.jobNumber.compareTo(b.jobNumber);
+      if (ad == null) return 1;
+      if (bd == null) return -1;
+      return bd.compareTo(ad);
+    });
+    return jobs;
+  }
+
+  double _clientAverageFrequencyDays(List<Job> completedJobs) {
+    if (completedJobs.length < 2) return 0;
+    final dates =
+        completedJobs
+            .map((job) => _parseJobDate(job.completedAt ?? job.scheduledDate))
+            .whereType<DateTime>()
+            .toList()
+          ..sort((a, b) => b.compareTo(a));
+    if (dates.length < 2) return 0;
+    var total = 0.0;
+    for (var i = 1; i < dates.length; i++) {
+      total += dates[i - 1].difference(dates[i]).inHours.abs() / 24.0;
+    }
+    return total / (dates.length - 1);
+  }
+
+  String _formatDateTimeShort(String? raw) {
+    if (raw == null || raw.trim().isEmpty) return '—';
+    try {
+      final parsed = DateTime.parse(raw).toLocal();
+      final hour = parsed.hour % 12 == 0 ? 12 : parsed.hour % 12;
+      final minute = parsed.minute.toString().padLeft(2, '0');
+      final suffix = parsed.hour >= 12 ? 'PM' : 'AM';
+      return '${parsed.month}-${parsed.day}-${parsed.year} $hour:$minute $suffix';
+    } catch (_) {
+      return raw;
+    }
+  }
+
+  List<JobAssignment> _assignmentsForJob(String jobId) {
+    return _clientAssignmentsByJob[jobId] ?? const [];
   }
 
   Widget _metricTile({
@@ -853,41 +948,198 @@ class _HomePageState extends State<HomePage> {
   }
 
   Widget _buildClientLanding() {
-    return Column(
-      children: [
-        _cardList(
-          title: 'Your Locations',
-          empty: 'No locations found',
-          children: _clientLocations
-              .map(
-                (location) => ListTile(
-                  contentPadding: EdgeInsets.zero,
-                  dense: true,
-                  title: Text(location.locationNumber),
-                  subtitle: Text(
-                    '${location.type} • ${location.address ?? 'No address'}',
-                  ),
+    final completedJobs = _clientCompletedJobs;
+    final recentCleanings = completedJobs.length;
+    final pendingJobs = _clientPendingJobs.length;
+    final averageDuration = completedJobs
+        .where((job) => job.actualDurationMinutes != null)
+        .fold<int>(0, (sum, job) => sum + (job.actualDurationMinutes ?? 0));
+    final durationCount = completedJobs
+        .where((job) => job.actualDurationMinutes != null)
+        .length;
+    final averageFrequencyDays = _clientAverageFrequencyDays(completedJobs);
+    final primaryLocation = _clientLocations.isNotEmpty
+        ? _clientLocations.first
+        : null;
+
+    Widget historyTile(Job job) {
+      final assignments = _assignmentsForJob(job.id);
+      final latestAssignment = assignments.isNotEmpty
+          ? assignments.first
+          : null;
+      final cleaner = latestAssignment?.employeeName ?? 'Unassigned';
+      final startTime = _formatDateTimeShort(latestAssignment?.startTime);
+      final endTime = _formatDateTimeShort(latestAssignment?.endTime);
+      final duration = job.actualDurationMinutes == null
+          ? 'N/A'
+          : '${job.actualDurationMinutes! ~/ 60}h ${job.actualDurationMinutes! % 60}m';
+      return Card(
+        margin: const EdgeInsets.only(bottom: 8),
+        child: Padding(
+          padding: const EdgeInsets.all(12),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                job.jobNumber,
+                style: const TextStyle(fontWeight: FontWeight.w700),
+              ),
+              const SizedBox(height: 4),
+              Text(
+                'Cleaning date: ${formatDateMdy(job.completedAt ?? job.scheduledDate)}',
+              ),
+              Text('Cleaner: $cleaner'),
+              Text('Start: $startTime'),
+              Text('Stop: $endTime'),
+              Text('Duration: $duration'),
+              if ((job.locationAddress?.trim().isNotEmpty ?? false))
+                Text(
+                  'Location: ${[job.locationAddress?.trim() ?? '', job.locationCity?.trim() ?? '', job.locationState?.trim() ?? '', job.locationZipCode?.trim() ?? ''].where((p) => p.isNotEmpty).join(', ')}',
                 ),
-              )
-              .toList(),
+            ],
+          ),
+        ),
+      );
+    }
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        SizedBox(
+          width: double.infinity,
+          child: Card(
+            child: Padding(
+              padding: const EdgeInsets.all(16),
+              child: Wrap(
+                spacing: 10,
+                runSpacing: 10,
+                children: [
+                  _metricTile(
+                    label: 'Recent Cleanings',
+                    value: recentCleanings.toString(),
+                    icon: Icons.cleaning_services_outlined,
+                    bg: const Color.fromRGBO(231, 240, 255, 1),
+                    fg: const Color.fromRGBO(35, 72, 138, 1),
+                  ),
+                  _metricTile(
+                    label: 'Pending Jobs',
+                    value: pendingJobs.toString(),
+                    icon: Icons.pending_actions_outlined,
+                    bg: const Color.fromRGBO(255, 247, 228, 1),
+                    fg: const Color.fromRGBO(132, 92, 18, 1),
+                  ),
+                  _metricTile(
+                    label: 'Avg Duration',
+                    value: durationCount == 0
+                        ? 'N/A'
+                        : '${(averageDuration ~/ durationCount) ~/ 60}h ${(averageDuration ~/ durationCount) % 60}m',
+                    icon: Icons.timer_outlined,
+                    bg: const Color.fromRGBO(236, 246, 240, 1),
+                    fg: const Color.fromRGBO(33, 94, 66, 1),
+                  ),
+                  _metricTile(
+                    label: 'Cleaning Frequency',
+                    value: averageFrequencyDays == 0
+                        ? 'N/A'
+                        : 'Every ${averageFrequencyDays.toStringAsFixed(1)} days',
+                    icon: Icons.repeat,
+                    bg: const Color.fromRGBO(238, 240, 253, 1),
+                    fg: const Color.fromRGBO(55, 66, 132, 1),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+        const SizedBox(height: 12),
+        if (primaryLocation != null)
+          SizedBox(
+            width: double.infinity,
+            child: Card(
+              child: Padding(
+                padding: const EdgeInsets.all(16),
+                child: Column(
+                  children: [
+                    Container(
+                      width: 280,
+                      height: 180,
+                      decoration: BoxDecoration(
+                        borderRadius: BorderRadius.circular(12),
+                        color: const Color.fromRGBO(234, 239, 246, 1),
+                        border: Border.all(
+                          color: const Color.fromRGBO(189, 202, 222, 1),
+                        ),
+                      ),
+                      child: const Center(
+                        child: Icon(Icons.home_work_outlined, size: 52),
+                      ),
+                    ),
+                    const SizedBox(height: 10),
+                    Text(
+                      primaryLocation.locationNumber,
+                      style: const TextStyle(fontWeight: FontWeight.w700),
+                    ),
+                    Text(
+                      '${primaryLocation.type} • ${primaryLocation.address ?? 'No address on file'}',
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        const SizedBox(height: 12),
+        _cardList(
+          title: 'Pending Jobs',
+          empty: 'No pending jobs',
+          children: _clientPendingJobs.map((job) {
+            return ListTile(
+              contentPadding: EdgeInsets.zero,
+              dense: true,
+              leading: const Icon(Icons.pending_actions),
+              title: Text(job.jobNumber),
+              subtitle: Text(
+                '${job.status.replaceAll('_', ' ')} • ${formatDateMdy(job.scheduledDate)}',
+              ),
+            );
+          }).toList(),
+        ),
+        const SizedBox(height: 12),
+        SizedBox(
+          width: double.infinity,
+          child: Card(
+            child: Padding(
+              padding: const EdgeInsets.all(16),
+              child: Wrap(
+                spacing: 10,
+                runSpacing: 10,
+                children: [
+                  Text(
+                    'Cleaning details since ${_clientCompletedSince.month}-${_clientCompletedSince.day}-${_clientCompletedSince.year}',
+                  ),
+                  TextButton(
+                    onPressed: () {
+                      setState(() {
+                        _clientCompletedSince = DateTime.now().subtract(
+                          const Duration(days: 30),
+                        );
+                      });
+                    },
+                    child: const Text('Last 30 days'),
+                  ),
+                  FilledButton.tonal(
+                    onPressed: _pickClientCompletedSinceDate,
+                    child: const Text('Pick date'),
+                  ),
+                ],
+              ),
+            ),
+          ),
         ),
         const SizedBox(height: 12),
         _cardList(
-          title: 'Pending Jobs For Your Locations',
-          empty: 'No pending jobs',
-          children: _clientPendingJobs
-              .map(
-                (job) => ListTile(
-                  contentPadding: EdgeInsets.zero,
-                  dense: true,
-                  leading: const Icon(Icons.pending_actions),
-                  title: Text(job.jobNumber),
-                  subtitle: Text(
-                    'Location #${job.locationId} • ${formatDateMdy(job.scheduledDate)}',
-                  ),
-                ),
-              )
-              .toList(),
+          title: 'Cleaning History',
+          empty: 'No completed cleanings in selected period',
+          children: completedJobs.map(historyTile).toList(),
         ),
       ],
     );

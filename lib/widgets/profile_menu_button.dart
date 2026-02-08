@@ -9,7 +9,7 @@ class ProfileMenuButton extends StatelessWidget {
   Widget build(BuildContext context) {
     final session = AuthSession.current;
     final email = session?.loginEmail ?? '';
-    final initial = email.isNotEmpty ? email[0].toUpperCase() : '?';
+    final initials = _initialsFromEmail(email);
 
     return PopupMenuButton<String>(
       tooltip: 'Account menu',
@@ -59,11 +59,26 @@ class ProfileMenuButton extends StatelessWidget {
         child: CircleAvatar(
           radius: 14,
           child: Text(
-            initial,
+            initials,
             style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w700),
           ),
         ),
       ),
     );
+  }
+
+  String _initialsFromEmail(String email) {
+    final localPart = email.split('@').first.trim();
+    if (localPart.isEmpty) return '?';
+    final parts = localPart
+        .split(RegExp(r'[._\-\s]+'))
+        .where((part) => part.trim().isNotEmpty)
+        .toList();
+    if (parts.length >= 2) {
+      return parts.take(3).map((p) => p[0].toUpperCase()).join();
+    }
+    final token = parts.first;
+    if (token.length == 1) return token.toUpperCase();
+    return token.substring(0, 2).toUpperCase();
   }
 }
