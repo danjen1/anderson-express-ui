@@ -10,6 +10,7 @@ class ProfileMenuButton extends StatelessWidget {
     final session = AuthSession.current;
     final email = session?.loginEmail ?? '';
     final initials = _initialsFromEmail(email);
+    final showKnowledgeBase = session?.user.isClient != true;
 
     return PopupMenuButton<String>(
       tooltip: 'Account menu',
@@ -27,33 +28,36 @@ class ProfileMenuButton extends StatelessWidget {
             break;
         }
       },
-      itemBuilder: (context) => const [
-        PopupMenuItem<String>(
-          value: 'profile',
-          child: ListTile(
-            leading: Icon(Icons.person_outline),
-            title: Text('My Profile'),
-            contentPadding: EdgeInsets.zero,
+      itemBuilder: (context) {
+        return [
+          const PopupMenuItem<String>(
+            value: 'profile',
+            child: ListTile(
+              leading: Icon(Icons.person_outline),
+              title: Text('My Profile'),
+              contentPadding: EdgeInsets.zero,
+            ),
           ),
-        ),
-        PopupMenuItem<String>(
-          value: 'knowledge_base',
-          child: ListTile(
-            leading: Icon(Icons.menu_book_outlined),
-            title: Text('Knowledge Base'),
-            contentPadding: EdgeInsets.zero,
+          if (showKnowledgeBase)
+            const PopupMenuItem<String>(
+              value: 'knowledge_base',
+              child: ListTile(
+                leading: Icon(Icons.menu_book_outlined),
+                title: Text('Knowledge Base'),
+                contentPadding: EdgeInsets.zero,
+              ),
+            ),
+          const PopupMenuDivider(),
+          const PopupMenuItem<String>(
+            value: 'logout',
+            child: ListTile(
+              leading: Icon(Icons.logout),
+              title: Text('Logout'),
+              contentPadding: EdgeInsets.zero,
+            ),
           ),
-        ),
-        PopupMenuDivider(),
-        PopupMenuItem<String>(
-          value: 'logout',
-          child: ListTile(
-            leading: Icon(Icons.logout),
-            title: Text('Logout'),
-            contentPadding: EdgeInsets.zero,
-          ),
-        ),
-      ],
+        ];
+      },
       child: Padding(
         padding: const EdgeInsets.symmetric(horizontal: 8),
         child: CircleAvatar(

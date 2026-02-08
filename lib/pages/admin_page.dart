@@ -551,92 +551,11 @@ class _AdminPageState extends State<AdminPage> {
   }
 
   Future<void> _showCreateJobDialog() async {
-    if (AppEnv.isDemoMode) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Demo mode: create/edit/delete actions are disabled'),
-        ),
-      );
-      return;
-    }
-    if (_locations.isEmpty || _cleaningProfiles.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text(
-            'Create at least one location and cleaning profile before creating a job.',
-          ),
-        ),
-      );
-      return;
-    }
-
-    final result = await showDialog<JobCreateInput>(
-      context: context,
-      builder: (context) => _JobEditorDialog(
-        locations: _locations,
-        cleaningProfiles: _cleaningProfiles,
-      ),
-    );
-    if (result == null) return;
-
-    try {
-      await _api.createJob(result, bearerToken: _token);
-      await _loadAdminData();
-      if (!mounted) return;
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(const SnackBar(content: Text('Job created')));
-    } catch (error) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text(userFacingError(error))));
-    }
+    Navigator.pushNamed(context, '/jobs');
   }
 
   Future<void> _showEditJobDialog(Job job) async {
-    if (AppEnv.isDemoMode) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Demo mode: create/edit/delete actions are disabled'),
-        ),
-      );
-      return;
-    }
-    if (_cleaningProfiles.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Create a cleaning profile first')),
-      );
-      return;
-    }
-
-    final result = await showDialog<JobUpdateInput>(
-      context: context,
-      builder: (context) => _JobEditorDialog(
-        locations: _locations,
-        cleaningProfiles: _cleaningProfiles,
-        isCreate: false,
-        selectedProfileId: job.profileId,
-        scheduledDate: formatDateMdy(job.scheduledDate),
-        status: job.status.toLowerCase(),
-        notes: job.notes ?? '',
-      ),
-    );
-    if (result == null) return;
-
-    try {
-      await _api.updateJob(job.id, result, bearerToken: _token);
-      await _loadAdminData();
-      if (!mounted) return;
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(const SnackBar(content: Text('Job updated')));
-    } catch (error) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text(userFacingError(error))));
-    }
+    Navigator.pushNamed(context, '/jobs');
   }
 
   Future<void> _deleteJob(Job job) async {
@@ -1350,53 +1269,58 @@ class _AdminPageState extends State<AdminPage> {
           'Operations Dashboard',
           'Snapshot across all employees and all jobs.',
         ),
-        Wrap(
-          spacing: 10,
-          runSpacing: 10,
-          children: [
-            _metricTile(
-              label: 'Pending',
-              value: _totalPendingJobs.toString(),
-              icon: Icons.pending_actions,
-              bg: const Color.fromRGBO(255, 249, 224, 1),
-              fg: const Color.fromRGBO(138, 92, 8, 1),
+        Card(
+          child: Padding(
+            padding: const EdgeInsets.all(14),
+            child: Wrap(
+              spacing: 10,
+              runSpacing: 10,
+              children: [
+                _metricTile(
+                  label: 'Pending',
+                  value: _totalPendingJobs.toString(),
+                  icon: Icons.pending_actions,
+                  bg: const Color.fromRGBO(255, 249, 224, 1),
+                  fg: const Color.fromRGBO(138, 92, 8, 1),
+                ),
+                _metricTile(
+                  label: 'Assigned',
+                  value: _totalAssignedJobs.toString(),
+                  icon: Icons.assignment_outlined,
+                  bg: const Color.fromRGBO(255, 249, 224, 1),
+                  fg: const Color.fromRGBO(138, 92, 8, 1),
+                ),
+                _metricTile(
+                  label: 'In Progress',
+                  value: _totalInProgressJobs.toString(),
+                  icon: Icons.timelapse_outlined,
+                  bg: const Color.fromRGBO(233, 246, 241, 1),
+                  fg: const Color.fromRGBO(29, 102, 76, 1),
+                ),
+                _metricTile(
+                  label: 'Completed',
+                  value: _totalCompletedJobs.toString(),
+                  icon: Icons.task_alt,
+                  bg: const Color.fromRGBO(227, 241, 233, 1),
+                  fg: const Color.fromRGBO(22, 89, 56, 1),
+                ),
+                _metricTile(
+                  label: 'Overdue',
+                  value: _totalOverdueJobs.toString(),
+                  icon: Icons.warning_amber_outlined,
+                  bg: const Color.fromRGBO(255, 232, 238, 1),
+                  fg: const Color.fromRGBO(156, 42, 74, 1),
+                ),
+                _metricTile(
+                  label: 'Employees',
+                  value: '${_employees.length} total ($activeEmployees active)',
+                  icon: Icons.groups_outlined,
+                  bg: const Color.fromRGBO(236, 244, 240, 1),
+                  fg: const Color.fromRGBO(45, 87, 73, 1),
+                ),
+              ],
             ),
-            _metricTile(
-              label: 'Assigned',
-              value: _totalAssignedJobs.toString(),
-              icon: Icons.assignment_outlined,
-              bg: const Color.fromRGBO(255, 249, 224, 1),
-              fg: const Color.fromRGBO(138, 92, 8, 1),
-            ),
-            _metricTile(
-              label: 'In Progress',
-              value: _totalInProgressJobs.toString(),
-              icon: Icons.timelapse_outlined,
-              bg: const Color.fromRGBO(233, 246, 241, 1),
-              fg: const Color.fromRGBO(29, 102, 76, 1),
-            ),
-            _metricTile(
-              label: 'Completed',
-              value: _totalCompletedJobs.toString(),
-              icon: Icons.task_alt,
-              bg: const Color.fromRGBO(227, 241, 233, 1),
-              fg: const Color.fromRGBO(22, 89, 56, 1),
-            ),
-            _metricTile(
-              label: 'Overdue',
-              value: _totalOverdueJobs.toString(),
-              icon: Icons.warning_amber_outlined,
-              bg: const Color.fromRGBO(255, 232, 238, 1),
-              fg: const Color.fromRGBO(156, 42, 74, 1),
-            ),
-            _metricTile(
-              label: 'Employees',
-              value: '${_employees.length} total ($activeEmployees active)',
-              icon: Icons.groups_outlined,
-              bg: const Color.fromRGBO(236, 244, 240, 1),
-              fg: const Color.fromRGBO(45, 87, 73, 1),
-            ),
-          ],
+          ),
         ),
         const SizedBox(height: 16),
         Card(
@@ -1482,9 +1406,30 @@ class _AdminPageState extends State<AdminPage> {
                   spacing: 8,
                   runSpacing: 8,
                   children: const [
-                    Chip(label: Text('Operations Summary (Stub)')),
-                    Chip(label: Text('Payroll Window Export (Stub)')),
-                    Chip(label: Text('Client Service Recap (Stub)')),
+                    Chip(
+                      backgroundColor: Color.fromRGBO(231, 239, 252, 1),
+                      labelStyle: TextStyle(
+                        color: Color.fromRGBO(31, 63, 122, 1),
+                        fontWeight: FontWeight.w600,
+                      ),
+                      label: Text('Operations Summary (Stub)'),
+                    ),
+                    Chip(
+                      backgroundColor: Color.fromRGBO(231, 239, 252, 1),
+                      labelStyle: TextStyle(
+                        color: Color.fromRGBO(31, 63, 122, 1),
+                        fontWeight: FontWeight.w600,
+                      ),
+                      label: Text('Payroll Window Export (Stub)'),
+                    ),
+                    Chip(
+                      backgroundColor: Color.fromRGBO(231, 239, 252, 1),
+                      labelStyle: TextStyle(
+                        color: Color.fromRGBO(31, 63, 122, 1),
+                        fontWeight: FontWeight.w600,
+                      ),
+                      label: Text('Client Service Recap (Stub)'),
+                    ),
                   ],
                 ),
               ],
@@ -1915,12 +1860,6 @@ class _AdminPageState extends State<AdminPage> {
                       ),
                     ),
                     const SizedBox(width: 8),
-                    OutlinedButton.icon(
-                      onPressed: () => Navigator.pushNamed(context, '/jobs'),
-                      icon: const Icon(Icons.open_in_new),
-                      label: const Text('Open Jobs Route'),
-                    ),
-                    const SizedBox(width: 8),
                     FilledButton.icon(
                       onPressed: AppEnv.isDemoMode
                           ? null
@@ -2040,10 +1979,10 @@ class _AdminPageState extends State<AdminPage> {
         const SizedBox(height: 12),
         Expanded(
           child: _centeredSectionBody(
-            Row(
+            Column(
               children: [
                 Expanded(
-                  flex: 3,
+                  flex: 4,
                   child: Card(
                     child: SingleChildScrollView(
                       scrollDirection: Axis.horizontal,
@@ -2118,13 +2057,13 @@ class _AdminPageState extends State<AdminPage> {
                     ),
                   ),
                 ),
-                const SizedBox(width: 12),
+                const SizedBox(height: 12),
                 Expanded(
-                  flex: 2,
-                  child: Column(
+                  flex: 3,
+                  child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Expanded(
-                        flex: 2,
                         child: Card(
                           child: Padding(
                             padding: const EdgeInsets.all(12),
@@ -2218,82 +2157,61 @@ class _AdminPageState extends State<AdminPage> {
                           ),
                         ),
                       ),
-                      const SizedBox(height: 12),
+                      const SizedBox(width: 12),
                       Expanded(
                         child: Card(
                           child: Padding(
                             padding: const EdgeInsets.all(12),
-                            child: Row(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
+                                const Text(
+                                  'Task Definitions',
+                                  style: TextStyle(fontWeight: FontWeight.w700),
+                                ),
+                                const SizedBox(height: 8),
                                 Expanded(
-                                  child: Column(
-                                    crossAxisAlignment:
-                                        CrossAxisAlignment.start,
-                                    children: [
-                                      const Text(
-                                        'Task Definitions',
-                                        style: TextStyle(
-                                          fontWeight: FontWeight.w700,
+                                  child: ListView.builder(
+                                    itemCount: _taskDefinitions.length,
+                                    itemBuilder: (context, index) {
+                                      final item = _taskDefinitions[index];
+                                      return ListTile(
+                                        dense: true,
+                                        contentPadding: EdgeInsets.zero,
+                                        title: Text(
+                                          '${item.code} • ${item.name}',
                                         ),
-                                      ),
-                                      const SizedBox(height: 8),
-                                      Expanded(
-                                        child: ListView.builder(
-                                          itemCount: _taskDefinitions.length,
-                                          itemBuilder: (context, index) {
-                                            final item =
-                                                _taskDefinitions[index];
-                                            return ListTile(
-                                              dense: true,
-                                              contentPadding: EdgeInsets.zero,
-                                              title: Text(
-                                                '${item.code} • ${item.name}',
-                                              ),
-                                              subtitle: Text(item.category),
-                                            );
-                                          },
-                                        ),
-                                      ),
-                                    ],
+                                        subtitle: Text(item.category),
+                                      );
+                                    },
                                   ),
                                 ),
-                                const VerticalDivider(),
+                                const Divider(height: 18),
+                                const Text(
+                                  'Task Rules',
+                                  style: TextStyle(fontWeight: FontWeight.w700),
+                                ),
+                                const SizedBox(height: 8),
                                 Expanded(
-                                  child: Column(
-                                    crossAxisAlignment:
-                                        CrossAxisAlignment.start,
-                                    children: [
-                                      const Text(
-                                        'Task Rules',
-                                        style: TextStyle(
-                                          fontWeight: FontWeight.w700,
+                                  child: ListView.builder(
+                                    itemCount: _taskRules.length,
+                                    itemBuilder: (context, index) {
+                                      final item = _taskRules[index];
+                                      return ListTile(
+                                        dense: true,
+                                        contentPadding: EdgeInsets.zero,
+                                        title: Text(
+                                          _taskDefinitionLabel(
+                                            item.taskDefinitionId,
+                                          ),
                                         ),
-                                      ),
-                                      const SizedBox(height: 8),
-                                      Expanded(
-                                        child: ListView.builder(
-                                          itemCount: _taskRules.length,
-                                          itemBuilder: (context, index) {
-                                            final item = _taskRules[index];
-                                            return ListTile(
-                                              dense: true,
-                                              contentPadding: EdgeInsets.zero,
-                                              title: Text(
-                                                _taskDefinitionLabel(
-                                                  item.taskDefinitionId,
-                                                ),
-                                              ),
-                                              subtitle: Text(
-                                                item.appliesWhen.isEmpty
-                                                    ? '{}'
-                                                    : item.appliesWhen
-                                                          .toString(),
-                                              ),
-                                            );
-                                          },
+                                        subtitle: Text(
+                                          item.appliesWhen.isEmpty
+                                              ? '{}'
+                                              : item.appliesWhen.toString(),
                                         ),
-                                      ),
-                                    ],
+                                      );
+                                    },
                                   ),
                                 ),
                               ],
@@ -2954,230 +2872,6 @@ class _LocationEditorDialogState extends State<_LocationEditorDialog> {
   String? _nullable(String value) {
     final trimmed = value.trim();
     return trimmed.isEmpty ? null : trimmed;
-  }
-}
-
-class _JobEditorDialog extends StatefulWidget {
-  const _JobEditorDialog({
-    required this.locations,
-    required this.cleaningProfiles,
-    this.isCreate = true,
-    this.selectedProfileId,
-    this.scheduledDate = '',
-    this.status = 'pending',
-    this.notes = '',
-  });
-
-  final List<Location> locations;
-  final List<CleaningProfile> cleaningProfiles;
-  final bool isCreate;
-  final int? selectedProfileId;
-  final String scheduledDate;
-  final String status;
-  final String notes;
-
-  @override
-  State<_JobEditorDialog> createState() => _JobEditorDialogState();
-}
-
-class _JobEditorDialogState extends State<_JobEditorDialog> {
-  late final TextEditingController _scheduledDate;
-  late final TextEditingController _notes;
-  int? _selectedLocationId;
-  int? _selectedProfileId;
-  late String _status;
-
-  @override
-  void initState() {
-    super.initState();
-    _scheduledDate = TextEditingController(
-      text: widget.scheduledDate.isNotEmpty
-          ? widget.scheduledDate
-          : DateTime.now().toIso8601String().split('T').first,
-    );
-    _notes = TextEditingController(text: widget.notes);
-    _selectedLocationId = int.tryParse(widget.locations.first.id);
-    _selectedProfileId =
-        widget.selectedProfileId ??
-        int.tryParse(widget.cleaningProfiles.first.id);
-    _status = widget.status;
-  }
-
-  @override
-  void dispose() {
-    _scheduledDate.dispose();
-    _notes.dispose();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return AlertDialog(
-      title: Text(widget.isCreate ? 'Create Job' : 'Edit Job'),
-      content: SizedBox(
-        width: 520,
-        child: SingleChildScrollView(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              if (widget.isCreate)
-                DropdownButtonFormField<int>(
-                  initialValue: _selectedLocationId,
-                  decoration: const InputDecoration(
-                    labelText: 'Location',
-                    border: OutlineInputBorder(),
-                  ),
-                  items: widget.locations
-                      .map(
-                        (location) => DropdownMenuItem<int>(
-                          value: int.tryParse(location.id),
-                          child: Text(
-                            '${location.locationNumber} • ${location.type}',
-                          ),
-                        ),
-                      )
-                      .toList(),
-                  onChanged: (value) =>
-                      setState(() => _selectedLocationId = value),
-                ),
-              if (widget.isCreate) const SizedBox(height: 10),
-              DropdownButtonFormField<int>(
-                initialValue: _selectedProfileId,
-                decoration: const InputDecoration(
-                  labelText: 'Cleaning Profile',
-                  border: OutlineInputBorder(),
-                ),
-                items: widget.cleaningProfiles
-                    .map(
-                      (profile) => DropdownMenuItem<int>(
-                        value: int.tryParse(profile.id),
-                        child: Text(profile.name),
-                      ),
-                    )
-                    .toList(),
-                onChanged: (value) =>
-                    setState(() => _selectedProfileId = value),
-              ),
-              const SizedBox(height: 10),
-              TextField(
-                controller: _scheduledDate,
-                decoration: const InputDecoration(
-                  labelText: 'Scheduled Date (YYYY-MM-DD or M-D-YYYY)',
-                  border: OutlineInputBorder(),
-                ),
-              ),
-              if (!widget.isCreate) const SizedBox(height: 10),
-              if (!widget.isCreate)
-                DropdownButtonFormField<String>(
-                  initialValue: _status,
-                  decoration: const InputDecoration(
-                    labelText: 'Status',
-                    border: OutlineInputBorder(),
-                  ),
-                  items: const [
-                    DropdownMenuItem(value: 'pending', child: Text('Pending')),
-                    DropdownMenuItem(
-                      value: 'assigned',
-                      child: Text('Assigned'),
-                    ),
-                    DropdownMenuItem(
-                      value: 'in_progress',
-                      child: Text('In Progress'),
-                    ),
-                    DropdownMenuItem(
-                      value: 'completed',
-                      child: Text('Completed'),
-                    ),
-                    DropdownMenuItem(
-                      value: 'canceled',
-                      child: Text('Canceled'),
-                    ),
-                  ],
-                  onChanged: (value) {
-                    if (value == null) return;
-                    setState(() => _status = value);
-                  },
-                ),
-              if (!widget.isCreate) const SizedBox(height: 10),
-              if (!widget.isCreate)
-                TextField(
-                  controller: _notes,
-                  maxLines: 3,
-                  decoration: const InputDecoration(
-                    labelText: 'Notes (optional)',
-                    border: OutlineInputBorder(),
-                  ),
-                ),
-            ],
-          ),
-        ),
-      ),
-      actions: [
-        TextButton(
-          onPressed: () => Navigator.pop(context),
-          child: const Text('Cancel'),
-        ),
-        FilledButton(
-          onPressed: () {
-            if (_selectedProfileId == null) {
-              return;
-            }
-            final normalized = _normalizeDate(_scheduledDate.text);
-            if (normalized == null) {
-              return;
-            }
-            if (widget.isCreate) {
-              if (_selectedLocationId == null) return;
-              Navigator.pop(
-                context,
-                JobCreateInput(
-                  profileId: _selectedProfileId!,
-                  locationId: _selectedLocationId!,
-                  scheduledDate: normalized,
-                ),
-              );
-            } else {
-              Navigator.pop(
-                context,
-                JobUpdateInput(
-                  profileId: _selectedProfileId!,
-                  scheduledDate: normalized,
-                  status: _status,
-                  notes: _notes.text.trim().isEmpty ? null : _notes.text.trim(),
-                ),
-              );
-            }
-          },
-          child: Text(widget.isCreate ? 'Create' : 'Save'),
-        ),
-      ],
-    );
-  }
-
-  String? _normalizeDate(String raw) {
-    final trimmed = raw.trim();
-    if (trimmed.isEmpty) return null;
-    final parsed = parseFlexibleDate(trimmed);
-    if (parsed != null) {
-      final yyyy = parsed.year.toString().padLeft(4, '0');
-      final mm = parsed.month.toString().padLeft(2, '0');
-      final dd = parsed.day.toString().padLeft(2, '0');
-      return '$yyyy-$mm-$dd';
-    }
-
-    final parts = trimmed.split('-');
-    if (parts.length != 3) return null;
-    final month = int.tryParse(parts[0]);
-    final day = int.tryParse(parts[1]);
-    final year = int.tryParse(parts[2]);
-    if (month == null || day == null || year == null) return null;
-    if (month < 1 || month > 12 || day < 1 || day > 31 || year < 2000) {
-      return null;
-    }
-    final yyyy = year.toString().padLeft(4, '0');
-    final mm = month.toString().padLeft(2, '0');
-    final dd = day.toString().padLeft(2, '0');
-    return '$yyyy-$mm-$dd';
   }
 }
 

@@ -206,7 +206,14 @@ class _HomePageState extends State<HomePage> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text(title, style: const TextStyle(fontWeight: FontWeight.w700)),
+              Text(
+                title,
+                style: const TextStyle(
+                  fontWeight: FontWeight.w800,
+                  fontSize: 18,
+                  letterSpacing: 0.2,
+                ),
+              ),
               const SizedBox(height: 10),
               if (children.isEmpty)
                 Text(empty, style: const TextStyle(color: Colors.black54)),
@@ -300,19 +307,6 @@ class _HomePageState extends State<HomePage> {
       if (location.id == job.locationId.toString()) return location;
     }
     return null;
-  }
-
-  String _employeeAddressLabel() {
-    final employee = _employeeProfile;
-    if (employee == null) return 'Unavailable';
-    final parts = [
-      employee.address?.trim() ?? '',
-      employee.city?.trim() ?? '',
-      employee.state?.trim() ?? '',
-      employee.zipCode?.trim() ?? '',
-    ].where((p) => p.isNotEmpty).toList();
-    if (parts.isEmpty) return 'Unavailable';
-    return parts.join(', ');
   }
 
   String _distanceHintForJob(Job job) {
@@ -501,10 +495,7 @@ class _HomePageState extends State<HomePage> {
   }
 
   String _deviceMapLabel() {
-    if (!kIsWeb && defaultTargetPlatform == TargetPlatform.iOS) {
-      return 'Open in Apple Maps';
-    }
-    return 'Open in Google Maps';
+    return 'Open in Maps';
   }
 
   Uri? _jobMapUri(Job job) {
@@ -651,6 +642,17 @@ class _HomePageState extends State<HomePage> {
       final dateLabel = completedCard ? 'Completed' : 'Scheduled';
       final isCompact = MediaQuery.sizeOf(context).width < 480;
       final statusLabel = job.status.replaceAll('_', ' ').toUpperCase();
+      final statusNormalized = job.status.trim().toLowerCase();
+      final statusChipColor = switch (statusNormalized) {
+        'pending' => const Color.fromRGBO(255, 247, 224, 1),
+        'assigned' => const Color.fromRGBO(232, 241, 255, 1),
+        _ => const Color.fromRGBO(240, 243, 249, 1),
+      };
+      final statusTextColor = switch (statusNormalized) {
+        'pending' => const Color.fromRGBO(138, 92, 8, 1),
+        'assigned' => const Color.fromRGBO(34, 73, 140, 1),
+        _ => const Color.fromRGBO(67, 76, 98, 1),
+      };
 
       return SizedBox(
         width: cardWidth,
@@ -680,6 +682,15 @@ class _HomePageState extends State<HomePage> {
                   '$dateLabel: $primaryDate',
                   style: const TextStyle(fontSize: 12),
                 ),
+                const SizedBox(height: 4),
+                Text(
+                  duration,
+                  style: const TextStyle(
+                    fontSize: 14,
+                    fontWeight: FontWeight.w700,
+                    color: Color.fromRGBO(22, 67, 121, 1),
+                  ),
+                ),
                 if ((job.locationAddress?.trim().isNotEmpty ?? false) ||
                     (job.locationCity?.trim().isNotEmpty ?? false) ||
                     (job.locationState?.trim().isNotEmpty ?? false) ||
@@ -701,32 +712,29 @@ class _HomePageState extends State<HomePage> {
                   runSpacing: 6,
                   children: [
                     Chip(
+                      backgroundColor: statusChipColor,
                       label: Text(
                         statusLabel,
-                        style: const TextStyle(
+                        style: TextStyle(
                           fontSize: 11,
                           fontWeight: FontWeight.w700,
+                          color: statusTextColor,
                         ),
                       ),
                     ),
-                    Chip(
-                      avatar: const Icon(Icons.timer_outlined, size: 14),
-                      label: Text(duration.replaceFirst('Duration: ', '')),
-                      labelStyle: const TextStyle(fontSize: 11),
-                      visualDensity: VisualDensity.compact,
-                    ),
-                    Chip(
-                      avatar: const Icon(Icons.near_me_outlined, size: 14),
-                      label: Text(_distanceHintForJob(job)),
-                      labelStyle: const TextStyle(fontSize: 11),
-                      visualDensity: VisualDensity.compact,
-                    ),
+                    if (!completedCard)
+                      Chip(
+                        avatar: const Icon(Icons.near_me_outlined, size: 14),
+                        label: Text(_distanceHintForJob(job)),
+                        labelStyle: const TextStyle(fontSize: 11),
+                        visualDensity: VisualDensity.compact,
+                      ),
                   ],
                 ),
-                const Spacer(),
+                const SizedBox(height: 6),
                 Wrap(
                   spacing: 6,
-                  runSpacing: 6,
+                  runSpacing: 4,
                   children: [
                     if (!completedCard)
                       FilledButton.icon(
@@ -734,7 +742,7 @@ class _HomePageState extends State<HomePage> {
                         icon: const Icon(Icons.map, size: 16),
                         label: Text(mapsLabel),
                         style: FilledButton.styleFrom(
-                          backgroundColor: const Color.fromRGBO(28, 117, 97, 1),
+                          backgroundColor: const Color.fromRGBO(41, 98, 255, 1),
                           foregroundColor: Colors.white,
                           padding: EdgeInsets.symmetric(
                             horizontal: isCompact ? 7 : 8,
@@ -757,6 +765,7 @@ class _HomePageState extends State<HomePage> {
                     ),
                   ],
                 ),
+                const Spacer(),
               ],
             ),
           ),
@@ -843,11 +852,6 @@ class _HomePageState extends State<HomePage> {
                       ),
                     ],
                   ),
-                  const SizedBox(height: 12),
-                  Text(
-                    'Home Address: ${_employeeAddressLabel()}',
-                    style: const TextStyle(color: Colors.black54),
-                  ),
                 ],
               ),
             ),
@@ -855,7 +859,7 @@ class _HomePageState extends State<HomePage> {
         ),
         const SizedBox(height: 12),
         _cardList(
-          title: 'Your Assigned Jobs',
+          title: 'YOUR ASSIGNED JOBS',
           empty: 'No jobs assigned',
           children: [
             if (assigned.isNotEmpty)
@@ -919,7 +923,7 @@ class _HomePageState extends State<HomePage> {
         ),
         const SizedBox(height: 12),
         _cardList(
-          title: 'Completed Jobs',
+          title: 'COMPLETED JOBS',
           empty: 'No completed jobs in selected period',
           children: [
             if (completed.isNotEmpty)

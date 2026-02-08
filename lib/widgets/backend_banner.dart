@@ -116,10 +116,10 @@ class _BackendBannerState extends State<BackendBanner> {
                   _chip(
                     label: _rustOnline ? 'Rust: Online' : 'Rust: Offline',
                     bg: _rustOnline
-                        ? Colors.green.shade100
+                        ? const Color.fromRGBO(230, 225, 243, 1)
                         : Colors.red.shade100,
                     fg: _rustOnline
-                        ? Colors.green.shade900
+                        ? const Color.fromRGBO(56, 44, 89, 1)
                         : Colors.red.shade900,
                   ),
                   const SizedBox(width: 8),
@@ -142,22 +142,18 @@ class _BackendBannerState extends State<BackendBanner> {
                   ),
                   const SizedBox(width: 8),
                   _chip(
-                    label: 'Env: ${AppEnv.environment}',
-                    bg: const Color.fromRGBO(214, 238, 229, 1),
-                    fg: const Color.fromRGBO(24, 86, 62, 1),
+                    label: AppEnv.isDemoMode
+                        ? 'Env: ${AppEnv.environment} (Demo)'
+                        : 'Env: ${AppEnv.environment}',
+                    bg: const Color.fromRGBO(230, 225, 243, 1),
+                    fg: const Color.fromRGBO(56, 44, 89, 1),
                   ),
                   if (AppEnv.isDemoMode) ...[
                     const SizedBox(width: 8),
                     _chip(
-                      label: 'Demo Preview',
-                      bg: const Color.fromRGBO(255, 241, 208, 1),
-                      fg: const Color.fromRGBO(122, 82, 8, 1),
-                    ),
-                    const SizedBox(width: 8),
-                    _chip(
                       label: 'Features in progress',
-                      bg: const Color.fromRGBO(245, 234, 238, 1),
-                      fg: const Color.fromRGBO(120, 57, 80, 1),
+                      bg: const Color.fromRGBO(230, 225, 243, 1),
+                      fg: const Color.fromRGBO(56, 44, 89, 1),
                     ),
                   ],
                 ],
