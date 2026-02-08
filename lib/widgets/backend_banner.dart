@@ -85,13 +85,11 @@ class _BackendBannerState extends State<BackendBanner> {
               width: double.infinity,
               padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
               decoration: BoxDecoration(
-                color: const Color.fromRGBO(238, 234, 247, 1),
+                color: const Color.fromRGBO(104, 88, 147, 1),
                 border: Border(
-                  top: const BorderSide(
-                    color: Color.fromRGBO(213, 205, 231, 1),
-                  ),
+                  top: const BorderSide(color: Color.fromRGBO(79, 67, 114, 1)),
                   bottom: const BorderSide(
-                    color: Color.fromRGBO(213, 205, 231, 1),
+                    color: Color.fromRGBO(79, 67, 114, 1),
                   ),
                 ),
               ),
@@ -103,12 +101,12 @@ class _BackendBannerState extends State<BackendBanner> {
                     height: 30,
                     decoration: BoxDecoration(
                       borderRadius: BorderRadius.circular(8),
-                      color: Colors.white,
+                      color: const Color.fromRGBO(230, 225, 243, 1),
                     ),
                     child: Padding(
                       padding: const EdgeInsets.all(3),
                       child: Image.asset(
-                        'assets/images/sub_logo.png',
+                        'assets/images/logo.png',
                         fit: BoxFit.contain,
                       ),
                     ),
@@ -126,20 +124,20 @@ class _BackendBannerState extends State<BackendBanner> {
                   const SizedBox(width: 8),
                   _chip(
                     label: 'Host: ${config.baseUrl}',
-                    bg: Colors.white,
-                    fg: const Color.fromRGBO(104, 88, 147, 1),
+                    bg: const Color.fromRGBO(230, 225, 243, 1),
+                    fg: const Color.fromRGBO(56, 44, 89, 1),
                   ),
                   const SizedBox(width: 8),
                   _chip(
                     label: 'Role: $role',
-                    bg: Colors.white,
-                    fg: const Color.fromRGBO(104, 88, 147, 1),
+                    bg: const Color.fromRGBO(230, 225, 243, 1),
+                    fg: const Color.fromRGBO(56, 44, 89, 1),
                   ),
                   const SizedBox(width: 8),
                   _chip(
                     label: 'User: $userLabel',
-                    bg: Colors.white,
-                    fg: const Color.fromRGBO(104, 88, 147, 1),
+                    bg: const Color.fromRGBO(230, 225, 243, 1),
+                    fg: const Color.fromRGBO(56, 44, 89, 1),
                   ),
                 ],
               ),

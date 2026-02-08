@@ -10,6 +10,8 @@ class Employee {
     this.city,
     this.state,
     this.zipCode,
+    this.latitude,
+    this.longitude,
   });
 
   final String id;
@@ -22,6 +24,8 @@ class Employee {
   final String? city;
   final String? state;
   final String? zipCode;
+  final double? latitude;
+  final double? longitude;
 
   factory Employee.fromJson(Map<String, dynamic> json) {
     return Employee(
@@ -35,6 +39,12 @@ class Employee {
       city: json['city']?.toString(),
       state: json['state']?.toString(),
       zipCode: json['zip_code']?.toString(),
+      latitude: json['latitude'] == null
+          ? null
+          : double.tryParse(json['latitude'].toString()),
+      longitude: json['longitude'] == null
+          ? null
+          : double.tryParse(json['longitude'].toString()),
     );
   }
 }
@@ -49,6 +59,8 @@ class EmployeeCreateInput {
     this.city,
     this.state,
     this.zipCode,
+    this.latitude,
+    this.longitude,
   });
 
   final String name;
@@ -59,6 +71,8 @@ class EmployeeCreateInput {
   final String? city;
   final String? state;
   final String? zipCode;
+  final double? latitude;
+  final double? longitude;
 
   Map<String, dynamic> toJson() => {
     'name': name,
@@ -69,6 +83,8 @@ class EmployeeCreateInput {
     'city': city,
     'state': state,
     'zip_code': zipCode,
+    'latitude': latitude,
+    'longitude': longitude,
   };
 }
 
@@ -81,6 +97,8 @@ class EmployeeUpdateInput {
     this.city,
     this.state,
     this.zipCode,
+    this.latitude,
+    this.longitude,
   });
 
   final String? name;
@@ -90,6 +108,8 @@ class EmployeeUpdateInput {
   final String? city;
   final String? state;
   final String? zipCode;
+  final double? latitude;
+  final double? longitude;
 
   Map<String, dynamic> toJson() {
     final data = <String, dynamic>{};
@@ -100,6 +120,8 @@ class EmployeeUpdateInput {
     if (city != null) data['city'] = city;
     if (state != null) data['state'] = state;
     if (zipCode != null) data['zip_code'] = zipCode;
+    if (latitude != null) data['latitude'] = latitude;
+    if (longitude != null) data['longitude'] = longitude;
     return data;
   }
 }

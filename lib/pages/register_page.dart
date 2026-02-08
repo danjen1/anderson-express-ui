@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../services/api_service.dart';
 import '../widgets/backend_banner.dart';
+import '../widgets/theme_toggle_button.dart';
 
 class RegisterPage extends StatefulWidget {
   const RegisterPage({super.key, this.initialEmail});
@@ -86,8 +87,9 @@ class _RegisterPageState extends State<RegisterPage> {
         _passwordController.text.trim().isNotEmpty;
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Register Invite'),
+        title: const Text('Anderson Express Cleaning Service'),
         bottom: const BackendBanner(),
+        actions: const [ThemeToggleButton()],
       ),
       body: Center(
         child: ConstrainedBox(
@@ -98,8 +100,8 @@ class _RegisterPageState extends State<RegisterPage> {
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
                 Image.asset(
-                  'assets/images/sub_logo.png',
-                  height: 64,
+                  'assets/images/logo.png',
+                  height: 148,
                   fit: BoxFit.contain,
                 ),
                 const SizedBox(height: 12),

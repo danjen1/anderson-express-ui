@@ -122,6 +122,19 @@ class ApiService {
         .toList();
   }
 
+  Future<Employee> getEmployee(String employeeId, {String? bearerToken}) async {
+    final response = await http
+        .get(
+          Uri.parse('${_backend.baseUrl}${_backend.employeesPath}/$employeeId'),
+          headers: _headers(bearerToken),
+        )
+        .timeout(const Duration(seconds: 8));
+
+    _throwIfError(response, fallbackMessage: 'Failed to fetch employee');
+    final data = jsonDecode(response.body) as Map<String, dynamic>;
+    return Employee.fromJson(data);
+  }
+
   Future<Employee> createEmployee(
     EmployeeCreateInput input, {
     String? bearerToken,

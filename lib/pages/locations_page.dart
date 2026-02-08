@@ -227,12 +227,21 @@ class _LocationsPageState extends State<LocationsPage> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Admin - Locations'),
+        title: const Text('Anderson Express Cleaning Service'),
         bottom: const BackendBanner(),
         actions: [
           IconButton(
+            onPressed: () {
+              AuthSession.clear();
+              Navigator.pushReplacementNamed(context, '/');
+            },
+            icon: const Icon(Icons.logout),
+            tooltip: 'Logout',
+          ),
+          IconButton(
             onPressed: _loading ? null : _loadLocations,
             icon: const Icon(Icons.refresh),
+            tooltip: 'Refresh',
           ),
         ],
       ),

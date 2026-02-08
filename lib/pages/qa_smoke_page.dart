@@ -7,6 +7,7 @@ import '../models/location.dart';
 import '../models/task_definition.dart';
 import '../models/task_rule.dart';
 import '../services/api_service.dart';
+import '../services/auth_session.dart';
 import '../widgets/backend_banner.dart';
 
 class QaSmokePage extends StatefulWidget {
@@ -347,8 +348,29 @@ class _QaSmokePageState extends State<QaSmokePage> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('QA Smoke - Employee + Client + Location + Cleaner'),
+        title: const Text('Anderson Express Cleaning Service'),
         bottom: const BackendBanner(),
+        actions: [
+          IconButton(
+            onPressed: () {
+              AuthSession.clear();
+              Navigator.pushReplacementNamed(context, '/');
+            },
+            icon: const Icon(Icons.logout),
+            tooltip: 'Logout',
+          ),
+          IconButton(
+            onPressed: _running
+                ? null
+                : () {
+                    setState(() {
+                      _logs.clear();
+                    });
+                  },
+            icon: const Icon(Icons.refresh),
+            tooltip: 'Refresh',
+          ),
+        ],
       ),
       body: Padding(
         padding: const EdgeInsets.all(16),

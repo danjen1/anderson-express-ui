@@ -150,12 +150,21 @@ class _CleanerPageState extends State<CleanerPage> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Cleaner - Assigned Jobs'),
+        title: const Text('Anderson Express Cleaning Service'),
         bottom: const BackendBanner(),
         actions: [
           IconButton(
+            onPressed: () {
+              AuthSession.clear();
+              Navigator.pushReplacementNamed(context, '/');
+            },
+            icon: const Icon(Icons.logout),
+            tooltip: 'Logout',
+          ),
+          IconButton(
             onPressed: _loading ? null : _loadAssignedJobs,
             icon: const Icon(Icons.refresh),
+            tooltip: 'Refresh',
           ),
         ],
       ),
