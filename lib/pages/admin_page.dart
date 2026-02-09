@@ -57,6 +57,8 @@ class AdminPage extends StatefulWidget {
 class _AdminPageState extends State<AdminPage> {
   static const String _defaultEmployeePhotoAsset =
       '/assets/images/profiles/employee_default.png';
+  static const String _defaultLocationPhotoAsset =
+      '/assets/images/locations/location_default.png';
   final GlobalKey<ScaffoldState> _scaffoldKey = GlobalKey<ScaffoldState>();
   late BackendKind _selectedBackend;
   late final TextEditingController _hostController;
@@ -641,6 +643,7 @@ class _AdminPageState extends State<AdminPage> {
         clientId: location.clientId,
         status: location.status,
         type: location.type,
+        photoUrl: location.photoUrl ?? '',
         address: location.address ?? '',
         city: location.city ?? '',
         state: location.state ?? '',
@@ -1744,6 +1747,13 @@ class _AdminPageState extends State<AdminPage> {
     return 'Client $clientId';
   }
 
+  String _assetPath(String? value, {required String fallback}) {
+    final candidate = (value == null || value.trim().isEmpty)
+        ? fallback
+        : value.trim();
+    return candidate.startsWith('/') ? candidate.substring(1) : candidate;
+  }
+
   String _adminDisplayName() {
     final email = AuthSession.current?.loginEmail?.trim() ?? '';
     if (email.isEmpty) return 'Admin';
@@ -1829,7 +1839,7 @@ class _AdminPageState extends State<AdminPage> {
       final selected = _selectedSection == section;
       final tile = ListTile(
         dense: true,
-        leading: Icon(icon, size: 20),
+        leading: Icon(icon, size: 24),
         iconColor: selected ? navSelectedFg : navFg,
         textColor: selected ? navSelectedFg : navFg,
         selectedTileColor: navSelected,
@@ -2802,14 +2812,15 @@ class _AdminPageState extends State<AdminPage> {
                                 ],
                                 _ManagementModel.clients => [
                                   _tableColumn(''),
-                                  _tableColumn('Client #'),
                                   _tableColumn('Name'),
                                   _tableColumn('Email'),
                                   _tableColumn('Phone'),
+                                  _tableColumn('Preferred Contact Window'),
                                   _tableColumn('Actions'),
                                 ],
                                 _ManagementModel.locations => [
                                   _tableColumn(''),
+                                  _tableColumn('Photo'),
                                   _tableColumn('Client'),
                                   _tableColumn('Type'),
                                   _tableColumn('Address'),
@@ -2935,11 +2946,24 @@ class _AdminPageState extends State<AdminPage> {
                                                 },
                                               ),
                                             ),
-                                            DataCell(Text(client.clientNumber)),
                                             DataCell(Text(client.name)),
                                             DataCell(Text(client.email ?? '—')),
                                             DataCell(
                                               Text(client.phoneNumber ?? '—'),
+                                            ),
+                                            DataCell(
+                                              SizedBox(
+                                                width: 220,
+                                                child: SingleChildScrollView(
+                                                  scrollDirection:
+                                                      Axis.horizontal,
+                                                  child: Text(
+                                                    client.preferredContactWindow ??
+                                                        '—',
+                                                    softWrap: false,
+                                                  ),
+                                                ),
+                                              ),
                                             ),
                                             DataCell(
                                               Row(
@@ -3011,6 +3035,21 @@ class _AdminPageState extends State<AdminPage> {
                                                     ),
                                                   );
                                                 },
+                                              ),
+                                            ),
+                                            DataCell(
+                                              CircleAvatar(
+                                                radius: 14,
+                                                backgroundColor: const Color(
+                                                  0xFFA8D6F7,
+                                                ),
+                                                backgroundImage: AssetImage(
+                                                  _assetPath(
+                                                    location.photoUrl,
+                                                    fallback:
+                                                        _defaultLocationPhotoAsset,
+                                                  ),
+                                                ),
                                               ),
                                             ),
                                             DataCell(
@@ -4763,6 +4802,7 @@ class _LocationEditorDialog extends StatefulWidget {
     this.clientId,
     this.status = 'active',
     this.type = 'residential',
+    this.photoUrl = '',
     this.address = '',
     this.city = '',
     this.state = '',
@@ -4774,6 +4814,7 @@ class _LocationEditorDialog extends StatefulWidget {
   final int? clientId;
   final String status;
   final String type;
+  final String photoUrl;
   final String address;
   final String city;
   final String state;
@@ -4785,10 +4826,13 @@ class _LocationEditorDialog extends StatefulWidget {
 }
 
 class _LocationEditorDialogState extends State<_LocationEditorDialog> {
+  static const String _defaultLocationPhotoAsset =
+      '/assets/images/locations/location_default.png';
   late final TextEditingController _address;
   late final TextEditingController _city;
   late final TextEditingController _state;
   late final TextEditingController _zipCode;
+  late final TextEditingController _photoUrl;
   late String _type;
   late String _status;
   int? _selectedClientId;
@@ -4800,6 +4844,7 @@ class _LocationEditorDialogState extends State<_LocationEditorDialog> {
     _city = TextEditingController(text: widget.city);
     _state = TextEditingController(text: widget.state);
     _zipCode = TextEditingController(text: widget.zipCode);
+    _photoUrl = TextEditingController(text: widget.photoUrl);
     _type = widget.type.toLowerCase();
     _status = widget.status.trim().isEmpty
         ? 'active'
@@ -4817,7 +4862,45 @@ class _LocationEditorDialogState extends State<_LocationEditorDialog> {
     _city.dispose();
     _state.dispose();
     _zipCode.dispose();
+    _photoUrl.dispose();
     super.dispose();
+  }
+
+  String _assetPath(String? value, {required String fallback}) {
+    final candidate = (value == null || value.trim().isEmpty)
+        ? fallback
+        : value.trim();
+    return candidate.startsWith('/') ? candidate.substring(1) : candidate;
+  }
+
+  Future<void> _editPhotoPath() async {
+    final controller = TextEditingController(text: _photoUrl.text);
+    final value = await showDialog<String>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Location photo path'),
+        content: TextField(
+          controller: controller,
+          decoration: const InputDecoration(
+            labelText: 'Asset path',
+            hintText: '/assets/images/locations/location_default.png',
+            border: OutlineInputBorder(),
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(context, controller.text.trim()),
+            child: const Text('Apply'),
+          ),
+        ],
+      ),
+    );
+    if (value == null) return;
+    setState(() => _photoUrl.text = value);
   }
 
   @override
@@ -4852,6 +4935,41 @@ class _LocationEditorDialogState extends State<_LocationEditorDialog> {
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
+              ValueListenableBuilder<TextEditingValue>(
+                valueListenable: _photoUrl,
+                builder: (context, value, _) {
+                  final path = value.text.trim().isNotEmpty
+                      ? value.text.trim()
+                      : _defaultLocationPhotoAsset;
+                  return Stack(
+                    children: [
+                      CircleAvatar(
+                        radius: 56,
+                        backgroundColor: dark
+                            ? const Color(0xFF3B4250)
+                            : const Color(0xFFA8D6F7),
+                        backgroundImage: AssetImage(
+                          _assetPath(
+                            path,
+                            fallback: _defaultLocationPhotoAsset,
+                          ),
+                        ),
+                      ),
+                      Positioned(
+                        right: -2,
+                        bottom: -2,
+                        child: IconButton(
+                          visualDensity: VisualDensity.compact,
+                          tooltip: 'Edit location photo',
+                          onPressed: _editPhotoPath,
+                          icon: const Icon(Icons.edit, size: 18),
+                        ),
+                      ),
+                    ],
+                  );
+                },
+              ),
+              const SizedBox(height: 10),
               Align(
                 alignment: Alignment.centerLeft,
                 child: Text(
@@ -4952,6 +5070,7 @@ class _LocationEditorDialogState extends State<_LocationEditorDialog> {
                   type: _type,
                   status: _status,
                   clientId: _selectedClientId!,
+                  photoUrl: _nullable(_photoUrl.text),
                   address: _nullable(_address.text),
                   city: _nullable(_city.text),
                   state: _nullable(_state.text),
@@ -4964,6 +5083,7 @@ class _LocationEditorDialogState extends State<_LocationEditorDialog> {
                 LocationUpdateInput(
                   type: _type,
                   status: _status,
+                  photoUrl: _nullable(_photoUrl.text),
                   address: _nullable(_address.text),
                   city: _nullable(_city.text),
                   state: _nullable(_state.text),
