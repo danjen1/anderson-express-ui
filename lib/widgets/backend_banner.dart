@@ -11,7 +11,9 @@ class BackendBanner extends StatefulWidget implements PreferredSizeWidget {
   const BackendBanner({super.key});
 
   @override
-  Size get preferredSize => const Size.fromHeight(44);
+  Size get preferredSize => AppEnv.isDemoMode 
+      ? const Size.fromHeight(0) 
+      : const Size.fromHeight(44);
 
   @override
   State<BackendBanner> createState() => _BackendBannerState();
@@ -80,6 +82,11 @@ class _BackendBannerState extends State<BackendBanner> {
 
   @override
   Widget build(BuildContext context) {
+    // Hide banner in demo mode (for client demos)
+    if (AppEnv.isDemoMode) {
+      return const SizedBox.shrink();
+    }
+
     return ValueListenableBuilder(
       valueListenable: BackendRuntime.listenable,
       builder: (context, config, _) {
