@@ -1665,6 +1665,23 @@ class _AdminPageState extends State<AdminPage> {
     return DataColumn(label: Text(label, style: _tableHeaderStyle));
   }
 
+  Widget _rowActionButton({
+    required IconData icon,
+    required String tooltip,
+    required VoidCallback? onPressed,
+  }) {
+    return IconButton(
+      icon: Icon(icon),
+      tooltip: tooltip,
+      visualDensity: VisualDensity.compact,
+      padding: EdgeInsets.zero,
+      constraints: const BoxConstraints(minWidth: 24, minHeight: 24),
+      splashRadius: 14,
+      iconSize: 18,
+      onPressed: onPressed,
+    );
+  }
+
   ({String label, Color bg, Color fg, Color border}) _employeeStatusBadge(
     Employee employee,
   ) {
@@ -2536,38 +2553,17 @@ class _AdminPageState extends State<AdminPage> {
                                           Row(
                                             mainAxisSize: MainAxisSize.min,
                                             children: [
-                                              IconButton(
-                                                icon: const Icon(Icons.edit),
+                                              _rowActionButton(
+                                                icon: Icons.edit,
                                                 tooltip: 'Edit',
-                                                visualDensity:
-                                                    VisualDensity.compact,
-                                                padding: EdgeInsets.zero,
-                                                constraints:
-                                                    const BoxConstraints(
-                                                      minWidth: 24,
-                                                      minHeight: 24,
-                                                    ),
-                                                splashRadius: 14,
-                                                iconSize: 18,
                                                 onPressed: () =>
                                                     _showEditJobDialog(job),
                                               ),
                                               const SizedBox(width: 10),
-                                              IconButton(
-                                                icon: const Icon(Icons.delete),
+                                              _rowActionButton(
+                                                icon: Icons.delete,
                                                 tooltip: 'Delete',
-                                                visualDensity:
-                                                    VisualDensity.compact,
-                                                padding: EdgeInsets.zero,
-                                                constraints:
-                                                    const BoxConstraints(
-                                                      minWidth: 24,
-                                                      minHeight: 24,
-                                                    ),
-                                                splashRadius: 14,
-                                                iconSize: 18,
-                                                onPressed: () =>
-                                                    _deleteJob(job),
+                                                onPressed: () => _deleteJob(job),
                                               ),
                                             ],
                                           ),
@@ -2870,50 +2866,28 @@ class _AdminPageState extends State<AdminPage> {
                                               Row(
                                                 mainAxisSize: MainAxisSize.min,
                                                 children: [
-                                                  IconButton(
-                                                    icon: const Icon(
-                                                      Icons.edit,
-                                                    ),
+                                                  _rowActionButton(
+                                                    icon: Icons.edit,
                                                     tooltip: 'Edit',
-                                                    visualDensity:
-                                                        VisualDensity.compact,
-                                                    padding: EdgeInsets.zero,
-                                                    constraints:
-                                                        const BoxConstraints(
-                                                          minWidth: 24,
-                                                          minHeight: 24,
-                                                        ),
-                                                    splashRadius: 14,
-                                                    iconSize: 18,
                                                     onPressed: () =>
                                                         _showEditDialog(
                                                           employee,
                                                         ),
                                                   ),
                                                   const SizedBox(width: 10),
-                                                  IconButton(
-                                                    icon: const Icon(
-                                                      Icons.delete,
-                                                    ),
+                                                  _rowActionButton(
+                                                    icon: Icons.delete,
                                                     tooltip: 'Delete',
-                                                    visualDensity:
-                                                        VisualDensity.compact,
-                                                    padding: EdgeInsets.zero,
-                                                    constraints:
-                                                        const BoxConstraints(
-                                                          minWidth: 24,
-                                                          minHeight: 24,
-                                                        ),
-                                                    splashRadius: 14,
-                                                    iconSize: 18,
                                                     onPressed:
                                                         employee.status
-                                                                .trim()
-                                                                .toLowerCase() ==
-                                                            'deleted'
-                                                        ? null
-                                                        : () =>
-                                                              _delete(employee),
+                                                                    .trim()
+                                                                    .toLowerCase() ==
+                                                                'deleted'
+                                                            ? null
+                                                            : () =>
+                                                                  _delete(
+                                                                    employee,
+                                                                  ),
                                                   ),
                                                 ],
                                               ),
@@ -2936,21 +2910,19 @@ class _AdminPageState extends State<AdminPage> {
                                             ),
                                             DataCell(
                                               Row(
+                                                mainAxisSize: MainAxisSize.min,
                                                 children: [
-                                                  IconButton(
-                                                    icon: const Icon(
-                                                      Icons.edit,
-                                                    ),
+                                                  _rowActionButton(
+                                                    icon: Icons.edit,
                                                     tooltip: 'Edit',
                                                     onPressed: () =>
                                                         _showEditClientDialog(
                                                           client,
                                                         ),
                                                   ),
-                                                  IconButton(
-                                                    icon: const Icon(
-                                                      Icons.delete,
-                                                    ),
+                                                  const SizedBox(width: 10),
+                                                  _rowActionButton(
+                                                    icon: Icons.delete,
                                                     tooltip: 'Delete',
                                                     onPressed: () =>
                                                         _deleteClient(client),
@@ -3002,21 +2974,19 @@ class _AdminPageState extends State<AdminPage> {
                                             ),
                                             DataCell(
                                               Row(
+                                                mainAxisSize: MainAxisSize.min,
                                                 children: [
-                                                  IconButton(
-                                                    icon: const Icon(
-                                                      Icons.edit,
-                                                    ),
+                                                  _rowActionButton(
+                                                    icon: Icons.edit,
                                                     tooltip: 'Edit',
                                                     onPressed: () =>
                                                         _showEditLocationDialog(
                                                           location,
                                                         ),
                                                   ),
-                                                  IconButton(
-                                                    icon: const Icon(
-                                                      Icons.delete,
-                                                    ),
+                                                  const SizedBox(width: 10),
+                                                  _rowActionButton(
+                                                    icon: Icons.delete,
                                                     tooltip: 'Delete',
                                                     onPressed: () =>
                                                         _deleteLocation(
