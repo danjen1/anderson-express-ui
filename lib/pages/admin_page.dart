@@ -2640,7 +2640,7 @@ class _AdminPageState extends State<AdminPage> {
               width: double.infinity,
               child: Card(
                 child: Padding(
-                  padding: const EdgeInsets.all(32),
+                  padding: const EdgeInsets.all(14),
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
