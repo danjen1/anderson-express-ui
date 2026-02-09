@@ -6,9 +6,32 @@ class BrandAppBarTitle extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Text(
-      'Anderson Express Cleaning Service',
-      style: GoogleFonts.oregano(fontSize: 34, fontWeight: FontWeight.w800),
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        // Logo
+        Container(
+          width: 40,
+          height: 40,
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(8),
+            color: Colors.white,
+          ),
+          child: Padding(
+            padding: const EdgeInsets.all(4),
+            child: Image.asset(
+              'assets/images/logo.png',
+              fit: BoxFit.contain,
+            ),
+          ),
+        ),
+        const SizedBox(width: 12),
+        // Title
+        Text(
+          'Anderson Express Cleaning Service',
+          style: GoogleFonts.oregano(fontSize: 34, fontWeight: FontWeight.w800),
+        ),
+      ],
     );
   }
 }

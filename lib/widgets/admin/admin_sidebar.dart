@@ -46,7 +46,7 @@ class AdminSidebar extends StatelessWidget {
       final selected = selectedSection == section;
       final tile = ListTile(
         dense: true,
-        leading: Icon(icon, size: 24),
+        leading: Icon(icon, size: 32),
         iconColor: selected ? navSelectedFg : navFg,
         textColor: selected ? navSelectedFg : navFg,
         selectedTileColor: navSelected,
@@ -80,37 +80,6 @@ class AdminSidebar extends StatelessWidget {
               child: Wrap(
                 spacing: 2,
                 runSpacing: 2,
-                children: [
-                  if (collapsed)
-                    Center(
-                      child: Image.asset(
-                        'assets/images/logo.png',
-                        width: 48,
-                        height: 48,
-                        fit: BoxFit.cover,
-                      ),
-                    )
-                  else ...[
-                    Image.asset(
-                      'assets/images/logo.png',
-                      width: 56,
-                      height: 56,
-                      fit: BoxFit.cover,
-                    ),
-                    const SizedBox(width: 4),
-                    Padding(
-                      padding: const EdgeInsets.only(top: 8),
-                      child: Text(
-                        'Anderson Express Cleaning',
-                        style: TextStyle(
-                          fontSize: 15,
-                          fontWeight: FontWeight.w800,
-                          color: navFg,
-                        ),
-                      ),
-                    ),
-                  ],
-                ],
               ),
             ),
           if (collapsed && !forDrawer)
