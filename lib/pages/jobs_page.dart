@@ -1,11 +1,11 @@
 import 'package:flutter/material.dart';
 
+import '../mixins/base_api_page_mixin.dart';
 import '../models/backend_config.dart';
 import '../models/employee.dart';
 import '../models/job.dart';
 import '../models/job_assignment.dart';
 import '../models/job_task.dart';
-import '../services/api_service.dart';
 import '../services/app_env.dart';
 import '../services/auth_session.dart';
 import '../services/backend_runtime.dart';
@@ -15,6 +15,7 @@ import '../widgets/brand_app_bar_title.dart';
 import '../widgets/demo_mode_notice.dart';
 import '../widgets/profile_menu_button.dart';
 import '../widgets/theme_toggle_button.dart';
+import '../utils/navigation_extensions.dart';
 
 class JobsPage extends StatefulWidget {
   const JobsPage({
@@ -34,7 +35,7 @@ class JobsPage extends StatefulWidget {
   State<JobsPage> createState() => _JobsPageState();
 }
 
-class _JobsPageState extends State<JobsPage> {
+class _JobsPageState extends State<JobsPage> with BaseApiPageMixin<JobsPage> {
   final _profileIdController = TextEditingController(text: '1');
   final _locationIdController = TextEditingController(text: '1');
   final _dateController = TextEditingController(
@@ -44,55 +45,47 @@ class _JobsPageState extends State<JobsPage> {
   late BackendKind _selectedBackend;
   late final TextEditingController _hostController;
 
-  bool _loading = false;
-  String? _error;
   List<Job> _jobs = const [];
   List<JobTask> _tasks = const [];
   List<JobAssignment> _assignments = const [];
   List<Employee> _employees = const [];
   String? _selectedJobId;
   String? _selectedEmployeeId;
-  String? get _token => AuthSession.current?.token.trim();
   bool get _isAdmin => AuthSession.current?.user.isAdmin == true;
   bool get _isClient => AuthSession.current?.user.isClient == true;
   bool get _isEmployee => AuthSession.current?.user.isEmployee == true;
 
-  ApiService get _api => ApiService();
-  BackendConfig get _backend => BackendRuntime.config;
-
   @override
   void initState() {
     super.initState();
-    _selectedBackend = _backend.kind;
+    _selectedBackend = backend.kind;
     _hostController = TextEditingController(text: BackendRuntime.host);
+  }
+
+  @override
+  bool checkAuthorization() {
     final session = AuthSession.current;
-    if (session == null) {
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (!mounted) return;
-        Navigator.pushReplacementNamed(context, '/');
-      });
-      return;
+    if (session == null) return false;
+    if (!session.user.isAdmin &&
+        !session.user.isClient &&
+        !session.user.isEmployee) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Admin, employee, or client access required'),
+        ),
+      );
+      context.navigateToHome();
+      return false;
     }
-    WidgetsBinding.instance.addPostFrameCallback((_) async {
-      if (!mounted) return;
-      if (!session.user.isAdmin &&
-          !session.user.isClient &&
-          !session.user.isEmployee) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(
-          const SnackBar(
-            content: Text('Admin, employee, or client access required'),
-          ),
-        );
-        Navigator.pushReplacementNamed(context, '/home');
-        return;
-      }
-      await _loadJobs();
-      if (session.user.isAdmin) {
-        await _loadEmployees();
-      }
-    });
+    return true;
+  }
+
+  @override
+  Future<void> loadData() async {
+    await _loadJobs();
+    if (AuthSession.current?.user.isAdmin == true) {
+      await _loadEmployees();
+    }
   }
 
   @override
@@ -116,14 +109,13 @@ class _JobsPageState extends State<JobsPage> {
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(content: Text('Backend set to ${next.label} (${next.baseUrl})')),
     );
-    Navigator.pushReplacementNamed(context, '/home');
+    context.navigateToHome();
   }
 
   Future<void> _loadEmployees() async {
-    final token = _token;
-    if (token == null || token.isEmpty) return;
+    if (token == null || token!.isEmpty) return;
     try {
-      final employees = await _api.listEmployees(bearerToken: token);
+      final employees = await api.listEmployees(bearerToken: token!);
       if (!mounted) return;
       setState(() {
         _employees = employees;
@@ -133,136 +125,101 @@ class _JobsPageState extends State<JobsPage> {
   }
 
   Future<void> _loadJobs() async {
-    final token = _token;
-    if (token == null || token.isEmpty) {
-      setState(() => _error = 'Login required');
-      return;
-    }
-    setState(() => _loading = true);
-    try {
-      final jobs = await _api.listJobs(bearerToken: token);
-      final visibleJobs = _isClient && widget.initialLocationId != null
-          ? jobs
-                .where((job) => job.locationId == widget.initialLocationId)
-                .toList()
-          : jobs;
-      final preferredJobId = widget.initialJobId;
-      final selectedJobId = (preferredJobId != null &&
-              visibleJobs.any((job) => job.id == preferredJobId))
-          ? preferredJobId
-          : (visibleJobs.isNotEmpty ? visibleJobs.first.id : null);
-      if (!mounted) return;
-      setState(() {
-        _jobs = visibleJobs;
-        _selectedJobId = selectedJobId;
-      });
-      await _loadSelectedJobDetails();
-    } catch (error) {
-      if (!mounted) return;
-      setState(() => _error = userFacingError(error));
-    } finally {
-      if (mounted) {
-        setState(() => _loading = false);
-      }
-    }
+    if (token == null || token!.isEmpty) return;
+    final jobs = await api.listJobs(bearerToken: token!);
+    final visibleJobs = _isClient && widget.initialLocationId != null
+        ? jobs
+              .where((job) => job.locationId == widget.initialLocationId)
+              .toList()
+        : jobs;
+    final preferredJobId = widget.initialJobId;
+    final selectedJobId = (preferredJobId != null &&
+            visibleJobs.any((job) => job.id == preferredJobId))
+        ? preferredJobId
+        : (visibleJobs.isNotEmpty ? visibleJobs.first.id : null);
+    if (!mounted) return;
+    setState(() {
+      _jobs = visibleJobs;
+      _selectedJobId = selectedJobId;
+    });
+    await _loadSelectedJobDetails();
   }
 
   Future<void> _loadSelectedJobDetails() async {
-    final token = _token;
     final jobId = _selectedJobId;
-    if (token == null || token.isEmpty || jobId == null || jobId.isEmpty) {
+    if (token == null || token!.isEmpty || jobId == null || jobId.isEmpty) {
       return;
     }
     try {
-      final tasks = await _api.listJobTasks(jobId, bearerToken: token);
-      final assignments = await _api.listJobAssignments(
+      final tasks = await api.listJobTasks(jobId, bearerToken: token!);
+      final assignments = await api.listJobAssignments(
         jobId,
-        bearerToken: token,
+        bearerToken: token!,
       );
       if (!mounted) return;
       setState(() {
         _tasks = tasks;
         _assignments = assignments;
       });
-    } catch (error) {
+    } catch (err) {
       if (!mounted) return;
-      setState(() => _error = userFacingError(error));
+      setError(userFacingError(err));
     }
   }
 
   Future<void> _createJob() async {
     if (AppEnv.isDemoMode) {
-      setState(
-        () => _error = 'Demo mode: create/edit/delete actions are disabled',
-      );
+      setError('Demo mode: create/edit/delete actions are disabled');
       return;
     }
-    final token = _token;
-    if (token == null || token.isEmpty) {
-      setState(() => _error = 'Login required');
+    if (token == null || token!.isEmpty) {
+      setError('Login required');
       return;
     }
     try {
-      await _api.createJob(
+      await api.createJob(
         JobCreateInput(
           profileId: int.parse(_profileIdController.text.trim()),
           locationId: int.parse(_locationIdController.text.trim()),
           scheduledDate: _dateController.text.trim(),
         ),
-        bearerToken: token,
+        bearerToken: token!,
       );
-      await _loadJobs();
-    } catch (error) {
+      await loadData();
+    } catch (err) {
       if (!mounted) return;
-      setState(() => _error = userFacingError(error));
+      setError(userFacingError(err));
     }
   }
 
   Future<void> _assignEmployee() async {
     if (AppEnv.isDemoMode) {
-      setState(
-        () => _error = 'Demo mode: create/edit/delete actions are disabled',
-      );
+      setError('Demo mode: create/edit/delete actions are disabled');
       return;
     }
-    final token = _token;
     final jobId = _selectedJobId;
     final employeeId = _selectedEmployeeId;
-    if (token == null || token.isEmpty || jobId == null || employeeId == null) {
+    if (token == null || token!.isEmpty || jobId == null || employeeId == null) {
       return;
     }
     try {
-      await _api.createJobAssignment(
+      await api.createJobAssignment(
         jobId,
         JobAssignmentCreateInput(employeeId: employeeId),
-        bearerToken: token,
+        bearerToken: token!,
       );
       await _loadSelectedJobDetails();
-    } catch (error) {
+    } catch (err) {
       if (!mounted) return;
-      setState(() => _error = userFacingError(error));
+      setError(userFacingError(err));
     }
   }
 
   @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(
-        title: const BrandAppBarTitle(),
-        bottom: const BackendBanner(),
-        actions: [
-          const ThemeToggleButton(),
-          IconButton(
-            onPressed: _loading ? null : _loadJobs,
-            icon: const Icon(Icons.refresh),
-            tooltip: 'Refresh',
-          ),
-          const ProfileMenuButton(),
-        ],
-      ),
-      body: ListView(
-        padding: const EdgeInsets.all(16),
-        children: [
+  Widget buildContent(BuildContext context) {
+    return ListView(
+      padding: const EdgeInsets.all(16),
+      children: [
           if (_isAdmin && BackendRuntime.allowBackendOverride) ...[
             const SizedBox(height: 12),
             Wrap(
@@ -375,15 +332,11 @@ class _JobsPageState extends State<JobsPage> {
                 ),
                 const SizedBox(width: 8),
                 FilledButton(
-                  onPressed: _loading || AppEnv.isDemoMode ? null : _createJob,
+                  onPressed: isLoading || AppEnv.isDemoMode ? null : _createJob,
                   child: const Text('Create'),
                 ),
               ],
             ),
-          ],
-          if (_error != null) ...[
-            const SizedBox(height: 12),
-            Text(_error!, style: TextStyle(color: Colors.red.shade700)),
           ],
           const SizedBox(height: 12),
           DropdownButtonFormField<String>(
@@ -431,7 +384,7 @@ class _JobsPageState extends State<JobsPage> {
                 ),
                 const SizedBox(width: 8),
                 FilledButton(
-                  onPressed: _loading || AppEnv.isDemoMode
+                  onPressed: isLoading || AppEnv.isDemoMode
                       ? null
                       : _assignEmployee,
                   child: const Text('Assign'),
@@ -456,7 +409,26 @@ class _JobsPageState extends State<JobsPage> {
                 .toList(),
           ),
         ],
+      );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(
+        title: const BrandAppBarTitle(),
+        bottom: const BackendBanner(),
+        actions: [
+          const ThemeToggleButton(),
+          IconButton(
+            onPressed: isLoading ? null : reload,
+            icon: const Icon(Icons.refresh),
+            tooltip: 'Refresh',
+          ),
+          const ProfileMenuButton(),
+        ],
       ),
+      body: buildBody(context),
     );
   }
 }

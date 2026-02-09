@@ -22,33 +22,8 @@ import '../widgets/employee/employee_dashboard_cards.dart';
 import '../widgets/employee/employee_job_card.dart';
 import '../widgets/profile_menu_button.dart';
 import '../widgets/theme_toggle_button.dart';
-
-DateTimeRange _currentWeekRange() {
-  final now = DateTime.now();
-  final daysSinceSunday = now.weekday % DateTime.daysPerWeek;
-  final start = DateTime(
-    now.year,
-    now.month,
-    now.day,
-  ).subtract(Duration(days: daysSinceSunday));
-  final end = start.add(const Duration(days: 6));
-  return DateTimeRange(start: start, end: end);
-}
-
-DateTimeRange _last30DaysRange() {
-  final now = DateTime.now();
-  final start = DateTime(
-    now.year,
-    now.month,
-    now.day,
-  ).subtract(const Duration(days: 29));
-  final end = DateTime(
-    now.year,
-    now.month,
-    now.day,
-  ).add(const Duration(days: 30));
-  return DateTimeRange(start: start, end: end);
-}
+import '../utils/navigation_extensions.dart';
+import '../utils/date_range_utils.dart';
 
 class HomePage extends StatefulWidget {
   const HomePage({super.key});
@@ -73,11 +48,11 @@ class _HomePageState extends State<HomePage> {
   List<Job> _cleanerJobs = const [];
   List<Location> _employeeLocations = const [];
   Employee? _employeeProfile;
-  DateTimeRange _employeeDateRange = _currentWeekRange();
+  DateTimeRange _employeeDateRange = DateRangeUtils.currentWeekRange();
   List<Location> _clientLocations = const [];
   List<Job> _clientJobs = const [];
   Client? _clientProfile;
-  DateTimeRange _clientDateRange = _last30DaysRange();
+  DateTimeRange _clientDateRange = DateRangeUtils.last30DaysRange();
   Map<String, List<JobAssignment>> _clientAssignmentsByJob = const {};
   bool _photoHovering = false;
   bool _uploadingPhoto = false;
@@ -93,7 +68,7 @@ class _HomePageState extends State<HomePage> {
     if (_session == null) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (!mounted) return;
-        Navigator.pushReplacementNamed(context, '/');
+        context.navigateToLogin();
       });
       return;
     }
@@ -104,7 +79,7 @@ class _HomePageState extends State<HomePage> {
     final valid = await _ensureSessionIsValid();
     if (!mounted) return;
     if (!valid) {
-      Navigator.pushReplacementNamed(context, '/');
+      context.navigateToLogin();
       return;
     }
     await _loadDashboard();
@@ -869,7 +844,7 @@ class _HomePageState extends State<HomePage> {
                     ),
                     TextButton(
                       onPressed: () => setState(
-                        () => _employeeDateRange = _currentWeekRange(),
+                        () => _employeeDateRange = DateRangeUtils.currentWeekRange(),
                       ),
                       child: const Text('Current week'),
                     ),
@@ -1305,7 +1280,7 @@ class _HomePageState extends State<HomePage> {
                               TextButton(
                                 onPressed: () {
                                   setState(() {
-                                    _clientDateRange = _last30DaysRange();
+                                    _clientDateRange = DateRangeUtils.last30DaysRange();
                                   });
                                 },
                                 child: const Text('Default range'),

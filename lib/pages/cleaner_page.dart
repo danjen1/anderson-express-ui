@@ -11,6 +11,7 @@ import '../widgets/backend_banner.dart';
 import '../widgets/brand_app_bar_title.dart';
 import '../widgets/profile_menu_button.dart';
 import '../widgets/theme_toggle_button.dart';
+import '../utils/navigation_extensions.dart';
 
 class CleanerPage extends StatefulWidget {
   const CleanerPage({super.key});
@@ -45,7 +46,7 @@ class _CleanerPageState extends State<CleanerPage> {
     if (session == null) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (!mounted) return;
-        Navigator.pushReplacementNamed(context, '/');
+        context.navigateToLogin();
       });
       return;
     }
@@ -57,7 +58,7 @@ class _CleanerPageState extends State<CleanerPage> {
             content: Text('Cleaner access requires employee role'),
           ),
         );
-        Navigator.pushReplacementNamed(context, '/home');
+        context.navigateToHome();
         return;
       }
       await _loadAssignedJobs();
@@ -82,7 +83,7 @@ class _CleanerPageState extends State<CleanerPage> {
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(content: Text('Backend set to ${next.label} (${next.baseUrl})')),
     );
-    Navigator.pushReplacementNamed(context, '/home');
+    context.navigateToHome();
   }
 
   Future<void> _loadAssignedJobs() async {

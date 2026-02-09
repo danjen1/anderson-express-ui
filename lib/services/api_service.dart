@@ -2,6 +2,7 @@ import 'dart:convert';
 
 import 'package:http/http.dart' as http;
 
+import '../config/api_constants.dart';
 import '../models/backend_config.dart';
 import '../models/auth_user.dart';
 import '../models/cleaning_profile.dart';
@@ -46,7 +47,7 @@ class ApiService {
           },
           body: body,
         )
-        .timeout(const Duration(seconds: 8));
+        .timeout(ApiTimeouts.standard);
 
     _throwIfError(response, fallbackMessage: 'Failed to fetch auth token');
     final data = jsonDecode(response.body) as Map<String, dynamic>;
@@ -63,7 +64,7 @@ class ApiService {
           Uri.parse('${_backend.baseUrl}/api/v1/auth/whoami'),
           headers: _headers(bearerToken),
         )
-        .timeout(const Duration(seconds: 8));
+        .timeout(ApiTimeouts.standard);
 
     _throwIfError(response, fallbackMessage: 'Failed to fetch current user');
     final data = jsonDecode(response.body) as Map<String, dynamic>;
@@ -83,7 +84,7 @@ class ApiService {
           },
           body: jsonEncode({'email': email, 'password': password}),
         )
-        .timeout(const Duration(seconds: 8));
+        .timeout(ApiTimeouts.standard);
 
     if (response.statusCode == 204) {
       return;
@@ -95,7 +96,7 @@ class ApiService {
     try {
       final response = await http
           .get(Uri.parse('${backend.baseUrl}${backend.healthPath}'))
-          .timeout(const Duration(seconds: 5));
+          .timeout(ApiTimeouts.quick);
       return response.statusCode == 200;
     } catch (_) {
       return false;
@@ -116,7 +117,7 @@ class ApiService {
 
     final response = await http
         .get(uri, headers: _headers(bearerToken))
-        .timeout(const Duration(seconds: 8));
+        .timeout(ApiTimeouts.standard);
 
     _throwIfError(response, fallbackMessage: 'Failed to list employees');
     final data = jsonDecode(response.body) as List<dynamic>;
@@ -131,7 +132,7 @@ class ApiService {
           Uri.parse('${_backend.baseUrl}${_backend.employeesPath}/$employeeId'),
           headers: _headers(bearerToken),
         )
-        .timeout(const Duration(seconds: 8));
+        .timeout(ApiTimeouts.standard);
 
     _throwIfError(response, fallbackMessage: 'Failed to fetch employee');
     final data = jsonDecode(response.body) as Map<String, dynamic>;
@@ -148,7 +149,7 @@ class ApiService {
           headers: _headers(bearerToken),
           body: jsonEncode(input.toJson()),
         )
-        .timeout(const Duration(seconds: 20));
+        .timeout(ApiTimeouts.long);
 
     _throwIfError(response, fallbackMessage: 'Failed to create employee');
     final data = jsonDecode(response.body) as Map<String, dynamic>;
@@ -171,7 +172,7 @@ class ApiService {
           headers: _headers(bearerToken),
           body: jsonEncode(payload),
         )
-        .timeout(const Duration(seconds: 20));
+        .timeout(ApiTimeouts.long);
 
     _throwIfError(response, fallbackMessage: 'Failed to update employee');
     final data = jsonDecode(response.body) as Map<String, dynamic>;
@@ -187,7 +188,7 @@ class ApiService {
           Uri.parse('${_backend.baseUrl}${_backend.employeesPath}/$employeeId'),
           headers: _headers(bearerToken),
         )
-        .timeout(const Duration(seconds: 8));
+        .timeout(ApiTimeouts.standard);
 
     _throwIfError(response, fallbackMessage: 'Failed to delete employee');
     if (response.body.isEmpty) {
@@ -206,7 +207,7 @@ class ApiService {
           Uri.parse('${_backend.baseUrl}/api/v1/clients'),
           headers: _headers(bearerToken),
         )
-        .timeout(const Duration(seconds: 8));
+        .timeout(ApiTimeouts.standard);
 
     _throwIfError(response, fallbackMessage: 'Failed to list clients');
     final data = jsonDecode(response.body) as List<dynamic>;
@@ -225,7 +226,7 @@ class ApiService {
           headers: _headers(bearerToken),
           body: jsonEncode(input.toJson()),
         )
-        .timeout(const Duration(seconds: 20));
+        .timeout(ApiTimeouts.long);
 
     _throwIfError(response, fallbackMessage: 'Failed to create client');
     final data = jsonDecode(response.body) as Map<String, dynamic>;
@@ -238,7 +239,7 @@ class ApiService {
           Uri.parse('${_backend.baseUrl}/api/v1/clients/$clientId'),
           headers: _headers(bearerToken),
         )
-        .timeout(const Duration(seconds: 8));
+        .timeout(ApiTimeouts.standard);
 
     _throwIfError(response, fallbackMessage: 'Failed to fetch client');
     final data = jsonDecode(response.body) as Map<String, dynamic>;
@@ -261,7 +262,7 @@ class ApiService {
           headers: _headers(bearerToken),
           body: jsonEncode(payload),
         )
-        .timeout(const Duration(seconds: 20));
+        .timeout(ApiTimeouts.long);
 
     _throwIfError(response, fallbackMessage: 'Failed to update client');
     final data = jsonDecode(response.body) as Map<String, dynamic>;
@@ -274,7 +275,7 @@ class ApiService {
           Uri.parse('${_backend.baseUrl}/api/v1/clients/$clientId'),
           headers: _headers(bearerToken),
         )
-        .timeout(const Duration(seconds: 8));
+        .timeout(ApiTimeouts.standard);
 
     _throwIfError(response, fallbackMessage: 'Failed to delete client');
     if (response.body.isEmpty) {
@@ -298,7 +299,7 @@ class ApiService {
 
     final response = await http
         .get(uri, headers: _headers(bearerToken))
-        .timeout(const Duration(seconds: 8));
+        .timeout(ApiTimeouts.standard);
 
     _throwIfError(response, fallbackMessage: 'Failed to list locations');
     final data = jsonDecode(response.body) as List<dynamic>;
@@ -317,7 +318,7 @@ class ApiService {
           headers: _headers(bearerToken),
           body: jsonEncode(input.toJson()),
         )
-        .timeout(const Duration(seconds: 8));
+        .timeout(ApiTimeouts.standard);
 
     _throwIfError(response, fallbackMessage: 'Failed to create location');
     final data = jsonDecode(response.body) as Map<String, dynamic>;
@@ -340,7 +341,7 @@ class ApiService {
           headers: _headers(bearerToken),
           body: jsonEncode(payload),
         )
-        .timeout(const Duration(seconds: 8));
+        .timeout(ApiTimeouts.standard);
 
     _throwIfError(response, fallbackMessage: 'Failed to update location');
     final data = jsonDecode(response.body) as Map<String, dynamic>;
@@ -356,7 +357,7 @@ class ApiService {
           Uri.parse('${_backend.baseUrl}/api/v1/locations/$locationId'),
           headers: _headers(bearerToken),
         )
-        .timeout(const Duration(seconds: 8));
+        .timeout(ApiTimeouts.standard);
 
     _throwIfError(response, fallbackMessage: 'Failed to delete location');
     if (response.body.isEmpty) {
@@ -383,7 +384,7 @@ class ApiService {
 
     final response = await http
         .get(uri, headers: _headers(bearerToken))
-        .timeout(const Duration(seconds: 8));
+        .timeout(ApiTimeouts.standard);
 
     _throwIfError(response, fallbackMessage: 'Failed to list jobs');
     final data = jsonDecode(response.body) as List<dynamic>;
@@ -399,7 +400,7 @@ class ApiService {
           headers: _headers(bearerToken),
           body: jsonEncode(input.toJson()),
         )
-        .timeout(const Duration(seconds: 8));
+        .timeout(ApiTimeouts.standard);
 
     _throwIfError(response, fallbackMessage: 'Failed to create job');
     final data = jsonDecode(response.body) as Map<String, dynamic>;
@@ -417,7 +418,7 @@ class ApiService {
           headers: _headers(bearerToken),
           body: jsonEncode(input.toJson()),
         )
-        .timeout(const Duration(seconds: 8));
+        .timeout(ApiTimeouts.standard);
 
     _throwIfError(response, fallbackMessage: 'Failed to update job');
     final data = jsonDecode(response.body) as Map<String, dynamic>;
@@ -430,7 +431,7 @@ class ApiService {
           Uri.parse('${_backend.baseUrl}/api/v1/jobs/$jobId'),
           headers: _headers(bearerToken),
         )
-        .timeout(const Duration(seconds: 8));
+        .timeout(ApiTimeouts.standard);
 
     _throwIfError(response, fallbackMessage: 'Failed to delete job');
     if (response.body.isEmpty) {
@@ -452,7 +453,7 @@ class ApiService {
           Uri.parse('${_backend.baseUrl}/api/v1/jobs/$jobId/tasks'),
           headers: _headers(bearerToken),
         )
-        .timeout(const Duration(seconds: 8));
+        .timeout(ApiTimeouts.standard);
 
     _throwIfError(response, fallbackMessage: 'Failed to list job tasks');
     final data = jsonDecode(response.body) as List<dynamic>;
@@ -478,7 +479,7 @@ class ApiService {
           headers: _headers(bearerToken),
           body: jsonEncode(payload),
         )
-        .timeout(const Duration(seconds: 8));
+        .timeout(ApiTimeouts.standard);
 
     _throwIfError(response, fallbackMessage: 'Failed to update job task');
     final data = jsonDecode(response.body) as Map<String, dynamic>;
@@ -494,7 +495,7 @@ class ApiService {
           Uri.parse('${_backend.baseUrl}/api/v1/jobs/$jobId/assignments'),
           headers: _headers(bearerToken),
         )
-        .timeout(const Duration(seconds: 8));
+        .timeout(ApiTimeouts.standard);
 
     _throwIfError(response, fallbackMessage: 'Failed to list job assignments');
     final data = jsonDecode(response.body) as List<dynamic>;
@@ -514,7 +515,7 @@ class ApiService {
           headers: _headers(bearerToken),
           body: jsonEncode(input.toJson()),
         )
-        .timeout(const Duration(seconds: 8));
+        .timeout(ApiTimeouts.standard);
 
     _throwIfError(response, fallbackMessage: 'Failed to create job assignment');
     final data = jsonDecode(response.body) as Map<String, dynamic>;
@@ -533,7 +534,7 @@ class ApiService {
           ),
           headers: _headers(bearerToken),
         )
-        .timeout(const Duration(seconds: 8));
+        .timeout(ApiTimeouts.standard);
 
     _throwIfError(response, fallbackMessage: 'Failed to delete job assignment');
     if (response.body.isEmpty) {
@@ -554,7 +555,7 @@ class ApiService {
           Uri.parse('${_backend.baseUrl}/api/v1/cleaning/task-definitions'),
           headers: _headers(bearerToken),
         )
-        .timeout(const Duration(seconds: 8));
+        .timeout(ApiTimeouts.standard);
 
     _throwIfError(response, fallbackMessage: 'Failed to list task definitions');
     final data = jsonDecode(response.body) as List<dynamic>;
@@ -573,7 +574,7 @@ class ApiService {
           headers: _headers(bearerToken),
           body: jsonEncode(input.toJson()),
         )
-        .timeout(const Duration(seconds: 8));
+        .timeout(ApiTimeouts.standard);
 
     _throwIfError(
       response,
@@ -589,7 +590,7 @@ class ApiService {
           Uri.parse('${_backend.baseUrl}/api/v1/cleaning/task-rules'),
           headers: _headers(bearerToken),
         )
-        .timeout(const Duration(seconds: 8));
+        .timeout(ApiTimeouts.standard);
 
     _throwIfError(response, fallbackMessage: 'Failed to list task rules');
     final data = jsonDecode(response.body) as List<dynamic>;
@@ -611,7 +612,7 @@ class ApiService {
 
     final response = await http
         .get(uri, headers: _headers(bearerToken))
-        .timeout(const Duration(seconds: 8));
+        .timeout(ApiTimeouts.standard);
 
     _throwIfError(
       response,
@@ -633,7 +634,7 @@ class ApiService {
           headers: _headers(bearerToken),
           body: jsonEncode(input.toJson()),
         )
-        .timeout(const Duration(seconds: 8));
+        .timeout(ApiTimeouts.standard);
 
     _throwIfError(
       response,
@@ -659,7 +660,7 @@ class ApiService {
           headers: _headers(bearerToken),
           body: jsonEncode(payload),
         )
-        .timeout(const Duration(seconds: 8));
+        .timeout(ApiTimeouts.standard);
 
     _throwIfError(
       response,
@@ -678,7 +679,7 @@ class ApiService {
           Uri.parse('${_backend.baseUrl}/api/v1/cleaning/profiles/$profileId'),
           headers: _headers(bearerToken),
         )
-        .timeout(const Duration(seconds: 8));
+        .timeout(ApiTimeouts.standard);
 
     _throwIfError(
       response,
@@ -705,7 +706,7 @@ class ApiService {
           ),
           headers: _headers(bearerToken),
         )
-        .timeout(const Duration(seconds: 8));
+        .timeout(ApiTimeouts.standard);
 
     _throwIfError(response, fallbackMessage: 'Failed to list profile tasks');
     final data = jsonDecode(response.body) as List<dynamic>;
@@ -727,7 +728,7 @@ class ApiService {
           headers: _headers(bearerToken),
           body: jsonEncode(input.toJson()),
         )
-        .timeout(const Duration(seconds: 8));
+        .timeout(ApiTimeouts.standard);
 
     _throwIfError(response, fallbackMessage: 'Failed to create profile task');
     final data = jsonDecode(response.body) as Map<String, dynamic>;
@@ -753,7 +754,7 @@ class ApiService {
           headers: _headers(bearerToken),
           body: jsonEncode(payload),
         )
-        .timeout(const Duration(seconds: 8));
+        .timeout(ApiTimeouts.standard);
 
     _throwIfError(response, fallbackMessage: 'Failed to update profile task');
     final data = jsonDecode(response.body) as Map<String, dynamic>;
@@ -772,7 +773,7 @@ class ApiService {
           ),
           headers: _headers(bearerToken),
         )
-        .timeout(const Duration(seconds: 8));
+        .timeout(ApiTimeouts.standard);
 
     _throwIfError(response, fallbackMessage: 'Failed to delete profile task');
     if (response.body.isEmpty) {
@@ -795,7 +796,7 @@ class ApiService {
           headers: _headers(bearerToken),
           body: jsonEncode(input.toJson()),
         )
-        .timeout(const Duration(seconds: 8));
+        .timeout(ApiTimeouts.standard);
 
     _throwIfError(response, fallbackMessage: 'Failed to create task rule');
     final data = jsonDecode(response.body) as Map<String, dynamic>;
@@ -812,7 +813,7 @@ class ApiService {
           headers: _headers(bearerToken),
           body: jsonEncode(input.toJson()),
         )
-        .timeout(const Duration(seconds: 10));
+        .timeout(ApiTimeouts.medium);
 
     _throwIfError(
       response,
@@ -839,7 +840,7 @@ class ApiService {
 
     final response = await http
         .get(uri, headers: _headers(bearerToken))
-        .timeout(const Duration(seconds: 10));
+        .timeout(ApiTimeouts.medium);
 
     _throwIfError(
       response,
@@ -862,7 +863,7 @@ class ApiService {
           headers: _headers(bearerToken),
           body: jsonEncode({'status': status}),
         )
-        .timeout(const Duration(seconds: 10));
+        .timeout(ApiTimeouts.medium);
 
     _throwIfError(
       response,

@@ -10,7 +10,7 @@ import 'pages/jobs_page.dart';
 import 'pages/locations_page.dart';
 import 'pages/knowledge_base_page.dart';
 import 'pages/profile_page.dart';
-import 'pages/qa_smoke_page.dart';
+import 'debug/qa_smoke_page.dart';
 import 'services/theme_controller.dart';
 
 const Color kBrandPrimary = Color.fromRGBO(32, 116, 84, 1);

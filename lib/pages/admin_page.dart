@@ -28,13 +28,19 @@ import '../widgets/admin/dialogs/profile_task_editor_dialog.dart';
 import '../widgets/admin/dialogs/task_definition_editor_dialog.dart';
 import '../widgets/admin/dialogs/task_rule_editor_dialog.dart';
 import '../widgets/admin/admin_sidebar.dart';
+import '../widgets/admin/sections/cleaning_profiles_section.dart';
+import '../widgets/admin/sections/dashboard_section.dart';
+import '../widgets/admin/sections/jobs_section.dart';
+import '../widgets/admin/sections/management_section.dart';
+import '../utils/dialog_utils.dart';
 import '../widgets/backend_banner.dart';
 import '../widgets/brand_app_bar_title.dart';
 import '../widgets/demo_mode_notice.dart';
 import '../widgets/profile_menu_button.dart';
 import '../widgets/theme_toggle_button.dart';
+import '../utils/navigation_extensions.dart';
 
-enum _ManagementModel { employees, clients, locations }
+
 
 enum _EmployeeFilter { all, active, invited }
 
@@ -44,7 +50,7 @@ enum _LocationFilter { all, active, inactive }
 
 enum _JobFilter { all, pending, assigned, inProgress, completed, overdue }
 
-enum _CleaningRequestFilter { open, reviewed, scheduled, closed, all }
+
 
 class AdminPage extends StatefulWidget {
   const AdminPage({super.key});
@@ -56,8 +62,6 @@ class AdminPage extends StatefulWidget {
 class _AdminPageState extends State<AdminPage> {
   static const String _defaultEmployeePhotoAsset =
       '/assets/images/profiles/employee_default.png';
-  static const String _defaultLocationPhotoAsset =
-      '/assets/images/locations/location_default.png';
   final GlobalKey<ScaffoldState> _scaffoldKey = GlobalKey<ScaffoldState>();
   late BackendKind _selectedBackend;
   late final TextEditingController _hostController;
@@ -70,7 +74,6 @@ class _AdminPageState extends State<AdminPage> {
   String? _error;
   List<Employee> _employees = const [];
   List<Job> _jobs = const [];
-  Map<String, String> _jobCleanerNameByJobId = const {};
   List<Client> _clients = const [];
   List<Location> _locations = const [];
   List<CleaningProfile> _cleaningProfiles = const [];
@@ -79,16 +82,17 @@ class _AdminPageState extends State<AdminPage> {
   List<TaskRule> _taskRules = const [];
   List<ProfileTask> _selectedProfileTasks = const [];
   AdminSection _selectedSection = AdminSection.dashboard;
-  _ManagementModel _managementModel = _ManagementModel.employees;
-  _EmployeeFilter _employeeFilter = _EmployeeFilter.active;
-  _ClientFilter _clientFilter = _ClientFilter.active;
-  _LocationFilter _locationFilter = _LocationFilter.active;
+  ManagementModel _managementModel = ManagementModel.employees;
+  bool _activeOnlyFilter = true;
+  final _EmployeeFilter _employeeFilter = _EmployeeFilter.active;
+  final _ClientFilter _clientFilter = _ClientFilter.active;
+  final _LocationFilter _locationFilter = _LocationFilter.active;
   _JobFilter _jobFilter = _JobFilter.all;
   DateTimeRange _jobDateRange = DateTimeRange(
     start: DateTime.now().subtract(const Duration(days: 30)),
     end: DateTime.now().add(const Duration(days: 30)),
   );
-  _CleaningRequestFilter _cleaningRequestFilter = _CleaningRequestFilter.open;
+  CleaningRequestFilter _cleaningRequestFilter = CleaningRequestFilter.open;
   String? _selectedCleaningProfileId;
   bool _loadingProfileTasks = false;
 
@@ -130,38 +134,6 @@ class _AdminPageState extends State<AdminPage> {
     );
   }
 
-  Future<bool> _showPolishedDeleteDialog({
-    required String title,
-    required String message,
-  }) async {
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (context) => Theme(
-        data: buildCrudModalTheme(context),
-        child: AlertDialog(
-          title: Text(
-            title,
-            style: TextStyle(
-              color: crudModalTitleColor(context),
-              fontWeight: FontWeight.w800,
-            ),
-          ),
-          content: Text(message),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(context, false),
-              child: const Text('Cancel'),
-            ),
-            FilledButton(
-              onPressed: () => Navigator.pop(context, true),
-              child: const Text('Delete'),
-            ),
-          ],
-        ),
-      ),
-    );
-    return confirmed == true;
-  }
 
   @override
   void initState() {
@@ -172,7 +144,7 @@ class _AdminPageState extends State<AdminPage> {
     if (session == null) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (!mounted) return;
-        Navigator.pushReplacementNamed(context, '/');
+        context.navigateToLogin();
       });
       return;
     }
@@ -182,7 +154,7 @@ class _AdminPageState extends State<AdminPage> {
         ScaffoldMessenger.of(
           context,
         ).showSnackBar(const SnackBar(content: Text('Admin access required')));
-        Navigator.pushReplacementNamed(context, '/home');
+        context.navigateToHome();
         return;
       }
       await _loadAdminData();
@@ -207,7 +179,7 @@ class _AdminPageState extends State<AdminPage> {
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(content: Text('Backend set to ${next.label} (${next.baseUrl})')),
     );
-    Navigator.pushReplacementNamed(context, '/admin');
+    context.navigateToAdmin();
   }
 
   Future<void> _loadAdminData() async {
@@ -266,33 +238,6 @@ class _AdminPageState extends State<AdminPage> {
       for (final employee in employees) {
         cleanerNameById[employee.id] = employee.name;
       }
-      final cleanerByJobId = <String, String>{};
-      for (final job in jobs) {
-        try {
-          final assignments = await _api.listJobAssignments(
-            job.id,
-            bearerToken: token,
-          );
-          JobAssignment? activeAssignment;
-          for (final assignment in assignments) {
-            if (assignment.isActive) {
-              activeAssignment = assignment;
-              break;
-            }
-          }
-          if (activeAssignment != null) {
-            final cleanerName =
-                activeAssignment.employeeName ??
-                cleanerNameById[activeAssignment.employeeId] ??
-                'Unassigned';
-            cleanerByJobId[job.id] = cleanerName;
-          } else {
-            cleanerByJobId[job.id] = 'Unassigned';
-          }
-        } catch (_) {
-          cleanerByJobId[job.id] = 'Unassigned';
-        }
-      }
       final previousSelected = _selectedCleaningProfileId;
       final nextSelected = profiles.any((p) => p.id == previousSelected)
           ? previousSelected
@@ -302,7 +247,6 @@ class _AdminPageState extends State<AdminPage> {
       setState(() {
         _employees = employees;
         _jobs = jobs;
-        _jobCleanerNameByJobId = cleanerByJobId;
         _clients = clients;
         _locations = locations;
         _cleaningProfiles = profiles;
@@ -433,41 +377,6 @@ class _AdminPageState extends State<AdminPage> {
     }
   }
 
-  Future<void> _delete(Employee employee) async {
-    final confirmed = await _showPolishedDeleteDialog(
-      title: 'Delete employee',
-      message: 'Delete ${employee.employeeNumber} - ${employee.name}?',
-    );
-
-    if (confirmed != true) return;
-
-    if (AppEnv.isDemoMode) {
-      await _showDemoCreateDialog(
-        title: 'Demo Employee Deleted',
-        message:
-            'Employee "${employee.name}" was removed in preview walkthrough mode. No database changes were made.',
-      );
-      return;
-    }
-
-    try {
-      final message = await _api.deleteEmployee(
-        employee.id,
-        bearerToken: _token,
-      );
-      await _loadAdminData();
-      if (!mounted) return;
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text(message)));
-    } catch (error) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text(userFacingError(error))));
-    }
-  }
-
   Future<void> _showCreateClientDialog() async {
     final result = await showDialog<ClientCreateInput>(
       context: context,
@@ -542,10 +451,35 @@ class _AdminPageState extends State<AdminPage> {
     }
   }
 
+  Future<void> _deleteEmployee(Employee emp) async {
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Delete Employee'),
+        content: Text('Delete ${emp.name}?'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Cancel'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('Delete'),
+          ),
+        ],
+      ),
+    );
+    if (confirm == true) {
+      await _api.deleteEmployee(emp.id);
+      await _loadAdminData();
+    }
+  }
+
   Future<void> _deleteClient(Client client) async {
-    final confirmed = await _showPolishedDeleteDialog(
-      title: 'Delete client',
-      message: 'Delete ${client.clientNumber} - ${client.name}?',
+    final confirmed = await showDeleteConfirmationDialog(
+      context,
+      itemType: 'client',
+      itemName: '${client.clientNumber} - ${client.name}',
     );
     if (!confirmed) return;
 
@@ -562,9 +496,7 @@ class _AdminPageState extends State<AdminPage> {
       final message = await _api.deleteClient(client.id, bearerToken: _token);
       await _loadAdminData();
       if (!mounted) return;
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text(message)));
+      showSuccessSnackBar(context, message);
     } catch (error) {
       if (!mounted) return;
       ScaffoldMessenger.of(
@@ -664,10 +596,10 @@ class _AdminPageState extends State<AdminPage> {
   }
 
   Future<void> _deleteLocation(Location location) async {
-    final confirmed = await _showPolishedDeleteDialog(
-      title: 'Delete location',
-      message:
-          'Delete ${location.locationNumber} (client ${location.clientId})?',
+    final confirmed = await showDeleteConfirmationDialog(
+      context,
+      itemType: 'location',
+      itemName: '${location.locationNumber} (client ${location.clientId})',
     );
     if (!confirmed) return;
 
@@ -687,9 +619,7 @@ class _AdminPageState extends State<AdminPage> {
       );
       await _loadAdminData();
       if (!mounted) return;
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text(message)));
+      showSuccessSnackBar(context, message);
     } catch (error) {
       if (!mounted) return;
       ScaffoldMessenger.of(
@@ -919,10 +849,10 @@ class _AdminPageState extends State<AdminPage> {
   }
 
   Future<void> _deleteJob(Job job) async {
-    final confirmed = await _showPolishedDeleteDialog(
-      title: 'Delete job',
-      message:
-          'Delete Job for ${job.clientName ?? 'Unknown Client'} on ${formatDateMdy(job.scheduledDate)}',
+    final confirmed = await showDeleteConfirmationDialog(
+      context,
+      itemType: 'job',
+      itemName: '${job.clientName ?? 'Unknown Client'} on ${formatDateMdy(job.scheduledDate)}',
     );
     if (confirmed != true) return;
 
@@ -939,9 +869,7 @@ class _AdminPageState extends State<AdminPage> {
       final message = await _api.deleteJob(job.id, bearerToken: _token);
       await _loadAdminData();
       if (!mounted) return;
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text(message)));
+      showSuccessSnackBar(context, message);
     } catch (error) {
       if (!mounted) return;
       ScaffoldMessenger.of(
@@ -1060,9 +988,7 @@ class _AdminPageState extends State<AdminPage> {
       );
       await _loadAdminData();
       if (!mounted) return;
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text(message)));
+      showSuccessSnackBar(context, message);
     } catch (error) {
       if (!mounted) return;
       ScaffoldMessenger.of(
@@ -1110,15 +1036,11 @@ class _AdminPageState extends State<AdminPage> {
 
   Future<void> _showAddProfileTaskDialog() async {
     if (_selectedCleaningProfileId == null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Select a cleaning profile first')),
-      );
+      showErrorSnackBar(context, 'Select a cleaning profile first');
       return;
     }
     if (_taskDefinitions.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Create task definitions first')),
-      );
+      showErrorSnackBar(context, 'Create task definitions first');
       return;
     }
 
@@ -1239,9 +1161,7 @@ class _AdminPageState extends State<AdminPage> {
       );
       await _loadProfileTasks(_selectedCleaningProfileId!);
       if (!mounted) return;
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text(message)));
+      showSuccessSnackBar(context, message);
     } catch (error) {
       if (!mounted) return;
       ScaffoldMessenger.of(
@@ -1283,9 +1203,7 @@ class _AdminPageState extends State<AdminPage> {
 
   Future<void> _showCreateTaskRuleDialog() async {
     if (_taskDefinitions.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Create a task definition first')),
-      );
+      showErrorSnackBar(context, 'Create a task definition first');
       return;
     }
 
@@ -1452,52 +1370,8 @@ class _AdminPageState extends State<AdminPage> {
     }).toList();
   }
 
-  String _jobFilterLabel(_JobFilter filter) {
-    return switch (filter) {
-      _JobFilter.pending => 'Pending',
-      _JobFilter.assigned => 'Assigned',
-      _JobFilter.inProgress => 'In Progress',
-      _JobFilter.completed => 'Completed',
-      _JobFilter.overdue => 'Overdue',
-      _JobFilter.all => 'All',
-    };
-  }
-
-  Future<void> _pickJobStartDate() async {
-    final picked = await showDatePicker(
-      context: context,
-      initialDate: _jobDateRange.start,
-      firstDate: DateTime(2020, 1, 1),
-      lastDate: DateTime(2100, 12, 31),
-    );
-    if (picked == null) return;
-    setState(() {
-      final currentEnd = _jobDateRange.end;
-      _jobDateRange = DateTimeRange(
-        start: picked,
-        end: picked.isAfter(currentEnd) ? picked : currentEnd,
-      );
-    });
-  }
-
-  Future<void> _pickJobEndDate() async {
-    final picked = await showDatePicker(
-      context: context,
-      initialDate: _jobDateRange.end,
-      firstDate: DateTime(2020, 1, 1),
-      lastDate: DateTime(2100, 12, 31),
-    );
-    if (picked == null) return;
-    setState(() {
-      final currentStart = _jobDateRange.start;
-      _jobDateRange = DateTimeRange(
-        start: picked.isBefore(currentStart) ? picked : currentStart,
-        end: picked,
-      );
-    });
-  }
-
-  String _locationLabel(int locationId) {
+  String _locationLabel(int? locationId) {
+    if (locationId == null) return 'N/A';
     for (final location in _locations) {
       if (int.tryParse(location.id) == locationId) {
         return location.locationNumber;
@@ -1534,24 +1408,6 @@ class _AdminPageState extends State<AdminPage> {
     return _jobs.where(_isOverdue).length;
   }
 
-  List<CleaningRequest> get _filteredCleaningRequests {
-    return _cleaningRequests.where((request) {
-      final status = request.status.trim().toUpperCase();
-      switch (_cleaningRequestFilter) {
-        case _CleaningRequestFilter.open:
-          return status == 'OPEN';
-        case _CleaningRequestFilter.reviewed:
-          return status == 'REVIEWED';
-        case _CleaningRequestFilter.scheduled:
-          return status == 'SCHEDULED';
-        case _CleaningRequestFilter.closed:
-          return status == 'CLOSED';
-        case _CleaningRequestFilter.all:
-          return true;
-      }
-    }).toList();
-  }
-
   Future<void> _updateCleaningRequestStatus(
     CleaningRequest request,
     String status,
@@ -1564,9 +1420,7 @@ class _AdminPageState extends State<AdminPage> {
       );
       await _loadAdminData();
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Request #${request.id} moved to $status.')),
-      );
+      showSuccessSnackBar(context, 'Request #${request.id} moved to $status.');
     } catch (error) {
       if (!mounted) return;
       ScaffoldMessenger.of(
@@ -1629,48 +1483,6 @@ class _AdminPageState extends State<AdminPage> {
     );
   }
 
-  ({String label, Color bg, Color fg, Color border}) _employeeStatusBadge(
-    Employee employee,
-  ) {
-    final status = employee.status.trim().toLowerCase();
-    return _statusBadgeForValue(status);
-  }
-
-  ({String label, Color bg, Color fg, Color border}) _statusBadgeForValue(
-    String status,
-  ) {
-    switch (status) {
-      case 'active':
-        return (
-          label: 'A',
-          bg: const Color(0xFFE7F4ED),
-          fg: const Color(0xFF1F6A43),
-          border: const Color(0xFF49A07D),
-        );
-      case 'invited':
-        return (
-          label: 'V',
-          bg: const Color(0xFFFFF4E7),
-          fg: const Color(0xFF9B4B12),
-          border: const Color(0xFFEE7E32),
-        );
-      case 'deleted':
-        return (
-          label: 'D',
-          bg: const Color(0xFFFBE7EE),
-          fg: const Color(0xFFE63721),
-          border: const Color(0xFFE63721),
-        );
-      default:
-        return (
-          label: status.isEmpty ? '?' : status[0].toUpperCase(),
-          bg: const Color(0xFFEAF0F5),
-          fg: const Color(0xFF41588E),
-          border: const Color(0xFF8AA4C7),
-        );
-    }
-  }
-
   Widget _centeredSectionBody(Widget child, {double maxWidth = 1240}) {
     return Center(
       child: ConstrainedBox(
@@ -1687,13 +1499,6 @@ class _AdminPageState extends State<AdminPage> {
       }
     }
     return 'Client $clientId';
-  }
-
-  String _assetPath(String? value, {required String fallback}) {
-    final candidate = (value == null || value.trim().isEmpty)
-        ? fallback
-        : value.trim();
-    return candidate.startsWith('/') ? candidate.substring(1) : candidate;
   }
 
   String _adminDisplayName() {
@@ -1776,1457 +1581,9 @@ class _AdminPageState extends State<AdminPage> {
     );
   }
 
-  Widget _buildDashboardSection() {
-    final activeEmployees = _employees
-        .where((e) => e.status.trim().toLowerCase() == 'active')
-        .length;
-    final overdueJobs = _jobs.where(_isOverdue).toList()
-      ..sort((a, b) => a.scheduledDate.compareTo(b.scheduledDate));
-    final utilizationAssigned = activeEmployees == 0
-        ? 0.0
-        : (_totalAssignedJobs / activeEmployees).clamp(0, 8) / 8;
-    final utilizationCompleted = activeEmployees == 0
-        ? 0.0
-        : (_totalCompletedJobs / activeEmployees).clamp(0, 8) / 8;
 
-    return ListView(
-      children: [
-        _buildSectionHeader(
-          'Operations Dashboard',
-          'Snapshot across all employees and all jobs.',
-        ),
-        Card(
-          child: Padding(
-            padding: const EdgeInsets.all(14),
-            child: Wrap(
-              spacing: 10,
-              runSpacing: 10,
-              children: [
-                _metricTile(
-                  label: 'Pending',
-                  value: _totalPendingJobs.toString(),
-                  icon: Icons.pending_actions,
-                  bg: const Color.fromRGBO(255, 249, 224, 1),
-                  fg: const Color.fromRGBO(138, 92, 8, 1),
-                ),
-                _metricTile(
-                  label: 'Assigned',
-                  value: _totalAssignedJobs.toString(),
-                  icon: Icons.assignment_outlined,
-                  bg: const Color.fromRGBO(255, 249, 224, 1),
-                  fg: const Color.fromRGBO(138, 92, 8, 1),
-                ),
-                _metricTile(
-                  label: 'In Progress',
-                  value: _totalInProgressJobs.toString(),
-                  icon: Icons.timelapse_outlined,
-                  bg: const Color.fromRGBO(231, 239, 252, 1),
-                  fg: const Color.fromRGBO(31, 63, 122, 1),
-                ),
-                _metricTile(
-                  label: 'Completed',
-                  value: _totalCompletedJobs.toString(),
-                  icon: Icons.task_alt,
-                  bg: const Color.fromRGBO(241, 236, 252, 1),
-                  fg: const Color.fromRGBO(68, 46, 111, 1),
-                ),
-                _metricTile(
-                  label: 'Overdue',
-                  value: _totalOverdueJobs.toString(),
-                  icon: Icons.warning_amber_outlined,
-                  bg: const Color.fromRGBO(255, 232, 238, 1),
-                  fg: const Color.fromRGBO(156, 42, 74, 1),
-                ),
-                _metricTile(
-                  label: 'Employees',
-                  value: '${_employees.length} total ($activeEmployees active)',
-                  icon: Icons.groups_outlined,
-                  bg: const Color.fromRGBO(231, 239, 252, 1),
-                  fg: const Color.fromRGBO(31, 63, 122, 1),
-                ),
-              ],
-            ),
-          ),
-        ),
-        const SizedBox(height: 16),
-        Card(
-          child: Padding(
-            padding: const EdgeInsets.all(14),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                const Text('Per-Employee Utilization (Placeholder)'),
-                const SizedBox(height: 8),
-                Text(
-                  'Data source wiring pending: current bars use high-level averages.',
-                  style: TextStyle(color: Theme.of(context).hintColor),
-                ),
-                const SizedBox(height: 12),
-                Text('Assigned capacity'),
-                const SizedBox(height: 6),
-                LinearProgressIndicator(value: utilizationAssigned),
-                const SizedBox(height: 10),
-                Text('Completed throughput'),
-                const SizedBox(height: 6),
-                LinearProgressIndicator(value: utilizationCompleted),
-              ],
-            ),
-          ),
-        ),
-        const SizedBox(height: 12),
-        Card(
-          child: Padding(
-            padding: const EdgeInsets.all(14),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                const Text(
-                  'Cleaning Requests',
-                  style: TextStyle(fontWeight: FontWeight.w700),
-                ),
-                const SizedBox(height: 8),
-                Wrap(
-                  spacing: 8,
-                  runSpacing: 8,
-                  children: [
-                    ChoiceChip(
-                      label: const Text('Open'),
-                      selected:
-                          _cleaningRequestFilter == _CleaningRequestFilter.open,
-                      onSelected: (_) => setState(
-                        () => _cleaningRequestFilter =
-                            _CleaningRequestFilter.open,
-                      ),
-                    ),
-                    ChoiceChip(
-                      label: const Text('Reviewed'),
-                      selected:
-                          _cleaningRequestFilter ==
-                          _CleaningRequestFilter.reviewed,
-                      onSelected: (_) => setState(
-                        () => _cleaningRequestFilter =
-                            _CleaningRequestFilter.reviewed,
-                      ),
-                    ),
-                    ChoiceChip(
-                      label: const Text('Scheduled'),
-                      selected:
-                          _cleaningRequestFilter ==
-                          _CleaningRequestFilter.scheduled,
-                      onSelected: (_) => setState(
-                        () => _cleaningRequestFilter =
-                            _CleaningRequestFilter.scheduled,
-                      ),
-                    ),
-                    ChoiceChip(
-                      label: const Text('Closed'),
-                      selected:
-                          _cleaningRequestFilter ==
-                          _CleaningRequestFilter.closed,
-                      onSelected: (_) => setState(
-                        () => _cleaningRequestFilter =
-                            _CleaningRequestFilter.closed,
-                      ),
-                    ),
-                    ChoiceChip(
-                      label: const Text('All'),
-                      selected:
-                          _cleaningRequestFilter == _CleaningRequestFilter.all,
-                      onSelected: (_) => setState(
-                        () =>
-                            _cleaningRequestFilter = _CleaningRequestFilter.all,
-                      ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 10),
-                if (_filteredCleaningRequests.isEmpty)
-                  Text(
-                    'No requests for the selected status.',
-                    style: TextStyle(color: Theme.of(context).hintColor),
-                  )
-                else
-                  ..._filteredCleaningRequests
-                      .take(8)
-                      .map(
-                        (request) => Container(
-                          margin: const EdgeInsets.only(bottom: 8),
-                          padding: const EdgeInsets.all(10),
-                          decoration: BoxDecoration(
-                            border: Border.all(color: const Color(0xFFD1D9E6)),
-                            borderRadius: BorderRadius.circular(10),
-                          ),
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Row(
-                                children: [
-                                  Text(
-                                    'Request #${request.id}',
-                                    style: const TextStyle(
-                                      fontWeight: FontWeight.w700,
-                                    ),
-                                  ),
-                                  const SizedBox(width: 8),
-                                  Chip(
-                                    visualDensity: VisualDensity.compact,
-                                    label: Text(request.status),
-                                  ),
-                                  const Spacer(),
-                                  Text(
-                                    '${formatDateMdy(request.requestedDate)} • ${request.requestedTime}',
-                                    style: TextStyle(
-                                      color: Theme.of(context).hintColor,
-                                    ),
-                                  ),
-                                ],
-                              ),
-                              const SizedBox(height: 4),
-                              Text(
-                                '${_clientNameById(request.clientId)} • ${request.requesterName}',
-                              ),
-                              Text(
-                                '${request.requesterEmail} • ${request.requesterPhone}',
-                                style: TextStyle(
-                                  color: Theme.of(context).hintColor,
-                                ),
-                              ),
-                              if ((request.cleaningDetails ?? '')
-                                  .trim()
-                                  .isNotEmpty)
-                                Padding(
-                                  padding: const EdgeInsets.only(top: 4),
-                                  child: Text(
-                                    request.cleaningDetails!.trim(),
-                                    maxLines: 2,
-                                    overflow: TextOverflow.ellipsis,
-                                  ),
-                                ),
-                              const SizedBox(height: 8),
-                              Wrap(
-                                spacing: 8,
-                                runSpacing: 8,
-                                children: [
-                                  OutlinedButton(
-                                    onPressed: request.status == 'REVIEWED'
-                                        ? null
-                                        : () => _updateCleaningRequestStatus(
-                                            request,
-                                            'REVIEWED',
-                                          ),
-                                    child: const Text('Mark Reviewed'),
-                                  ),
-                                  OutlinedButton(
-                                    onPressed: request.status == 'SCHEDULED'
-                                        ? null
-                                        : () => _updateCleaningRequestStatus(
-                                            request,
-                                            'SCHEDULED',
-                                          ),
-                                    child: const Text('Mark Scheduled'),
-                                  ),
-                                  OutlinedButton(
-                                    onPressed: request.status == 'CLOSED'
-                                        ? null
-                                        : () => _updateCleaningRequestStatus(
-                                            request,
-                                            'CLOSED',
-                                          ),
-                                    child: const Text('Close'),
-                                  ),
-                                ],
-                              ),
-                            ],
-                          ),
-                        ),
-                      ),
-              ],
-            ),
-          ),
-        ),
-        const SizedBox(height: 12),
-        Card(
-          child: Padding(
-            padding: const EdgeInsets.all(14),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                const Text(
-                  'Quick Late-Job List',
-                  style: TextStyle(fontWeight: FontWeight.w700),
-                ),
-                const SizedBox(height: 8),
-                if (overdueJobs.isEmpty)
-                  Text(
-                    'No overdue jobs right now.',
-                    style: TextStyle(color: Theme.of(context).hintColor),
-                  )
-                else
-                  ...overdueJobs
-                      .take(5)
-                      .map(
-                        (job) => ListTile(
-                          dense: true,
-                          contentPadding: EdgeInsets.zero,
-                          title: Text(job.jobNumber),
-                          subtitle: Text(
-                            '${job.clientName ?? 'Unknown client'} • ${formatDateMdy(job.scheduledDate)}',
-                          ),
-                        ),
-                      ),
-                const SizedBox(height: 6),
-                Align(
-                  alignment: Alignment.centerRight,
-                  child: OutlinedButton.icon(
-                    onPressed: _openJobsOverdue,
-                    icon: const Icon(Icons.open_in_new),
-                    label: const Text('Open Overdue Jobs'),
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ),
-        const SizedBox(height: 12),
-        Card(
-          child: Padding(
-            padding: const EdgeInsets.all(14),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                const Text(
-                  'Reporting Stubs',
-                  style: TextStyle(fontWeight: FontWeight.w700),
-                ),
-                const SizedBox(height: 8),
-                Wrap(
-                  spacing: 8,
-                  runSpacing: 8,
-                  children: const [
-                    Chip(
-                      backgroundColor: Color.fromRGBO(231, 239, 252, 1),
-                      labelStyle: TextStyle(
-                        color: Color.fromRGBO(31, 63, 122, 1),
-                        fontWeight: FontWeight.w600,
-                      ),
-                      label: Text('Operations Summary (Stub)'),
-                    ),
-                    Chip(
-                      backgroundColor: Color.fromRGBO(231, 239, 252, 1),
-                      labelStyle: TextStyle(
-                        color: Color.fromRGBO(31, 63, 122, 1),
-                        fontWeight: FontWeight.w600,
-                      ),
-                      label: Text('Payroll Window Export (Stub)'),
-                    ),
-                    Chip(
-                      backgroundColor: Color.fromRGBO(231, 239, 252, 1),
-                      labelStyle: TextStyle(
-                        color: Color.fromRGBO(31, 63, 122, 1),
-                        fontWeight: FontWeight.w600,
-                      ),
-                      label: Text('Client Service Recap (Stub)'),
-                    ),
-                  ],
-                ),
-              ],
-            ),
-          ),
-        ),
-      ],
-    );
-  }
 
-  Widget _buildJobsSection() {
-    final dark = Theme.of(context).brightness == Brightness.dark;
-    final rangeStart = DateTime(
-      _jobDateRange.start.year,
-      _jobDateRange.start.month,
-      _jobDateRange.start.day,
-    );
-    final rangeEnd = DateTime(
-      _jobDateRange.end.year,
-      _jobDateRange.end.month,
-      _jobDateRange.end.day,
-      23,
-      59,
-      59,
-    );
-    final rows = _filteredJobs.where((job) {
-      final scheduled = parseFlexibleDate(job.scheduledDate);
-      if (scheduled == null) return true;
-      return !scheduled.isBefore(rangeStart) && !scheduled.isAfter(rangeEnd);
-    }).toList();
-    rows.sort((a, b) {
-      final aDate = parseFlexibleDate(a.scheduledDate);
-      final bDate = parseFlexibleDate(b.scheduledDate);
-      if (aDate == null && bDate == null) return 0;
-      if (aDate == null) return 1;
-      if (bDate == null) return -1;
-      return bDate.compareTo(aDate);
-    });
 
-    String minutesLabel(int? value) {
-      if (value == null || value < 0) return '—';
-      final hours = value ~/ 60;
-      final minutes = value % 60;
-      if (hours == 0) return '${minutes}m';
-      return '${hours}h ${minutes}m';
-    }
-
-    ({String label, Color bg, Color fg, Color border}) statusBadge(Job job) {
-      final status = job.status.trim().toLowerCase();
-      if (_isOverdue(job)) {
-        return (
-          label: 'O',
-          bg: dark ? const Color(0xFF4A2D35) : const Color(0xFFFFE5EC),
-          fg: dark ? const Color(0xFFFFC1CC) : const Color(0xFFE63721),
-          border: dark ? const Color(0xFFB85B74) : const Color(0xFFE63721),
-        );
-      }
-      return switch (status) {
-        'assigned' => (
-          label: 'A',
-          bg: dark ? const Color(0xFF5A5530) : const Color(0xFFFFF7C5),
-          fg: dark ? const Color(0xFFF7EFAE) : const Color(0xFF7A6F00),
-          border: dark ? const Color(0xFFCADA56) : const Color(0xFFB3A846),
-        ),
-        'pending' => (
-          label: 'P',
-          bg: dark ? const Color(0xFF4B3D2A) : const Color(0xFFFFE3CC),
-          fg: dark ? const Color(0xFFFFD3AD) : const Color(0xFF8A4E17),
-          border: dark ? const Color(0xFFB17945) : const Color(0xFFEE7E32),
-        ),
-        'in_progress' || 'in progress' || 'in-progress' => (
-          label: 'I',
-          bg: dark ? const Color(0xFF3D3550) : const Color(0xFFE8DDF7),
-          fg: dark ? const Color(0xFFE4E4E4) : const Color(0xFF442E6F),
-          border: dark ? const Color(0xFF8C74B2) : const Color(0xFF7A56A5),
-        ),
-        'completed' => (
-          label: 'C',
-          bg: dark ? const Color(0xFF2C4A40) : const Color(0xFFDBF3E8),
-          fg: dark ? const Color(0xFFE4E4E4) : const Color(0xFF1E6A4F),
-          border: dark ? const Color(0xFF6DB598) : const Color(0xFF49A07D),
-        ),
-        _ => (
-          label: '?',
-          bg: dark ? const Color(0xFF41424B) : const Color(0xFFE9EEF2),
-          fg: dark ? const Color(0xFFE4E4E4) : const Color(0xFF41588E),
-          border: dark ? const Color(0xFF7A7E8C) : const Color(0xFFBEDCE4),
-        ),
-      };
-    }
-
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Row(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            const Expanded(
-              child: Padding(
-                padding: EdgeInsets.only(bottom: 12),
-                child: Text(
-                  'Jobs',
-                  style: TextStyle(fontSize: 20, fontWeight: FontWeight.w800),
-                ),
-              ),
-            ),
-            FilledButton.icon(
-              onPressed: _showCreateJobDialog,
-              icon: const Icon(Icons.add),
-              label: const Text('Create Job'),
-            ),
-          ],
-        ),
-        Expanded(
-          child: _centeredSectionBody(
-            Column(
-              children: [
-                Row(
-                  children: [
-                    SizedBox(
-                      width: 210,
-                      child: DropdownButtonFormField<_JobFilter>(
-                        initialValue: _jobFilter,
-                        decoration: const InputDecoration(
-                          labelText: 'Status Filter',
-                          border: OutlineInputBorder(),
-                          isDense: true,
-                        ),
-                        items: _JobFilter.values
-                            .map(
-                              (filter) => DropdownMenuItem(
-                                value: filter,
-                                child: Text(_jobFilterLabel(filter)),
-                              ),
-                            )
-                            .toList(),
-                        onChanged: (next) {
-                          if (next == null) return;
-                          setState(() => _jobFilter = next);
-                        },
-                      ),
-                    ),
-                    const Spacer(),
-                    Text(
-                      'Date range',
-                      style: TextStyle(
-                        color: Theme.of(context).hintColor,
-                        fontWeight: FontWeight.w700,
-                      ),
-                    ),
-                    const SizedBox(width: 8),
-                    OutlinedButton.icon(
-                      onPressed: _pickJobStartDate,
-                      icon: const Icon(Icons.date_range, size: 16),
-                      label: Text(
-                        '${_jobDateRange.start.month}-${_jobDateRange.start.day}-${_jobDateRange.start.year}',
-                      ),
-                    ),
-                    const SizedBox(width: 6),
-                    const Text('to'),
-                    const SizedBox(width: 6),
-                    OutlinedButton.icon(
-                      onPressed: _pickJobEndDate,
-                      icon: const Icon(Icons.date_range, size: 16),
-                      label: Text(
-                        '${_jobDateRange.end.month}-${_jobDateRange.end.day}-${_jobDateRange.end.year}',
-                      ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 12),
-                Expanded(
-                  child: LayoutBuilder(
-                    builder: (context, constraints) => Card(
-                      child: SingleChildScrollView(
-                        scrollDirection: Axis.horizontal,
-                        child: ConstrainedBox(
-                          constraints: BoxConstraints(
-                            minWidth: constraints.maxWidth,
-                          ),
-                          child: SingleChildScrollView(
-                            child: DataTable(
-                              columns: [
-                                _tableColumn(''),
-                                _tableColumn('Scheduled'),
-                                _tableColumn('Client'),
-                                _tableColumn('Cleaner'),
-                                _tableColumn('Est. Duration'),
-                                _tableColumn('Actual Duration'),
-                                _tableColumn('Actions'),
-                              ],
-                              rows: rows
-                                  .map(
-                                    (job) => DataRow(
-                                      cells: [
-                                        DataCell(
-                                          Builder(
-                                            builder: (context) {
-                                              final badge = statusBadge(job);
-                                              return Container(
-                                                width: 28,
-                                                height: 28,
-                                                alignment: Alignment.center,
-                                                decoration: BoxDecoration(
-                                                  shape: BoxShape.circle,
-                                                  color: badge.bg,
-                                                  border: Border.all(
-                                                    color: badge.border,
-                                                    width: 1.1,
-                                                  ),
-                                                ),
-                                                child: Text(
-                                                  badge.label,
-                                                  style: TextStyle(
-                                                    color: badge.fg,
-                                                    fontWeight: FontWeight.w800,
-                                                    fontSize: 12,
-                                                  ),
-                                                ),
-                                              );
-                                            },
-                                          ),
-                                        ),
-                                        DataCell(
-                                          Text(
-                                            formatDateMdy(job.scheduledDate),
-                                          ),
-                                        ),
-                                        DataCell(Text(job.clientName ?? '—')),
-                                        DataCell(
-                                          Text(
-                                            _jobCleanerNameByJobId[job.id] ??
-                                                'Unassigned',
-                                          ),
-                                        ),
-                                        DataCell(
-                                          Text(
-                                            minutesLabel(
-                                              job.estimatedDurationMinutes,
-                                            ),
-                                          ),
-                                        ),
-                                        DataCell(
-                                          Text(
-                                            minutesLabel(
-                                              job.actualDurationMinutes,
-                                            ),
-                                          ),
-                                        ),
-                                        DataCell(
-                                          Row(
-                                            mainAxisSize: MainAxisSize.min,
-                                            children: [
-                                              _rowActionButton(
-                                                icon: Icons.edit,
-                                                tooltip: 'Edit',
-                                                onPressed: () =>
-                                                    _showEditJobDialog(job),
-                                              ),
-                                              const SizedBox(width: 10),
-                                              _rowActionButton(
-                                                icon: Icons.delete,
-                                                tooltip: 'Delete',
-                                                onPressed: () =>
-                                                    _deleteJob(job),
-                                              ),
-                                            ],
-                                          ),
-                                        ),
-                                      ],
-                                    ),
-                                  )
-                                  .toList(),
-                            ),
-                          ),
-                        ),
-                      ),
-                    ),
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ),
-      ],
-    );
-  }
-
-  String get _managementModelSubtitle {
-    switch (_managementModel) {
-      case _ManagementModel.employees:
-        return '';
-      case _ManagementModel.clients:
-        return 'Client records and status filters.';
-      case _ManagementModel.locations:
-        return 'Location records and status filters.';
-    }
-  }
-
-  Widget _buildManagementSection() {
-    final rowsCount = switch (_managementModel) {
-      _ManagementModel.employees => _filteredEmployees.length,
-      _ManagementModel.clients => _filteredClients.length,
-      _ManagementModel.locations => _filteredLocations.length,
-    };
-
-    final createButton = switch (_managementModel) {
-      _ManagementModel.employees => (
-        label: 'Create Employee',
-        icon: Icons.person_add,
-        onPressed: _showCreateDialog,
-      ),
-      _ManagementModel.clients => (
-        label: 'Create Client',
-        icon: Icons.business,
-        onPressed: _showCreateClientDialog,
-      ),
-      _ManagementModel.locations => (
-        label: 'Create Location',
-        icon: Icons.add_location_alt,
-        onPressed: _showCreateLocationDialog,
-      ),
-    };
-
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        _buildSectionHeader(
-          'People & Places',
-          'Manage employees, clients, and locations.',
-        ),
-        Expanded(
-          child: _centeredSectionBody(
-            SizedBox(
-              width: double.infinity,
-              child: Card(
-                child: Padding(
-                  padding: const EdgeInsets.all(14),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Row(
-                        children: [
-                          SizedBox(
-                            width: 300,
-                            child: DropdownButtonFormField<_ManagementModel>(
-                              initialValue: _managementModel,
-                              decoration: const InputDecoration(
-                                labelText: 'Management Type',
-                                border: OutlineInputBorder(),
-                                isDense: true,
-                              ),
-                              items: const [
-                                DropdownMenuItem(
-                                  value: _ManagementModel.employees,
-                                  child: Text('Employees'),
-                                ),
-                                DropdownMenuItem(
-                                  value: _ManagementModel.clients,
-                                  child: Text('Clients'),
-                                ),
-                                DropdownMenuItem(
-                                  value: _ManagementModel.locations,
-                                  child: Text('Locations'),
-                                ),
-                              ],
-                              onChanged: (next) {
-                                if (next == null) return;
-                                setState(() => _managementModel = next);
-                              },
-                            ),
-                          ),
-                          const SizedBox(width: 12),
-                          Expanded(
-                            child: Text(
-                              _managementModelSubtitle,
-                              style: TextStyle(
-                                color: Theme.of(context).hintColor,
-                              ),
-                            ),
-                          ),
-                          const SizedBox(width: 12),
-                          FilledButton.icon(
-                            onPressed: createButton.onPressed,
-                            icon: Icon(createButton.icon),
-                            label: Text(createButton.label),
-                          ),
-                        ],
-                      ),
-                      const SizedBox(height: 12),
-                      Row(
-                        children: [
-                          Expanded(
-                            child: Wrap(
-                              spacing: 8,
-                              runSpacing: 8,
-                              children: [
-                                ChoiceChip(
-                                  label: const Text('Active'),
-                                  selected: switch (_managementModel) {
-                                    _ManagementModel.employees =>
-                                      _employeeFilter == _EmployeeFilter.active,
-                                    _ManagementModel.clients =>
-                                      _clientFilter == _ClientFilter.active,
-                                    _ManagementModel.locations =>
-                                      _locationFilter == _LocationFilter.active,
-                                  },
-                                  onSelected: (_) => setState(() {
-                                    switch (_managementModel) {
-                                      case _ManagementModel.employees:
-                                        _employeeFilter =
-                                            _EmployeeFilter.active;
-                                      case _ManagementModel.clients:
-                                        _clientFilter = _ClientFilter.active;
-                                      case _ManagementModel.locations:
-                                        _locationFilter =
-                                            _LocationFilter.active;
-                                    }
-                                  }),
-                                ),
-                                ChoiceChip(
-                                  label: Text(
-                                    _managementModel ==
-                                            _ManagementModel.employees
-                                        ? 'Invited'
-                                        : 'Inactive',
-                                  ),
-                                  selected: switch (_managementModel) {
-                                    _ManagementModel.employees =>
-                                      _employeeFilter ==
-                                          _EmployeeFilter.invited,
-                                    _ManagementModel.clients =>
-                                      _clientFilter == _ClientFilter.inactive,
-                                    _ManagementModel.locations =>
-                                      _locationFilter ==
-                                          _LocationFilter.inactive,
-                                  },
-                                  onSelected: (_) => setState(() {
-                                    switch (_managementModel) {
-                                      case _ManagementModel.employees:
-                                        _employeeFilter =
-                                            _EmployeeFilter.invited;
-                                      case _ManagementModel.clients:
-                                        _clientFilter = _ClientFilter.inactive;
-                                      case _ManagementModel.locations:
-                                        _locationFilter =
-                                            _LocationFilter.inactive;
-                                    }
-                                  }),
-                                ),
-                                ChoiceChip(
-                                  label: const Text('All'),
-                                  selected: switch (_managementModel) {
-                                    _ManagementModel.employees =>
-                                      _employeeFilter == _EmployeeFilter.all,
-                                    _ManagementModel.clients =>
-                                      _clientFilter == _ClientFilter.all,
-                                    _ManagementModel.locations =>
-                                      _locationFilter == _LocationFilter.all,
-                                  },
-                                  onSelected: (_) => setState(() {
-                                    switch (_managementModel) {
-                                      case _ManagementModel.employees:
-                                        _employeeFilter = _EmployeeFilter.all;
-                                      case _ManagementModel.clients:
-                                        _clientFilter = _ClientFilter.all;
-                                      case _ManagementModel.locations:
-                                        _locationFilter = _LocationFilter.all;
-                                    }
-                                  }),
-                                ),
-                              ],
-                            ),
-                          ),
-                          const SizedBox(width: 12),
-                          Text(
-                            '$rowsCount records',
-                            style: TextStyle(
-                              color: Theme.of(context).hintColor,
-                            ),
-                          ),
-                        ],
-                      ),
-                      const SizedBox(height: 12),
-                      Expanded(
-                        child: SingleChildScrollView(
-                          scrollDirection: Axis.horizontal,
-                          child: SingleChildScrollView(
-                            child: DataTable(
-                              columns: switch (_managementModel) {
-                                _ManagementModel.employees => [
-                                  _tableColumn(''),
-                                  _tableColumn('Name'),
-                                  _tableColumn('Email'),
-                                  _tableColumn('Phone'),
-                                  _tableColumn('Employee #'),
-                                  _tableColumn('Actions'),
-                                ],
-                                _ManagementModel.clients => [
-                                  _tableColumn(''),
-                                  _tableColumn('Name'),
-                                  _tableColumn('Email'),
-                                  _tableColumn('Phone'),
-                                  _tableColumn('Preferred Contact Window'),
-                                  _tableColumn('Actions'),
-                                ],
-                                _ManagementModel.locations => [
-                                  _tableColumn(''),
-                                  _tableColumn('Photo'),
-                                  _tableColumn('Client'),
-                                  _tableColumn('Type'),
-                                  _tableColumn('Address'),
-                                  _tableColumn('Actions'),
-                                ],
-                              },
-                              rows: switch (_managementModel) {
-                                _ManagementModel.employees =>
-                                  _filteredEmployees
-                                      .map(
-                                        (employee) => DataRow(
-                                          cells: [
-                                            DataCell(
-                                              Builder(
-                                                builder: (context) {
-                                                  final badge =
-                                                      _employeeStatusBadge(
-                                                        employee,
-                                                      );
-                                                  return Container(
-                                                    width: 28,
-                                                    height: 28,
-                                                    alignment: Alignment.center,
-                                                    decoration: BoxDecoration(
-                                                      shape: BoxShape.circle,
-                                                      color: badge.bg,
-                                                      border: Border.all(
-                                                        color: badge.border,
-                                                        width: 1.1,
-                                                      ),
-                                                    ),
-                                                    child: Text(
-                                                      badge.label,
-                                                      style: TextStyle(
-                                                        color: badge.fg,
-                                                        fontWeight:
-                                                            FontWeight.w800,
-                                                        fontSize: 12,
-                                                      ),
-                                                    ),
-                                                  );
-                                                },
-                                              ),
-                                            ),
-                                            DataCell(Text(employee.name)),
-                                            DataCell(
-                                              Text(employee.email ?? '—'),
-                                            ),
-                                            DataCell(
-                                              Text(employee.phoneNumber ?? '—'),
-                                            ),
-                                            DataCell(
-                                              Text(employee.employeeNumber),
-                                            ),
-                                            DataCell(
-                                              Row(
-                                                mainAxisSize: MainAxisSize.min,
-                                                children: [
-                                                  _rowActionButton(
-                                                    icon: Icons.edit,
-                                                    tooltip: 'Edit',
-                                                    onPressed: () =>
-                                                        _showEditDialog(
-                                                          employee,
-                                                        ),
-                                                  ),
-                                                  const SizedBox(width: 10),
-                                                  _rowActionButton(
-                                                    icon: Icons.delete,
-                                                    tooltip: 'Delete',
-                                                    onPressed:
-                                                        employee.status
-                                                                .trim()
-                                                                .toLowerCase() ==
-                                                            'deleted'
-                                                        ? null
-                                                        : () =>
-                                                              _delete(employee),
-                                                  ),
-                                                ],
-                                              ),
-                                            ),
-                                          ],
-                                        ),
-                                      )
-                                      .toList(),
-                                _ManagementModel.clients =>
-                                  _filteredClients
-                                      .map(
-                                        (client) => DataRow(
-                                          cells: [
-                                            DataCell(
-                                              Builder(
-                                                builder: (context) {
-                                                  final badge =
-                                                      _statusBadgeForValue(
-                                                        client.status
-                                                            .trim()
-                                                            .toLowerCase(),
-                                                      );
-                                                  return Container(
-                                                    width: 28,
-                                                    height: 28,
-                                                    alignment: Alignment.center,
-                                                    decoration: BoxDecoration(
-                                                      shape: BoxShape.circle,
-                                                      color: badge.bg,
-                                                      border: Border.all(
-                                                        color: badge.border,
-                                                        width: 1.1,
-                                                      ),
-                                                    ),
-                                                    child: Text(
-                                                      badge.label,
-                                                      style: TextStyle(
-                                                        color: badge.fg,
-                                                        fontWeight:
-                                                            FontWeight.w800,
-                                                        fontSize: 12,
-                                                      ),
-                                                    ),
-                                                  );
-                                                },
-                                              ),
-                                            ),
-                                            DataCell(Text(client.name)),
-                                            DataCell(Text(client.email ?? '—')),
-                                            DataCell(
-                                              Text(client.phoneNumber ?? '—'),
-                                            ),
-                                            DataCell(
-                                              SizedBox(
-                                                width: 220,
-                                                child: SingleChildScrollView(
-                                                  scrollDirection:
-                                                      Axis.horizontal,
-                                                  child: Text(
-                                                    client.preferredContactWindow ??
-                                                        '—',
-                                                    softWrap: false,
-                                                  ),
-                                                ),
-                                              ),
-                                            ),
-                                            DataCell(
-                                              Row(
-                                                mainAxisSize: MainAxisSize.min,
-                                                children: [
-                                                  _rowActionButton(
-                                                    icon: Icons.edit,
-                                                    tooltip: 'Edit',
-                                                    onPressed: () =>
-                                                        _showEditClientDialog(
-                                                          client,
-                                                        ),
-                                                  ),
-                                                  const SizedBox(width: 10),
-                                                  _rowActionButton(
-                                                    icon: Icons.delete,
-                                                    tooltip: 'Delete',
-                                                    onPressed:
-                                                        client.status
-                                                                .trim()
-                                                                .toLowerCase() ==
-                                                            'deleted'
-                                                        ? null
-                                                        : () => _deleteClient(
-                                                            client,
-                                                          ),
-                                                  ),
-                                                ],
-                                              ),
-                                            ),
-                                          ],
-                                        ),
-                                      )
-                                      .toList(),
-                                _ManagementModel.locations =>
-                                  _filteredLocations
-                                      .map(
-                                        (location) => DataRow(
-                                          cells: [
-                                            DataCell(
-                                              Builder(
-                                                builder: (context) {
-                                                  final badge =
-                                                      _statusBadgeForValue(
-                                                        location.status
-                                                            .trim()
-                                                            .toLowerCase(),
-                                                      );
-                                                  return Container(
-                                                    width: 28,
-                                                    height: 28,
-                                                    alignment: Alignment.center,
-                                                    decoration: BoxDecoration(
-                                                      shape: BoxShape.circle,
-                                                      color: badge.bg,
-                                                      border: Border.all(
-                                                        color: badge.border,
-                                                        width: 1.1,
-                                                      ),
-                                                    ),
-                                                    child: Text(
-                                                      badge.label,
-                                                      style: TextStyle(
-                                                        color: badge.fg,
-                                                        fontWeight:
-                                                            FontWeight.w800,
-                                                        fontSize: 12,
-                                                      ),
-                                                    ),
-                                                  );
-                                                },
-                                              ),
-                                            ),
-                                            DataCell(
-                                              CircleAvatar(
-                                                radius: 14,
-                                                backgroundColor: const Color(
-                                                  0xFFA8D6F7,
-                                                ),
-                                                backgroundImage: AssetImage(
-                                                  _assetPath(
-                                                    location.photoUrl,
-                                                    fallback:
-                                                        _defaultLocationPhotoAsset,
-                                                  ),
-                                                ),
-                                              ),
-                                            ),
-                                            DataCell(
-                                              Text(
-                                                _clientNameById(
-                                                  location.clientId,
-                                                ),
-                                              ),
-                                            ),
-                                            DataCell(Text(location.type)),
-                                            DataCell(
-                                              Text(
-                                                [
-                                                      location.address ?? '',
-                                                      location.city ?? '',
-                                                      location.state ?? '',
-                                                      location.zipCode ?? '',
-                                                    ]
-                                                    .where(
-                                                      (e) =>
-                                                          e.trim().isNotEmpty,
-                                                    )
-                                                    .join(', '),
-                                              ),
-                                            ),
-                                            DataCell(
-                                              Row(
-                                                mainAxisSize: MainAxisSize.min,
-                                                children: [
-                                                  _rowActionButton(
-                                                    icon: Icons.edit,
-                                                    tooltip: 'Edit',
-                                                    onPressed: () =>
-                                                        _showEditLocationDialog(
-                                                          location,
-                                                        ),
-                                                  ),
-                                                  const SizedBox(width: 10),
-                                                  _rowActionButton(
-                                                    icon: Icons.delete,
-                                                    tooltip: 'Delete',
-                                                    onPressed:
-                                                        location.status
-                                                                .trim()
-                                                                .toLowerCase() ==
-                                                            'deleted'
-                                                        ? null
-                                                        : () => _deleteLocation(
-                                                            location,
-                                                          ),
-                                                  ),
-                                                ],
-                                              ),
-                                            ),
-                                          ],
-                                        ),
-                                      )
-                                      .toList(),
-                              },
-                            ),
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-            ),
-            maxWidth: 1220,
-          ),
-        ),
-      ],
-    );
-  }
-
-  Widget _buildCleaningProfilesSection() {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        _buildSectionHeader(
-          'Cleaning Profiles',
-          'Define reusable cleaning profiles and seed task definitions/rules.',
-        ),
-        Wrap(
-          spacing: 8,
-          runSpacing: 8,
-          children: [
-            FilledButton.icon(
-              onPressed: _showCreateCleaningProfileDialog,
-              icon: const Icon(Icons.add_task),
-              label: const Text('Create Profile'),
-            ),
-            OutlinedButton.icon(
-              onPressed: _showCreateTaskDefinitionDialog,
-              icon: const Icon(Icons.playlist_add),
-              label: const Text('Create Task Definition'),
-            ),
-            OutlinedButton.icon(
-              onPressed: _showCreateTaskRuleDialog,
-              icon: const Icon(Icons.rule),
-              label: const Text('Create Task Rule'),
-            ),
-            FilledButton.icon(
-              onPressed: _showAddProfileTaskDialog,
-              icon: const Icon(Icons.link),
-              label: const Text('Link Task To Selected Profile'),
-            ),
-          ],
-        ),
-        const SizedBox(height: 12),
-        Expanded(
-          child: _centeredSectionBody(
-            Column(
-              children: [
-                Expanded(
-                  flex: 4,
-                  child: Card(
-                    child: SingleChildScrollView(
-                      scrollDirection: Axis.horizontal,
-                      child: SingleChildScrollView(
-                        child: DataTable(
-                          columns: [
-                            _tableColumn('Profile'),
-                            _tableColumn('Location'),
-                            _tableColumn('Notes'),
-                            _tableColumn('Select'),
-                            _tableColumn('Actions'),
-                          ],
-                          rows: _cleaningProfiles
-                              .map(
-                                (profile) => DataRow(
-                                  selected:
-                                      profile.id == _selectedCleaningProfileId,
-                                  cells: [
-                                    DataCell(Text(profile.name)),
-                                    DataCell(
-                                      Text(_locationLabel(profile.locationId)),
-                                    ),
-                                    DataCell(Text(profile.notes ?? '—')),
-                                    DataCell(
-                                      OutlinedButton(
-                                        onPressed:
-                                            profile.id ==
-                                                _selectedCleaningProfileId
-                                            ? null
-                                            : () => _selectCleaningProfile(
-                                                profile.id,
-                                              ),
-                                        child: Text(
-                                          profile.id ==
-                                                  _selectedCleaningProfileId
-                                              ? 'Selected'
-                                              : 'Select',
-                                        ),
-                                      ),
-                                    ),
-                                    DataCell(
-                                      Row(
-                                        children: [
-                                          IconButton(
-                                            icon: const Icon(Icons.edit),
-                                            tooltip: 'Edit',
-                                            onPressed: AppEnv.isDemoMode
-                                                ? null
-                                                : () =>
-                                                      _showEditCleaningProfileDialog(
-                                                        profile,
-                                                      ),
-                                          ),
-                                          IconButton(
-                                            icon: const Icon(Icons.delete),
-                                            tooltip: 'Delete',
-                                            onPressed: AppEnv.isDemoMode
-                                                ? null
-                                                : () => _deleteCleaningProfile(
-                                                    profile,
-                                                  ),
-                                          ),
-                                        ],
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                              )
-                              .toList(),
-                        ),
-                      ),
-                    ),
-                  ),
-                ),
-                const SizedBox(height: 12),
-                Expanded(
-                  flex: 3,
-                  child: Row(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Expanded(
-                        child: Card(
-                          child: Padding(
-                            padding: const EdgeInsets.all(12),
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Text(
-                                  _selectedCleaningProfileId == null
-                                      ? 'Profile Tasks'
-                                      : 'Profile Tasks (${_selectedProfileTasks.length})',
-                                  style: const TextStyle(
-                                    fontWeight: FontWeight.w700,
-                                  ),
-                                ),
-                                const SizedBox(height: 8),
-                                Expanded(
-                                  child: _selectedCleaningProfileId == null
-                                      ? Center(
-                                          child: Text(
-                                            'Select a profile to manage linked tasks',
-                                            style: TextStyle(
-                                              color: Theme.of(
-                                                context,
-                                              ).hintColor,
-                                            ),
-                                          ),
-                                        )
-                                      : _loadingProfileTasks
-                                      ? const Center(
-                                          child: CircularProgressIndicator(),
-                                        )
-                                      : ListView.builder(
-                                          itemCount:
-                                              _selectedProfileTasks.length,
-                                          itemBuilder: (context, index) {
-                                            final item =
-                                                _selectedProfileTasks[index];
-                                            final metadata =
-                                                item.taskMetadata ?? const {};
-                                            return ListTile(
-                                              dense: true,
-                                              contentPadding: EdgeInsets.zero,
-                                              title: Text(
-                                                _taskDefinitionLabel(
-                                                  item.taskDefinitionId,
-                                                ),
-                                              ),
-                                              subtitle: Text(
-                                                'Order: ${item.displayOrder ?? '—'} • Metadata: ${metadata.isEmpty ? '{}' : metadata}',
-                                              ),
-                                              trailing: Row(
-                                                mainAxisSize: MainAxisSize.min,
-                                                children: [
-                                                  Text(
-                                                    item.required
-                                                        ? 'Req'
-                                                        : 'Opt',
-                                                  ),
-                                                  IconButton(
-                                                    icon: const Icon(
-                                                      Icons.edit,
-                                                    ),
-                                                    tooltip: 'Edit',
-                                                    onPressed: AppEnv.isDemoMode
-                                                        ? null
-                                                        : () =>
-                                                              _showEditProfileTaskDialog(
-                                                                item,
-                                                              ),
-                                                  ),
-                                                  IconButton(
-                                                    icon: const Icon(
-                                                      Icons.delete,
-                                                    ),
-                                                    tooltip: 'Delete',
-                                                    onPressed: AppEnv.isDemoMode
-                                                        ? null
-                                                        : () =>
-                                                              _deleteProfileTask(
-                                                                item,
-                                                              ),
-                                                  ),
-                                                ],
-                                              ),
-                                            );
-                                          },
-                                        ),
-                                ),
-                              ],
-                            ),
-                          ),
-                        ),
-                      ),
-                      const SizedBox(width: 12),
-                      Expanded(
-                        child: Card(
-                          child: Padding(
-                            padding: const EdgeInsets.all(12),
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                const Text(
-                                  'Task Definitions',
-                                  style: TextStyle(fontWeight: FontWeight.w700),
-                                ),
-                                const SizedBox(height: 8),
-                                Expanded(
-                                  child: ListView.builder(
-                                    itemCount: _taskDefinitions.length,
-                                    itemBuilder: (context, index) {
-                                      final item = _taskDefinitions[index];
-                                      return ListTile(
-                                        dense: true,
-                                        contentPadding: EdgeInsets.zero,
-                                        title: Text(
-                                          '${item.code} • ${item.name}',
-                                        ),
-                                        subtitle: Text(item.category),
-                                      );
-                                    },
-                                  ),
-                                ),
-                                const Divider(height: 18),
-                                const Text(
-                                  'Task Rules',
-                                  style: TextStyle(fontWeight: FontWeight.w700),
-                                ),
-                                const SizedBox(height: 8),
-                                Expanded(
-                                  child: ListView.builder(
-                                    itemCount: _taskRules.length,
-                                    itemBuilder: (context, index) {
-                                      final item = _taskRules[index];
-                                      return ListTile(
-                                        dense: true,
-                                        contentPadding: EdgeInsets.zero,
-                                        title: Text(
-                                          _taskDefinitionLabel(
-                                            item.taskDefinitionId,
-                                          ),
-                                        ),
-                                        subtitle: Text(
-                                          item.appliesWhen.isEmpty
-                                              ? '{}'
-                                              : item.appliesWhen.toString(),
-                                        ),
-                                      );
-                                    },
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ),
-      ],
-    );
-  }
 
   Widget _buildCrudScaffoldSection({
     required String title,
@@ -3252,13 +1609,84 @@ class _AdminPageState extends State<AdminPage> {
   Widget _buildSectionContent() {
     switch (_selectedSection) {
       case AdminSection.dashboard:
-        return _buildDashboardSection();
+        return DashboardSection(
+              jobs: _jobs,
+              employees: _employees,
+              cleaningRequests: _cleaningRequests,
+              cleaningRequestFilter: _cleaningRequestFilter,
+              totalPendingJobs: _totalPendingJobs,
+              totalAssignedJobs: _totalAssignedJobs,
+              totalInProgressJobs: _totalInProgressJobs,
+              totalCompletedJobs: _totalCompletedJobs,
+              totalOverdueJobs: _totalOverdueJobs,
+              onCleaningRequestFilterChanged: (filter) => setState(() => _cleaningRequestFilter = filter),
+              onUpdateCleaningRequestStatus: _updateCleaningRequestStatus,
+              onOpenJobsOverdue: _openJobsOverdue,
+              getClientNameById: _clientNameById,
+              buildSectionHeader: _buildSectionHeader,
+              buildMetricTile: _metricTile,
+            );
       case AdminSection.jobs:
-        return _buildJobsSection();
+        return JobsSection(
+              filteredJobs: _filteredJobs,
+              jobDateRange: _jobDateRange,
+              onDateRangeChanged: (range) => setState(() => _jobDateRange = range),
+              onShowCreateJobDialog: _showCreateJobDialog,
+              onShowEditJobDialog: _showEditJobDialog,
+              onDeleteJob: _deleteJob,
+              buildSectionHeader: _buildSectionHeader,
+              buildCenteredSection: _centeredSectionBody,
+              buildTableColumn: ({required String label, bool numeric = false, double? minWidth}) => _tableColumn(label),
+              buildRowActionButton: _rowActionButton,
+              isOverdue: _isOverdue,
+            );
       case AdminSection.cleaningProfiles:
-        return _buildCleaningProfilesSection();
+        return CleaningProfilesSection(
+              cleaningProfiles: _cleaningProfiles,
+              selectedProfileTasks: _selectedProfileTasks,
+              taskDefinitions: _taskDefinitions,
+              taskRules: _taskRules,
+              selectedProfileId: _selectedCleaningProfileId,
+              loadingProfileTasks: _loadingProfileTasks,
+              onCreateProfile: _showCreateCleaningProfileDialog,
+              onCreateTaskDefinition: _showCreateTaskDefinitionDialog,
+              onCreateTaskRule: _showCreateTaskRuleDialog,
+              onAddProfileTask: _showAddProfileTaskDialog,
+              onSelectProfile: _selectCleaningProfile,
+              onEditProfile: _showEditCleaningProfileDialog,
+              onDeleteProfile: _deleteCleaningProfile,
+              onEditProfileTask: _showEditProfileTaskDialog,
+              onDeleteProfileTask: _deleteProfileTask,
+              getLocationLabel: _locationLabel,
+              getTaskDefinitionLabel: _taskDefinitionLabel,
+              buildSectionHeader: _buildSectionHeader,
+              buildCenteredSection: _centeredSectionBody,
+              buildTableColumn: _tableColumn,
+            );
       case AdminSection.management:
-        return _buildManagementSection();
+        return ManagementSection(
+              managementModel: _managementModel,
+              filteredEmployees: _filteredEmployees,
+              filteredClients: _filteredClients,
+              filteredLocations: _filteredLocations,
+              activeOnlyFilter: _activeOnlyFilter,
+              onManagementModelChanged: (model) => setState(() => _managementModel = model),
+              onActiveOnlyFilterChanged: (active) => setState(() => _activeOnlyFilter = active),
+              onShowCreateDialog: _showCreateDialog,
+              onShowCreateClientDialog: _showCreateClientDialog,
+              onShowCreateLocationDialog: _showCreateLocationDialog,
+              onShowEditDialog: _showEditDialog,
+              onShowEditClientDialog: _showEditClientDialog,
+              onShowEditLocationDialog: _showEditLocationDialog,
+              onDeleteEmployee: _deleteEmployee,
+              onDeleteClient: _deleteClient,
+              onDeleteLocation: _deleteLocation,
+              buildSectionHeader: _buildSectionHeader,
+              buildCenteredSection: _centeredSectionBody,
+              buildTableColumn: _tableColumn,
+              buildRowActionButton: _rowActionButton,
+              getLocationLabel: _locationLabel,
+            );
       case AdminSection.reports:
         return _buildCrudScaffoldSection(
           title: 'Reports',
@@ -3530,28 +1958,6 @@ class _AdminPageState extends State<AdminPage> {
       ),
     );
   }
-}
-
-class JobEditorFormData {
-  const JobEditorFormData({
-    required this.clientId,
-    required this.locationId,
-    required this.scheduledDate,
-    required this.scheduledStartAt,
-    required this.scheduledTime,
-    required this.estimatedDurationMinutes,
-    this.actualDurationMinutes,
-    this.cleanerEmployeeId,
-  });
-
-  final int clientId;
-  final int locationId;
-  final String scheduledDate;
-  final String scheduledStartAt;
-  final TimeOfDay scheduledTime;
-  final int estimatedDurationMinutes;
-  final int? actualDurationMinutes;
-  final String? cleanerEmployeeId;
 }
 
 class CleaningProfileEditorDialogState

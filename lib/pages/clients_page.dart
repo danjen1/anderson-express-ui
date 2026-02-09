@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
 
+import '../mixins/base_api_page_mixin.dart';
 import '../models/backend_config.dart';
 import '../models/client.dart';
-import '../services/api_service.dart';
 import '../services/app_env.dart';
 import '../services/auth_session.dart';
 import '../services/backend_runtime.dart';
@@ -12,6 +12,7 @@ import '../widgets/brand_app_bar_title.dart';
 import '../widgets/demo_mode_notice.dart';
 import '../widgets/profile_menu_button.dart';
 import '../widgets/theme_toggle_button.dart';
+import '../utils/navigation_extensions.dart';
 
 class ClientsPage extends StatefulWidget {
   const ClientsPage({super.key});
@@ -20,42 +21,36 @@ class ClientsPage extends StatefulWidget {
   State<ClientsPage> createState() => _ClientsPageState();
 }
 
-class _ClientsPageState extends State<ClientsPage> {
+class _ClientsPageState extends State<ClientsPage> with BaseApiPageMixin<ClientsPage> {
   late BackendKind _selectedBackend;
   late final TextEditingController _hostController;
 
-  BackendConfig get _backend => BackendRuntime.config;
-  ApiService get _api => ApiService();
-
-  bool _loading = false;
-  String? _error;
   List<Client> _clients = const [];
-  String? get _token => AuthSession.current?.token.trim();
 
   @override
   void initState() {
     super.initState();
-    _selectedBackend = _backend.kind;
+    _selectedBackend = backend.kind;
     _hostController = TextEditingController(text: BackendRuntime.host);
+  }
+
+  @override
+  bool checkAuthorization() {
     final session = AuthSession.current;
-    if (session == null) {
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (!mounted) return;
-        Navigator.pushReplacementNamed(context, '/');
-      });
-      return;
+    if (session == null) return false;
+    if (!session.user.isAdmin) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Admin access required')),
+      );
+      context.navigateToHome();
+      return false;
     }
-    WidgetsBinding.instance.addPostFrameCallback((_) async {
-      if (!mounted) return;
-      if (!session.user.isAdmin) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(const SnackBar(content: Text('Admin access required')));
-        Navigator.pushReplacementNamed(context, '/home');
-        return;
-      }
-      await _loadClients();
-    });
+    return true;
+  }
+
+  @override
+  Future<void> loadData() async {
+    await _loadClients();
   }
 
   @override
@@ -76,57 +71,33 @@ class _ClientsPageState extends State<ClientsPage> {
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(content: Text('Backend set to ${next.label} (${next.baseUrl})')),
     );
-    Navigator.pushReplacementNamed(context, '/home');
+    context.navigateToHome();
   }
 
   Future<void> _loadClients() async {
-    final token = _token;
-    if (token == null || token.isEmpty) {
-      setState(() {
-        _error = 'Login required. Please sign in again.';
-      });
-      return;
-    }
-
-    setState(() {
-      _loading = true;
-      _error = null;
-    });
-
+    if (token == null || token!.isEmpty) return;
     try {
-      final clients = await _api.listClients(bearerToken: token);
+      final clients = await api.listClients(bearerToken: token!);
       if (!mounted) return;
       setState(() {
         _clients = clients;
       });
     } catch (error) {
       if (!mounted) return;
-      setState(() {
-        _error = userFacingError(error);
-      });
-    } finally {
-      if (mounted) {
-        setState(() {
-          _loading = false;
-        });
-      }
+      setError(userFacingError(error));
     }
   }
 
   Future<void> _showCreateDialog() async {
     if (AppEnv.isDemoMode) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Demo mode: create/edit/delete actions are disabled'),
-        ),
-      );
+      setError('Demo mode: create/edit/delete actions are disabled');
       return;
     }
     final session = AuthSession.current;
     if (session == null || !session.user.isAdmin) {
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(const SnackBar(content: Text('Admin access required')));
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Admin access required')),
+      );
       return;
     }
 
@@ -137,8 +108,8 @@ class _ClientsPageState extends State<ClientsPage> {
     if (result == null) return;
 
     try {
-      final created = await _api.createClient(result, bearerToken: _token);
-      await _loadClients();
+      final created = await api.createClient(result, bearerToken: token);
+      await loadData();
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
@@ -149,19 +120,13 @@ class _ClientsPageState extends State<ClientsPage> {
       );
     } catch (error) {
       if (!mounted) return;
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text(userFacingError(error))));
+      setError(userFacingError(error));
     }
   }
 
   Future<void> _showEditDialog(Client client) async {
     if (AppEnv.isDemoMode) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Demo mode: create/edit/delete actions are disabled'),
-        ),
-      );
+      setError('Demo mode: create/edit/delete actions are disabled');
       return;
     }
     final result = await showDialog<ClientUpdateInput>(
@@ -183,27 +148,21 @@ class _ClientsPageState extends State<ClientsPage> {
     if (result == null) return;
 
     try {
-      await _api.updateClient(client.id, result, bearerToken: _token);
-      await _loadClients();
+      await api.updateClient(client.id, result, bearerToken: token);
+      await loadData();
       if (!mounted) return;
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(const SnackBar(content: Text('Client updated')));
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Client updated')),
+      );
     } catch (error) {
       if (!mounted) return;
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text(userFacingError(error))));
+      setError(userFacingError(error));
     }
   }
 
   Future<void> _delete(Client client) async {
     if (AppEnv.isDemoMode) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Demo mode: create/edit/delete actions are disabled'),
-        ),
-      );
+      setError('Demo mode: create/edit/delete actions are disabled');
       return;
     }
     final confirmed = await showDialog<bool>(
@@ -226,18 +185,111 @@ class _ClientsPageState extends State<ClientsPage> {
     if (confirmed != true) return;
 
     try {
-      final message = await _api.deleteClient(client.id, bearerToken: _token);
-      await _loadClients();
+      final message = await api.deleteClient(client.id, bearerToken: token);
+      await loadData();
       if (!mounted) return;
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text(message)));
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(message)),
+      );
     } catch (error) {
       if (!mounted) return;
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text(userFacingError(error))));
+      setError(userFacingError(error));
     }
+  }
+
+  @override
+  Widget buildContent(BuildContext context) {
+    return Column(
+      children: [
+        if (BackendRuntime.allowBackendOverride) ...[
+          Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            children: const [BackendKind.rust]
+                .map(
+                  (kind) => ChoiceChip(
+                    label: Text(switch (kind) {
+                      BackendKind.rust => 'Rust',
+                      _ => 'Rust',
+                    }),
+                    selected: _selectedBackend == kind,
+                    onSelected: (_) =>
+                        setState(() => _selectedBackend = kind),
+                  ),
+                )
+                .toList(),
+          ),
+          const SizedBox(height: 12),
+          Row(
+            children: [
+              Expanded(
+                child: TextField(
+                  controller: _hostController,
+                  decoration: const InputDecoration(
+                    labelText: 'Backend Host',
+                    border: OutlineInputBorder(),
+                  ),
+                ),
+              ),
+              const SizedBox(width: 8),
+              FilledButton.icon(
+                onPressed: _applyBackendSelection,
+                icon: const Icon(Icons.check),
+                label: const Text('Apply'),
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+        ],
+        if (AppEnv.isDemoMode) ...[
+          const DemoModeNotice(
+            message:
+                'Demo mode: client management is read-only in preview.',
+          ),
+          const SizedBox(height: 12),
+        ],
+        const SizedBox(height: 16),
+        Expanded(
+          child: _clients.isEmpty
+              ? const Center(child: Text('No clients found'))
+              : ListView.separated(
+                  itemCount: _clients.length,
+                  separatorBuilder: (_, _) => const SizedBox(height: 8),
+                  itemBuilder: (context, index) {
+                    final client = _clients[index];
+                    return Card(
+                      child: ListTile(
+                        title: Text(client.name),
+                        subtitle: Text(
+                          '${client.clientNumber} • ${client.status}${client.email != null ? ' • ${client.email}' : ''}'
+                          '${client.preferredContactMethod != null ? '\nContact: ${client.preferredContactMethod}' : ''}'
+                          '${client.preferredContactWindow != null ? ' • ${client.preferredContactWindow}' : ''}',
+                        ),
+                        isThreeLine: client.preferredContactMethod != null,
+                        trailing: Wrap(
+                          spacing: 8,
+                          children: [
+                            IconButton(
+                              onPressed: AppEnv.isDemoMode
+                                  ? null
+                                  : () => _showEditDialog(client),
+                              icon: const Icon(Icons.edit),
+                            ),
+                            IconButton(
+                              onPressed: AppEnv.isDemoMode
+                                  ? null
+                                  : () => _delete(client),
+                              icon: const Icon(Icons.delete),
+                            ),
+                          ],
+                        ),
+                      ),
+                    );
+                  },
+                ),
+        ),
+      ],
+    );
   }
 
   @override
@@ -249,7 +301,7 @@ class _ClientsPageState extends State<ClientsPage> {
         actions: [
           const ThemeToggleButton(),
           IconButton(
-            onPressed: _loading ? null : _loadClients,
+            onPressed: isLoading ? null : reload,
             icon: const Icon(Icons.refresh),
             tooltip: 'Refresh',
           ),
@@ -263,124 +315,7 @@ class _ClientsPageState extends State<ClientsPage> {
       ),
       body: Padding(
         padding: const EdgeInsets.all(16),
-        child: Column(
-          children: [
-            if (BackendRuntime.allowBackendOverride) ...[
-              Wrap(
-                spacing: 8,
-                runSpacing: 8,
-                children: const [BackendKind.rust]
-                    .map(
-                      (kind) => ChoiceChip(
-                        label: Text(switch (kind) {
-                          BackendKind.rust => 'Rust',
-                          _ => 'Rust',
-                        }),
-                        selected: _selectedBackend == kind,
-                        onSelected: (_) =>
-                            setState(() => _selectedBackend = kind),
-                      ),
-                    )
-                    .toList(),
-              ),
-              const SizedBox(height: 12),
-              Row(
-                children: [
-                  Expanded(
-                    child: TextField(
-                      controller: _hostController,
-                      decoration: const InputDecoration(
-                        labelText: 'Backend Host',
-                        border: OutlineInputBorder(),
-                      ),
-                    ),
-                  ),
-                  const SizedBox(width: 8),
-                  FilledButton.icon(
-                    onPressed: _applyBackendSelection,
-                    icon: const Icon(Icons.check),
-                    label: const Text('Apply'),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 12),
-            ],
-            if (AppEnv.isDemoMode) ...[
-              const DemoModeNotice(
-                message:
-                    'Demo mode: client management is read-only in preview.',
-              ),
-              const SizedBox(height: 12),
-            ],
-            const SizedBox(height: 16),
-            if (_error != null)
-              Container(
-                width: double.infinity,
-                margin: const EdgeInsets.only(bottom: 12),
-                padding: const EdgeInsets.all(12),
-                decoration: BoxDecoration(
-                  color: Colors.red.shade50,
-                  borderRadius: BorderRadius.circular(8),
-                ),
-                child: Text(
-                  _error!,
-                  style: TextStyle(color: Colors.red.shade700),
-                ),
-              ),
-            if ((_token == null || _token!.isEmpty) && _clients.isEmpty)
-              Container(
-                width: double.infinity,
-                margin: const EdgeInsets.only(bottom: 12),
-                padding: const EdgeInsets.all(12),
-                decoration: BoxDecoration(
-                  color: Colors.blue.shade50,
-                  borderRadius: BorderRadius.circular(8),
-                ),
-                child: const Text('Login required. Please sign in again.'),
-              ),
-            Expanded(
-              child: _loading
-                  ? const Center(child: CircularProgressIndicator())
-                  : _clients.isEmpty
-                  ? const Center(child: Text('No clients found'))
-                  : ListView.separated(
-                      itemCount: _clients.length,
-                      separatorBuilder: (_, _) => const SizedBox(height: 8),
-                      itemBuilder: (context, index) {
-                        final client = _clients[index];
-                        return Card(
-                          child: ListTile(
-                            title: Text(client.name),
-                            subtitle: Text(
-                              '${client.clientNumber} • ${client.status}${client.email != null ? ' • ${client.email}' : ''}'
-                              '${client.preferredContactMethod != null ? '\nContact: ${client.preferredContactMethod}' : ''}'
-                              '${client.preferredContactWindow != null ? ' • ${client.preferredContactWindow}' : ''}',
-                            ),
-                            isThreeLine: client.preferredContactMethod != null,
-                            trailing: Wrap(
-                              spacing: 8,
-                              children: [
-                                IconButton(
-                                  onPressed: AppEnv.isDemoMode
-                                      ? null
-                                      : () => _showEditDialog(client),
-                                  icon: const Icon(Icons.edit),
-                                ),
-                                IconButton(
-                                  onPressed: AppEnv.isDemoMode
-                                      ? null
-                                      : () => _delete(client),
-                                  icon: const Icon(Icons.delete),
-                                ),
-                              ],
-                            ),
-                          ),
-                        );
-                      },
-                    ),
-            ),
-          ],
-        ),
+        child: buildBody(context),
       ),
     );
   }

@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
 
+import '../mixins/base_api_page_mixin.dart';
 import '../models/backend_config.dart';
 import '../models/location.dart';
-import '../services/api_service.dart';
 import '../services/app_env.dart';
 import '../services/auth_session.dart';
 import '../services/backend_runtime.dart';
@@ -12,6 +12,7 @@ import '../widgets/brand_app_bar_title.dart';
 import '../widgets/demo_mode_notice.dart';
 import '../widgets/profile_menu_button.dart';
 import '../widgets/theme_toggle_button.dart';
+import '../utils/navigation_extensions.dart';
 
 class LocationsPage extends StatefulWidget {
   const LocationsPage({super.key});
@@ -20,47 +21,40 @@ class LocationsPage extends StatefulWidget {
   State<LocationsPage> createState() => _LocationsPageState();
 }
 
-class _LocationsPageState extends State<LocationsPage> {
+class _LocationsPageState extends State<LocationsPage> with BaseApiPageMixin<LocationsPage> {
   final _clientFilterController = TextEditingController();
   late BackendKind _selectedBackend;
   late final TextEditingController _hostController;
 
-  BackendConfig get _backend => BackendRuntime.config;
-  ApiService get _api => ApiService();
-
-  bool _loading = false;
-  String? _error;
   List<Location> _locations = const [];
-  bool _isAdmin = false;
-  String? get _token => AuthSession.current?.token.trim();
+  bool get _isAdmin => AuthSession.current?.user.isAdmin == true;
 
   @override
   void initState() {
     super.initState();
-    _selectedBackend = _backend.kind;
+    _selectedBackend = backend.kind;
     _hostController = TextEditingController(text: BackendRuntime.host);
+  }
+
+  @override
+  bool checkAuthorization() {
     final session = AuthSession.current;
-    if (session == null) {
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (!mounted) return;
-        Navigator.pushReplacementNamed(context, '/');
-      });
-      return;
+    if (session == null) return false;
+    if (!session.user.isAdmin && !session.user.isClient) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Locations access requires admin/client role'),
+        ),
+      );
+      context.navigateToHome();
+      return false;
     }
-    _isAdmin = session.user.isAdmin;
-    WidgetsBinding.instance.addPostFrameCallback((_) async {
-      if (!mounted) return;
-      if (!session.user.isAdmin && !session.user.isClient) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Locations access requires admin/client role'),
-          ),
-        );
-        Navigator.pushReplacementNamed(context, '/home');
-        return;
-      }
-      await _loadLocations();
-    });
+    return true;
+  }
+
+  @override
+  Future<void> loadData() async {
+    await _loadLocations();
   }
 
   @override
@@ -82,28 +76,16 @@ class _LocationsPageState extends State<LocationsPage> {
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(content: Text('Backend set to ${next.label} (${next.baseUrl})')),
     );
-    Navigator.pushReplacementNamed(context, '/home');
+    context.navigateToHome();
   }
 
   Future<void> _loadLocations() async {
-    final token = _token;
-    if (token == null || token.isEmpty) {
-      setState(() {
-        _error = 'Login required. Please sign in again.';
-      });
-      return;
-    }
-
-    setState(() {
-      _loading = true;
-      _error = null;
-    });
-
+    if (token == null || token!.isEmpty) return;
     try {
       final filterClientId = int.tryParse(_clientFilterController.text.trim());
-      final locations = await _api.listLocations(
+      final locations = await api.listLocations(
         clientId: filterClientId,
-        bearerToken: token,
+        bearerToken: token!,
       );
       if (!mounted) return;
       setState(() {
@@ -111,25 +93,13 @@ class _LocationsPageState extends State<LocationsPage> {
       });
     } catch (error) {
       if (!mounted) return;
-      setState(() {
-        _error = userFacingError(error);
-      });
-    } finally {
-      if (mounted) {
-        setState(() {
-          _loading = false;
-        });
-      }
+      setError(userFacingError(error));
     }
   }
 
   Future<void> _showCreateDialog() async {
     if (AppEnv.isDemoMode) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Demo mode: create/edit/delete actions are disabled'),
-        ),
-      );
+      setError('Demo mode: create/edit/delete actions are disabled');
       return;
     }
     if (!_isAdmin) {
@@ -146,7 +116,7 @@ class _LocationsPageState extends State<LocationsPage> {
     if (result == null) return;
 
     try {
-      await _api.createLocation(result, bearerToken: _token);
+      await api.createLocation(result, bearerToken: token);
       await _loadLocations();
       if (!mounted) return;
       ScaffoldMessenger.of(
@@ -162,11 +132,7 @@ class _LocationsPageState extends State<LocationsPage> {
 
   Future<void> _showEditDialog(Location location) async {
     if (AppEnv.isDemoMode) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Demo mode: create/edit/delete actions are disabled'),
-        ),
-      );
+      setError('Demo mode: create/edit/delete actions are disabled');
       return;
     }
     final result = await showDialog<LocationUpdateInput>(
@@ -187,7 +153,7 @@ class _LocationsPageState extends State<LocationsPage> {
     if (result == null) return;
 
     try {
-      await _api.updateLocation(location.id, result, bearerToken: _token);
+      await api.updateLocation(location.id, result, bearerToken: token);
       await _loadLocations();
       if (!mounted) return;
       ScaffoldMessenger.of(
@@ -203,11 +169,7 @@ class _LocationsPageState extends State<LocationsPage> {
 
   Future<void> _delete(Location location) async {
     if (AppEnv.isDemoMode) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Demo mode: create/edit/delete actions are disabled'),
-        ),
-      );
+      setError('Demo mode: create/edit/delete actions are disabled');
       return;
     }
     if (!_isAdmin) {
@@ -239,9 +201,9 @@ class _LocationsPageState extends State<LocationsPage> {
     if (confirmed != true) return;
 
     try {
-      final message = await _api.deleteLocation(
+      final message = await api.deleteLocation(
         location.id,
-        bearerToken: _token,
+        bearerToken: token,
       );
       await _loadLocations();
       if (!mounted) return;
@@ -257,6 +219,116 @@ class _LocationsPageState extends State<LocationsPage> {
   }
 
   @override
+  Widget buildContent(BuildContext context) {
+    return Column(
+      children: [
+        if (BackendRuntime.allowBackendOverride) ...[
+          Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            children: const [BackendKind.rust]
+                .map(
+                  (kind) => ChoiceChip(
+                    label: Text(switch (kind) {
+                      BackendKind.rust => 'Rust',
+                      _ => 'Rust',
+                    }),
+                    selected: _selectedBackend == kind,
+                    onSelected: (_) {
+                      setState(() => _selectedBackend = kind);
+                    },
+                  ),
+                )
+                .toList(),
+          ),
+          const SizedBox(height: 12),
+          Row(
+            children: [
+              Expanded(
+                child: TextField(
+                  controller: _hostController,
+                  decoration: const InputDecoration(
+                    labelText: 'Backend Host',
+                    border: OutlineInputBorder(),
+                  ),
+                ),
+              ),
+              const SizedBox(width: 8),
+              FilledButton.icon(
+                onPressed: _applyBackendSelection,
+                icon: const Icon(Icons.check),
+                label: const Text('Apply'),
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+        ],
+        if (AppEnv.isDemoMode) ...[
+          const DemoModeNotice(
+            message:
+                'Demo mode: location management is read-only in preview.',
+          ),
+          const SizedBox(height: 12),
+        ],
+        const SizedBox(height: 12),
+        TextField(
+          controller: _clientFilterController,
+          keyboardType: TextInputType.number,
+          decoration: InputDecoration(
+            labelText: 'Client ID Filter (optional)',
+            border: const OutlineInputBorder(),
+            suffixIcon: IconButton(
+              onPressed: _loadLocations,
+              icon: const Icon(Icons.filter_alt),
+            ),
+          ),
+        ),
+        const SizedBox(height: 16),
+        Expanded(
+          child: _locations.isEmpty
+              ? const Center(child: Text('No locations found'))
+              : ListView.separated(
+                  itemCount: _locations.length,
+                  separatorBuilder: (_, _) => const SizedBox(height: 8),
+                  itemBuilder: (context, index) {
+                    final location = _locations[index];
+                    return Card(
+                      child: ListTile(
+                        leading: _locationThumb(location.photoUrl),
+                        title: Text(location.locationNumber),
+                        subtitle: Text(
+                          'Client ${location.clientId} • ${location.type} • ${location.status}${location.address != null ? ' • ${location.address}' : ''}'
+                          '${location.accessNotes != null ? '\nAccess: ${location.accessNotes}' : ''}',
+                        ),
+                        isThreeLine: location.accessNotes != null,
+                        trailing: Wrap(
+                          spacing: 8,
+                          children: [
+                            IconButton(
+                              onPressed: AppEnv.isDemoMode
+                                  ? null
+                                  : () => _showEditDialog(location),
+                              icon: const Icon(Icons.edit),
+                            ),
+                            if (_isAdmin)
+                              IconButton(
+                                onPressed: AppEnv.isDemoMode
+                                    ? null
+                                    : () => _delete(location),
+                                icon: const Icon(Icons.delete),
+                              ),
+                          ],
+                        ),
+                      ),
+                    );
+                  },
+                ),
+        ),
+      ],
+    );
+  }
+
+  @override
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
@@ -265,7 +337,7 @@ class _LocationsPageState extends State<LocationsPage> {
         actions: [
           const ThemeToggleButton(),
           IconButton(
-            onPressed: _loading ? null : _loadLocations,
+            onPressed: isLoading ? null : reload,
             icon: const Icon(Icons.refresh),
             tooltip: 'Refresh',
           ),
@@ -279,128 +351,7 @@ class _LocationsPageState extends State<LocationsPage> {
       ),
       body: Padding(
         padding: const EdgeInsets.all(16),
-        child: Column(
-          children: [
-            if (BackendRuntime.allowBackendOverride) ...[
-              Wrap(
-                spacing: 8,
-                runSpacing: 8,
-                children: const [BackendKind.rust]
-                    .map(
-                      (kind) => ChoiceChip(
-                        label: Text(switch (kind) {
-                          BackendKind.rust => 'Rust',
-                          _ => 'Rust',
-                        }),
-                        selected: _selectedBackend == kind,
-                        onSelected: (_) {
-                          setState(() => _selectedBackend = kind);
-                        },
-                      ),
-                    )
-                    .toList(),
-              ),
-              const SizedBox(height: 12),
-              Row(
-                children: [
-                  Expanded(
-                    child: TextField(
-                      controller: _hostController,
-                      decoration: const InputDecoration(
-                        labelText: 'Backend Host',
-                        border: OutlineInputBorder(),
-                      ),
-                    ),
-                  ),
-                  const SizedBox(width: 8),
-                  FilledButton.icon(
-                    onPressed: _applyBackendSelection,
-                    icon: const Icon(Icons.check),
-                    label: const Text('Apply'),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 12),
-            ],
-            if (AppEnv.isDemoMode) ...[
-              const DemoModeNotice(
-                message:
-                    'Demo mode: location management is read-only in preview.',
-              ),
-              const SizedBox(height: 12),
-            ],
-            const SizedBox(height: 12),
-            TextField(
-              controller: _clientFilterController,
-              keyboardType: TextInputType.number,
-              decoration: InputDecoration(
-                labelText: 'Client ID Filter (optional)',
-                border: const OutlineInputBorder(),
-                suffixIcon: IconButton(
-                  onPressed: _loadLocations,
-                  icon: const Icon(Icons.filter_alt),
-                ),
-              ),
-            ),
-            const SizedBox(height: 16),
-            if (_error != null)
-              Container(
-                width: double.infinity,
-                margin: const EdgeInsets.only(bottom: 12),
-                padding: const EdgeInsets.all(12),
-                decoration: BoxDecoration(
-                  color: Colors.red.shade50,
-                  borderRadius: BorderRadius.circular(8),
-                ),
-                child: Text(
-                  _error!,
-                  style: TextStyle(color: Colors.red.shade700),
-                ),
-              ),
-            Expanded(
-              child: _loading
-                  ? const Center(child: CircularProgressIndicator())
-                  : _locations.isEmpty
-                  ? const Center(child: Text('No locations found'))
-                  : ListView.separated(
-                      itemCount: _locations.length,
-                      separatorBuilder: (_, _) => const SizedBox(height: 8),
-                      itemBuilder: (context, index) {
-                        final location = _locations[index];
-                        return Card(
-                          child: ListTile(
-                            leading: _locationThumb(location.photoUrl),
-                            title: Text(location.locationNumber),
-                            subtitle: Text(
-                              'Client ${location.clientId} • ${location.type} • ${location.status}${location.address != null ? ' • ${location.address}' : ''}'
-                              '${location.accessNotes != null ? '\nAccess: ${location.accessNotes}' : ''}',
-                            ),
-                            isThreeLine: location.accessNotes != null,
-                            trailing: Wrap(
-                              spacing: 8,
-                              children: [
-                                IconButton(
-                                  onPressed: AppEnv.isDemoMode
-                                      ? null
-                                      : () => _showEditDialog(location),
-                                  icon: const Icon(Icons.edit),
-                                ),
-                                if (_isAdmin)
-                                  IconButton(
-                                    onPressed: AppEnv.isDemoMode
-                                        ? null
-                                        : () => _delete(location),
-                                    icon: const Icon(Icons.delete),
-                                  ),
-                              ],
-                            ),
-                          ),
-                        );
-                      },
-                    ),
-            ),
-          ],
-        ),
+        child: buildBody(context),
       ),
     );
   }

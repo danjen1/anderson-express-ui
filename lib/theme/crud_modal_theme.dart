@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 
+import 'app_colors.dart';
+
 /// Builds a consistent theme for CRUD modal dialogs across the application.
 /// 
 /// This theme provides standardized styling for:
@@ -11,39 +13,39 @@ ThemeData buildCrudModalTheme(BuildContext context) {
   final dark = Theme.of(context).brightness == Brightness.dark;
   return Theme.of(context).copyWith(
     dialogTheme: DialogThemeData(
-      backgroundColor: dark ? const Color(0xFF2C2C2C) : Colors.white,
+      backgroundColor: dark ? AppColors.darkBackground : Colors.white,
       surfaceTintColor: Colors.transparent,
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(14),
         side: BorderSide(
-          color: dark ? const Color(0xFF4A525F) : const Color(0xFFA8D6F7),
+          color: dark ? AppColors.mediumGray : AppColors.lightBlue,
         ),
       ),
     ),
     inputDecorationTheme: InputDecorationTheme(
       filled: true,
-      fillColor: dark ? const Color(0xFF1F1F1F) : const Color(0xFFF7FCFE),
+      fillColor: dark ? AppColors.darkerBackground : AppColors.veryLightBackground,
       border: OutlineInputBorder(
         borderRadius: BorderRadius.circular(10),
         borderSide: BorderSide(
-          color: dark ? const Color(0xFF657184) : const Color(0xFFBEDCE4),
+          color: dark ? const Color(0xFF657184) : AppColors.paleBlue,
         ),
       ),
       enabledBorder: OutlineInputBorder(
         borderRadius: BorderRadius.circular(10),
         borderSide: BorderSide(
-          color: dark ? const Color(0xFF657184) : const Color(0xFFBEDCE4),
+          color: dark ? const Color(0xFF657184) : AppColors.paleBlue,
         ),
       ),
       focusedBorder: OutlineInputBorder(
         borderRadius: BorderRadius.circular(10),
         borderSide: BorderSide(
-          color: dark ? const Color(0xFFB39CD0) : const Color(0xFF296273),
+          color: dark ? AppColors.primaryPurple : AppColors.accentTeal,
           width: 1.4,
         ),
       ),
       labelStyle: TextStyle(
-        color: dark ? const Color(0xFFE4E4E4) : const Color(0xFF442E6F),
+        color: dark ? AppColors.lightBackground : AppColors.primaryDarkPurple,
       ),
       hintStyle: TextStyle(
         color: dark ? const Color(0xFFB8BCC4) : const Color(0xFF6A6A6A),
@@ -52,26 +54,26 @@ ThemeData buildCrudModalTheme(BuildContext context) {
     textButtonTheme: TextButtonThemeData(
       style: TextButton.styleFrom(
         foregroundColor: dark
-            ? const Color(0xFFA8DADC)
-            : const Color(0xFF296273),
+            ? AppColors.accentCyan
+            : AppColors.accentTeal,
       ),
     ),
     outlinedButtonTheme: OutlinedButtonThemeData(
       style: OutlinedButton.styleFrom(
         foregroundColor: dark
-            ? const Color(0xFFA8DADC)
-            : const Color(0xFF296273),
+            ? AppColors.accentCyan
+            : AppColors.accentTeal,
         side: BorderSide(
-          color: dark ? const Color(0xFF657184) : const Color(0xFFBEDCE4),
+          color: dark ? const Color(0xFF657184) : AppColors.paleBlue,
         ),
       ),
     ),
     filledButtonTheme: FilledButtonThemeData(
       style: FilledButton.styleFrom(
         backgroundColor: dark
-            ? const Color(0xFFB39CD0)
-            : const Color(0xFF442E6F),
-        foregroundColor: dark ? const Color(0xFF1F1F1F) : Colors.white,
+            ? AppColors.primaryPurple
+            : AppColors.primaryDarkPurple,
+        foregroundColor: dark ? AppColors.darkerBackground : Colors.white,
       ),
     ),
   );
@@ -80,13 +82,13 @@ ThemeData buildCrudModalTheme(BuildContext context) {
 /// Returns the appropriate title color for CRUD modals based on theme brightness.
 Color crudModalTitleColor(BuildContext context) {
   return Theme.of(context).brightness == Brightness.dark
-      ? const Color(0xFFB39CD0)
-      : const Color(0xFF442E6F);
+      ? AppColors.primaryPurple
+      : AppColors.primaryDarkPurple;
 }
 
 /// Returns the appropriate color for required field indicators in CRUD modals.
 Color crudModalRequiredColor(BuildContext context) {
   return Theme.of(context).brightness == Brightness.dark
-      ? const Color(0xFFFFC1CC)
-      : const Color(0xFF442E6F);
+      ? AppColors.lightPink
+      : AppColors.primaryDarkPurple;
 }

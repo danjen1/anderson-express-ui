@@ -1,13 +1,14 @@
 import 'package:flutter/material.dart';
 
+import '../mixins/base_api_page_mixin.dart';
 import '../models/client.dart';
 import '../models/employee.dart';
-import '../services/api_service.dart';
 import '../services/auth_session.dart';
 import '../utils/error_text.dart';
 import '../widgets/backend_banner.dart';
 import '../widgets/profile_menu_button.dart';
 import '../widgets/theme_toggle_button.dart';
+import '../utils/navigation_extensions.dart';
 
 class ProfilePage extends StatefulWidget {
   const ProfilePage({super.key});
@@ -16,7 +17,7 @@ class ProfilePage extends StatefulWidget {
   State<ProfilePage> createState() => _ProfilePageState();
 }
 
-class _ProfilePageState extends State<ProfilePage> {
+class _ProfilePageState extends State<ProfilePage> with BaseApiPageMixin<ProfilePage> {
   static const String _defaultEmployeePhotoAsset =
       '/assets/images/profiles/employee_default.png';
   final _name = TextEditingController();
@@ -28,13 +29,9 @@ class _ProfilePageState extends State<ProfilePage> {
   final _zip = TextEditingController();
   final _photoUrl = TextEditingController();
 
-  bool _loading = true;
   bool _saving = false;
-  String? _error;
   bool _isEditable = false;
   String _profileType = 'Account';
-
-  String? get _token => AuthSession.current?.token.trim();
 
   String _assetPath(String? value, {required String fallback}) {
     final candidate = (value == null || value.trim().isEmpty)
@@ -47,15 +44,52 @@ class _ProfilePageState extends State<ProfilePage> {
   void initState() {
     super.initState();
     final session = AuthSession.current;
-    if (session == null) {
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (!mounted) return;
-        Navigator.pushReplacementNamed(context, '/');
-      });
-      return;
+    if (session != null) {
+      _email.text = session.loginEmail ?? '';
     }
-    _email.text = session.loginEmail ?? '';
-    _loadProfile();
+  }
+
+  @override
+  bool checkAuthorization() {
+    final session = AuthSession.current;
+    if (session == null) return false;
+    if (!session.user.isClient && !session.user.isEmployee && !session.user.isAdmin) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Client or employee access required'),
+        ),
+      );
+      context.navigateToHome();
+      return false;
+    }
+    return true;
+  }
+
+  @override
+  Future<void> loadData() async {
+    final session = AuthSession.current;
+    if (session == null || token == null || token!.isEmpty) return;
+
+    if (session.user.isEmployee) {
+      final employee = await api.getEmployee(
+        session.user.subjectId,
+        bearerToken: token!,
+      );
+      _fillFromEmployee(employee);
+      _profileType = 'Employee Profile';
+      _isEditable = true;
+    } else if (session.user.isClient) {
+      final client = await api.getClient(
+        session.user.subjectId,
+        bearerToken: token!,
+      );
+      _fillFromClient(client);
+      _profileType = 'Client Profile';
+      _isEditable = true;
+    } else {
+      _profileType = 'Admin Account';
+      _isEditable = false;
+    }
   }
 
   @override
@@ -69,49 +103,6 @@ class _ProfilePageState extends State<ProfilePage> {
     _zip.dispose();
     _photoUrl.dispose();
     super.dispose();
-  }
-
-  Future<void> _loadProfile() async {
-    final session = AuthSession.current;
-    final token = _token;
-    if (session == null || token == null || token.isEmpty) return;
-
-    setState(() {
-      _loading = true;
-      _error = null;
-    });
-
-    try {
-      final api = ApiService();
-      if (session.user.isEmployee) {
-        final employee = await api.getEmployee(
-          session.user.subjectId,
-          bearerToken: token,
-        );
-        _fillFromEmployee(employee);
-        _profileType = 'Employee Profile';
-        _isEditable = true;
-      } else if (session.user.isClient) {
-        final client = await api.getClient(
-          session.user.subjectId,
-          bearerToken: token,
-        );
-        _fillFromClient(client);
-        _profileType = 'Client Profile';
-        _isEditable = true;
-      } else {
-        _profileType = 'Admin Account';
-        _isEditable = false;
-      }
-    } catch (error) {
-      _error = userFacingError(error);
-    } finally {
-      if (mounted) {
-        setState(() {
-          _loading = false;
-        });
-      }
-    }
   }
 
   void _fillFromEmployee(Employee employee) {
@@ -137,17 +128,15 @@ class _ProfilePageState extends State<ProfilePage> {
 
   Future<void> _saveProfile() async {
     final session = AuthSession.current;
-    final token = _token;
-    if (session == null || token == null || token.isEmpty) return;
+    if (session == null || token == null || token!.isEmpty) return;
     if (!_isEditable) return;
 
     setState(() {
       _saving = true;
-      _error = null;
     });
+    setError(null);
 
     try {
-      final api = ApiService();
       if (session.user.isEmployee) {
         await api.updateEmployee(
           session.user.subjectId,
@@ -161,7 +150,7 @@ class _ProfilePageState extends State<ProfilePage> {
             zipCode: _nullable(_zip.text),
             photoUrl: _nullable(_photoUrl.text),
           ),
-          bearerToken: token,
+          bearerToken: token!,
         );
       } else if (session.user.isClient) {
         await api.updateClient(
@@ -175,17 +164,17 @@ class _ProfilePageState extends State<ProfilePage> {
             state: _nullable(_state.text),
             zipCode: _nullable(_zip.text),
           ),
-          bearerToken: token,
+          bearerToken: token!,
         );
       }
       if (!mounted) return;
       ScaffoldMessenger.of(
         context,
       ).showSnackBar(const SnackBar(content: Text('Profile updated')));
-      await _loadProfile();
+      await reload();
     } catch (error) {
       if (!mounted) return;
-      setState(() => _error = userFacingError(error));
+      setError(userFacingError(error));
     } finally {
       if (mounted) {
         setState(() => _saving = false);
@@ -196,8 +185,7 @@ class _ProfilePageState extends State<ProfilePage> {
   Future<void> _showEmployeeEditModal() async {
     final session = AuthSession.current;
     if (session == null || !session.user.isEmployee) return;
-    final token = _token;
-    if (token == null || token.isEmpty) return;
+    if (token == null || token!.isEmpty) return;
     final dark = Theme.of(context).brightness == Brightness.dark;
 
     final name = TextEditingController(text: _name.text);
@@ -345,7 +333,7 @@ class _ProfilePageState extends State<ProfilePage> {
 
       if (submit != true) return;
 
-      await ApiService().updateEmployee(
+      await api.updateEmployee(
         session.user.subjectId,
         EmployeeUpdateInput(
           name: _nullable(name.text),
@@ -357,7 +345,7 @@ class _ProfilePageState extends State<ProfilePage> {
           zipCode: _nullable(zip.text),
           photoUrl: _nullable(photo.text),
         ),
-        bearerToken: token,
+        bearerToken: token!,
       );
       if (!mounted) return;
       await showDialog<void>(
@@ -381,10 +369,10 @@ class _ProfilePageState extends State<ProfilePage> {
       _state.text = state.text;
       _zip.text = zip.text;
       _photoUrl.text = photo.text;
-      await _loadProfile();
+      await reload();
     } catch (error) {
       if (!mounted) return;
-      setState(() => _error = userFacingError(error));
+      setError(userFacingError(error));
     } finally {
       name.dispose();
       email.dispose();
@@ -403,6 +391,79 @@ class _ProfilePageState extends State<ProfilePage> {
   }
 
   @override
+  Widget buildContent(BuildContext context) {
+    return SelectionArea(
+      child: Center(
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 720),
+          child: ListView(
+            padding: const EdgeInsets.all(16),
+            children: [
+              if (!_isEditable)
+                const Card(
+                  child: Padding(
+                    padding: EdgeInsets.all(12),
+                    child: Text(
+                      'Admin self-profile editing is not wired to backend yet. Employee and Client profiles are editable now.',
+                    ),
+                  ),
+                ),
+              const SizedBox(height: 8),
+              _field(_name, 'Name'),
+              const SizedBox(height: 10),
+              _field(_email, 'Email'),
+              const SizedBox(height: 10),
+              _field(_phone, 'Phone'),
+              const SizedBox(height: 10),
+              _field(_address, 'Address'),
+              const SizedBox(height: 10),
+              _field(_city, 'City'),
+              const SizedBox(height: 10),
+              _field(_state, 'State'),
+              const SizedBox(height: 10),
+              _field(_zip, 'Zip Code'),
+              if (AuthSession.current?.user.isEmployee == true) ...[
+                const SizedBox(height: 10),
+                _field(_photoUrl, 'Photo URL'),
+              ],
+              const SizedBox(height: 14),
+              Row(
+                children: [
+                  if (AuthSession.current?.user.isEmployee == true)
+                    OutlinedButton.icon(
+                      onPressed: _saving
+                          ? null
+                          : _showEmployeeEditModal,
+                      icon: const Icon(Icons.edit_outlined),
+                      label: const Text('Edit Details'),
+                    ),
+                  const Spacer(),
+                  FilledButton.icon(
+                    onPressed: _isEditable && !_saving
+                        ? _saveProfile
+                        : null,
+                    icon: _saving
+                        ? const SizedBox(
+                            width: 16,
+                            height: 16,
+                            child: CircularProgressIndicator(
+                              strokeWidth: 2,
+                              color: Colors.white,
+                            ),
+                          )
+                        : const Icon(Icons.save_outlined),
+                    label: const Text('Save Profile'),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  @override
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
@@ -410,88 +471,7 @@ class _ProfilePageState extends State<ProfilePage> {
         bottom: const BackendBanner(),
         actions: const [ThemeToggleButton(), ProfileMenuButton()],
       ),
-      body: _loading
-          ? const Center(child: CircularProgressIndicator())
-          : SelectionArea(
-              child: Center(
-                child: ConstrainedBox(
-                  constraints: const BoxConstraints(maxWidth: 720),
-                  child: ListView(
-                    padding: const EdgeInsets.all(16),
-                    children: [
-                      if (_error != null)
-                        Card(
-                          color: Colors.red.shade50,
-                          child: Padding(
-                            padding: const EdgeInsets.all(12),
-                            child: Text(
-                              _error!,
-                              style: TextStyle(color: Colors.red.shade700),
-                            ),
-                          ),
-                        ),
-                      if (!_isEditable)
-                        const Card(
-                          child: Padding(
-                            padding: EdgeInsets.all(12),
-                            child: Text(
-                              'Admin self-profile editing is not wired to backend yet. Employee and Client profiles are editable now.',
-                            ),
-                          ),
-                        ),
-                      const SizedBox(height: 8),
-                      _field(_name, 'Name'),
-                      const SizedBox(height: 10),
-                      _field(_email, 'Email'),
-                      const SizedBox(height: 10),
-                      _field(_phone, 'Phone'),
-                      const SizedBox(height: 10),
-                      _field(_address, 'Address'),
-                      const SizedBox(height: 10),
-                      _field(_city, 'City'),
-                      const SizedBox(height: 10),
-                      _field(_state, 'State'),
-                      const SizedBox(height: 10),
-                      _field(_zip, 'Zip Code'),
-                      if (AuthSession.current?.user.isEmployee == true) ...[
-                        const SizedBox(height: 10),
-                        _field(_photoUrl, 'Photo URL'),
-                      ],
-                      const SizedBox(height: 14),
-                      Row(
-                        children: [
-                          if (AuthSession.current?.user.isEmployee == true)
-                            OutlinedButton.icon(
-                              onPressed: _saving
-                                  ? null
-                                  : _showEmployeeEditModal,
-                              icon: const Icon(Icons.edit_outlined),
-                              label: const Text('Edit Details'),
-                            ),
-                          const Spacer(),
-                          FilledButton.icon(
-                            onPressed: _isEditable && !_saving
-                                ? _saveProfile
-                                : null,
-                            icon: _saving
-                                ? const SizedBox(
-                                    width: 16,
-                                    height: 16,
-                                    child: CircularProgressIndicator(
-                                      strokeWidth: 2,
-                                      color: Colors.white,
-                                    ),
-                                  )
-                                : const Icon(Icons.save_outlined),
-                            label: const Text('Save Profile'),
-                          ),
-                        ],
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-            ),
+      body: buildBody(context),
     );
   }
 

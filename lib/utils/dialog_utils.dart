@@ -105,3 +105,35 @@ Future<void> showErrorDialog(
     ),
   );
 }
+
+/// Shows a success SnackBar with a green background.
+///
+/// Example:
+/// ```dart
+/// showSuccessSnackBar(context, 'Employee created successfully');
+/// ```
+void showSuccessSnackBar(BuildContext context, String message) {
+  ScaffoldMessenger.of(context).showSnackBar(
+    SnackBar(
+      content: Text(message),
+      backgroundColor: Colors.green[700],
+      behavior: SnackBarBehavior.floating,
+    ),
+  );
+}
+
+/// Shows an error SnackBar with a red background.
+///
+/// Example:
+/// ```dart
+/// showErrorSnackBar(context, 'Failed to delete employee: ${error.toString()}');
+/// ```
+void showErrorSnackBar(BuildContext context, String message) {
+  ScaffoldMessenger.of(context).showSnackBar(
+    SnackBar(
+      content: Text(message),
+      backgroundColor: Colors.red[700],
+      behavior: SnackBarBehavior.floating,
+    ),
+  );
+}
