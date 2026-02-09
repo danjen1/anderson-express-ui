@@ -5,6 +5,7 @@ import 'package:http/http.dart' as http;
 import '../models/backend_config.dart';
 import '../models/auth_user.dart';
 import '../models/cleaning_profile.dart';
+import '../models/cleaning_request.dart';
 import '../models/client.dart';
 import '../models/employee.dart';
 import '../models/job.dart';
@@ -774,6 +775,76 @@ class ApiService {
     _throwIfError(response, fallbackMessage: 'Failed to create task rule');
     final data = jsonDecode(response.body) as Map<String, dynamic>;
     return TaskRule.fromJson(data);
+  }
+
+  Future<void> createCleaningRequest(
+    CleaningRequestCreateInput input, {
+    String? bearerToken,
+  }) async {
+    final response = await http
+        .post(
+          Uri.parse('${_backend.baseUrl}/api/v1/cleaning-requests'),
+          headers: _headers(bearerToken),
+          body: jsonEncode(input.toJson()),
+        )
+        .timeout(const Duration(seconds: 10));
+
+    _throwIfError(
+      response,
+      fallbackMessage: 'Failed to submit cleaning request',
+    );
+  }
+
+  Future<List<CleaningRequest>> listCleaningRequests({
+    int? clientId,
+    String? status,
+    String? bearerToken,
+  }) async {
+    var uri = Uri.parse('${_backend.baseUrl}/api/v1/cleaning-requests');
+    final params = <String, String>{};
+    if (clientId != null) {
+      params['client_id'] = clientId.toString();
+    }
+    if (status != null && status.trim().isNotEmpty) {
+      params['status'] = status.trim().toUpperCase();
+    }
+    if (params.isNotEmpty) {
+      uri = uri.replace(queryParameters: params);
+    }
+
+    final response = await http
+        .get(uri, headers: _headers(bearerToken))
+        .timeout(const Duration(seconds: 10));
+
+    _throwIfError(
+      response,
+      fallbackMessage: 'Failed to list cleaning requests',
+    );
+    final data = jsonDecode(response.body) as List<dynamic>;
+    return data
+        .map((item) => CleaningRequest.fromJson(item as Map<String, dynamic>))
+        .toList();
+  }
+
+  Future<CleaningRequest> updateCleaningRequestStatus(
+    int requestId,
+    String status, {
+    String? bearerToken,
+  }) async {
+    final response = await http
+        .patch(
+          Uri.parse('${_backend.baseUrl}/api/v1/cleaning-requests/$requestId'),
+          headers: _headers(bearerToken),
+          body: jsonEncode({'status': status}),
+        )
+        .timeout(const Duration(seconds: 10));
+
+    _throwIfError(
+      response,
+      fallbackMessage: 'Failed to update cleaning request status',
+    );
+    final data = jsonDecode(response.body) as Map<String, dynamic>;
+    return CleaningRequest.fromJson(data);
   }
 
   Map<String, String> _headers(String? bearerToken) {

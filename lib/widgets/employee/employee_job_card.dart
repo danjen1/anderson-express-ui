@@ -77,7 +77,9 @@ class EmployeeJobCard extends StatelessWidget {
         color: cardBg,
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(12),
-          side: BorderSide(color: dark ? _darkCta : _lightSecondary),
+          side: BorderSide(
+            color: dark ? const Color(0xFF657184) : _lightSecondary,
+          ),
         ),
         child: Padding(
           padding: EdgeInsets.all(isCompact ? 10 : 12),
@@ -284,6 +286,7 @@ class EmployeeJobCard extends StatelessWidget {
               overflow: TextOverflow.ellipsis,
               style: TextStyle(
                 fontSize: 11,
+                fontWeight: FontWeight.w700,
                 color: dark ? _darkText : _lightAccent,
               ),
               textAlign: TextAlign.center,

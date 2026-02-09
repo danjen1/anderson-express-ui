@@ -1,9 +1,13 @@
+import 'dart:convert';
 import 'dart:math';
 
+import 'package:file_picker/file_picker.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:url_launcher/url_launcher.dart';
 
+import '../models/client.dart';
+import '../models/cleaning_request.dart';
 import '../models/employee.dart';
 import '../models/job.dart';
 import '../models/job_assignment.dart';
@@ -27,6 +31,21 @@ DateTimeRange _currentWeekRange() {
     now.day,
   ).subtract(Duration(days: daysSinceSunday));
   final end = start.add(const Duration(days: 6));
+  return DateTimeRange(start: start, end: end);
+}
+
+DateTimeRange _last30DaysRange() {
+  final now = DateTime.now();
+  final start = DateTime(
+    now.year,
+    now.month,
+    now.day,
+  ).subtract(const Duration(days: 29));
+  final end = DateTime(
+    now.year,
+    now.month,
+    now.day,
+  ).add(const Duration(days: 30));
   return DateTimeRange(start: start, end: end);
 }
 
@@ -56,11 +75,11 @@ class _HomePageState extends State<HomePage> {
   DateTimeRange _employeeDateRange = _currentWeekRange();
   List<Location> _clientLocations = const [];
   List<Job> _clientJobs = const [];
-  List<Job> _clientPendingJobs = const [];
-  DateTime _clientCompletedSince = DateTime.now().subtract(
-    const Duration(days: 30),
-  );
+  Client? _clientProfile;
+  DateTimeRange _clientDateRange = _last30DaysRange();
   Map<String, List<JobAssignment>> _clientAssignmentsByJob = const {};
+  bool _photoHovering = false;
+  bool _uploadingPhoto = false;
 
   AuthSessionState? get _session => AuthSession.current;
   bool get _isAdmin => _session?.user.isAdmin == true;
@@ -148,7 +167,7 @@ class _HomePageState extends State<HomePage> {
       Employee? employeeProfile;
       List<Location> clientLocations = const [];
       List<Job> clientJobs = const [];
-      List<Job> clientPending = const [];
+      Client? clientProfile;
       Map<String, List<JobAssignment>> clientAssignmentsByJob = const {};
 
       if (_isAdmin) {
@@ -171,11 +190,16 @@ class _HomePageState extends State<HomePage> {
           employeeProfile = null;
         }
       } else if (_isClient) {
+        final subjectId = _session?.user.subjectId ?? '';
+        if (subjectId.isNotEmpty) {
+          try {
+            clientProfile = await api.getClient(subjectId, bearerToken: token);
+          } catch (_) {
+            clientProfile = null;
+          }
+        }
         clientLocations = await api.listLocations(bearerToken: token);
         clientJobs = await api.listJobs(bearerToken: token);
-        clientPending = clientJobs
-            .where((job) => !_isCompletedStatus(job.status))
-            .toList();
 
         final assignmentsMap = <String, List<JobAssignment>>{};
         for (final job in clientJobs) {
@@ -200,7 +224,7 @@ class _HomePageState extends State<HomePage> {
         _employeeProfile = employeeProfile;
         _clientLocations = clientLocations;
         _clientJobs = clientJobs;
-        _clientPendingJobs = clientPending;
+        _clientProfile = clientProfile;
         _clientAssignmentsByJob = clientAssignmentsByJob;
       });
     } catch (loadError) {
@@ -505,32 +529,59 @@ class _HomePageState extends State<HomePage> {
     });
   }
 
-  Future<void> _pickClientCompletedSinceDate() async {
+  Future<void> _pickClientStartDate() async {
     final now = DateTime.now();
     final picked = await showDatePicker(
       context: context,
-      initialDate: _clientCompletedSince,
+      initialDate: _clientDateRange.start,
       firstDate: DateTime(now.year - 3),
       lastDate: now,
     );
     if (picked == null) return;
     setState(() {
-      _clientCompletedSince = picked;
+      final end = picked.isAfter(_clientDateRange.end)
+          ? picked
+          : _clientDateRange.end;
+      _clientDateRange = DateTimeRange(start: picked, end: end);
+    });
+  }
+
+  Future<void> _pickClientEndDate() async {
+    final now = DateTime.now();
+    final picked = await showDatePicker(
+      context: context,
+      initialDate: _clientDateRange.end,
+      firstDate: DateTime(now.year - 3),
+      lastDate: now.add(const Duration(days: 365)),
+    );
+    if (picked == null) return;
+    setState(() {
+      final start = picked.isBefore(_clientDateRange.start)
+          ? picked
+          : _clientDateRange.start;
+      _clientDateRange = DateTimeRange(start: start, end: picked);
     });
   }
 
   List<Job> get _clientCompletedJobs {
     final start = DateTime(
-      _clientCompletedSince.year,
-      _clientCompletedSince.month,
-      _clientCompletedSince.day,
+      _clientDateRange.start.year,
+      _clientDateRange.start.month,
+      _clientDateRange.start.day,
+    );
+    final end = DateTime(
+      _clientDateRange.end.year,
+      _clientDateRange.end.month,
+      _clientDateRange.end.day,
+      23,
+      59,
+      59,
     );
     final jobs = _clientJobs.where((job) {
       if (!_isCompletedStatus(job.status)) return false;
       final date = _parseJobDate(job.completedAt ?? job.scheduledDate);
       if (date == null) return true;
-      final normalized = DateTime(date.year, date.month, date.day);
-      return !normalized.isBefore(start);
+      return !date.isBefore(start) && !date.isAfter(end);
     }).toList();
     jobs.sort((a, b) {
       final ad = _parseJobDate(a.completedAt ?? a.scheduledDate);
@@ -559,55 +610,84 @@ class _HomePageState extends State<HomePage> {
     return total / (dates.length - 1);
   }
 
-  String _formatDateTimeShort(String? raw) {
-    if (raw == null || raw.trim().isEmpty) return '—';
+  Future<void> _pickClientLocationPhoto(Location? location) async {
+    if (location == null) return;
+    final token = _session?.token ?? '';
+    if (token.isEmpty) return;
+    final proceed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Update Location Photo'),
+        content: const Text('Select a new photo for your location.'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text('Choose Photo'),
+          ),
+        ],
+      ),
+    );
+    if (proceed != true) return;
+
+    final result = await FilePicker.platform.pickFiles(
+      type: FileType.custom,
+      allowedExtensions: const ['jpg', 'jpeg', 'png', 'webp'],
+      withData: true,
+    );
+    if (result == null || result.files.isEmpty) return;
+    final file = result.files.first;
+    final bytes = file.bytes;
+    if (bytes == null || bytes.isEmpty) return;
+    if (bytes.length > 500 * 1024) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text(
+            'Image must be under 500KB. Please choose a smaller file.',
+          ),
+        ),
+      );
+      return;
+    }
+
+    final ext = (file.extension ?? '').toLowerCase();
+    final mime = switch (ext) {
+      'png' => 'image/png',
+      'webp' => 'image/webp',
+      _ => 'image/jpeg',
+    };
+    final dataUrl = 'data:$mime;base64,${base64Encode(bytes)}';
+
+    setState(() => _uploadingPhoto = true);
     try {
-      final parsed = DateTime.parse(raw).toLocal();
-      final hour = parsed.hour % 12 == 0 ? 12 : parsed.hour % 12;
-      final minute = parsed.minute.toString().padLeft(2, '0');
-      final suffix = parsed.hour >= 12 ? 'PM' : 'AM';
-      return '${parsed.month}-${parsed.day}-${parsed.year} $hour:$minute $suffix';
-    } catch (_) {
-      return raw;
+      await ApiService().updateLocation(
+        location.id,
+        LocationUpdateInput(photoUrl: dataUrl),
+        bearerToken: token,
+      );
+      await _loadDashboard();
+      if (!mounted) return;
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('Location photo updated')));
+    } catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('Photo upload failed: $error')));
+    } finally {
+      if (mounted) {
+        setState(() => _uploadingPhoto = false);
+      }
     }
   }
 
   List<JobAssignment> _assignmentsForJob(String jobId) {
     return _clientAssignmentsByJob[jobId] ?? const [];
-  }
-
-  Widget _metricTile({
-    required String label,
-    required String value,
-    IconData? icon,
-    Color? bg,
-    Color? fg,
-  }) {
-    final dark = Theme.of(context).brightness == Brightness.dark;
-    final tileFg = fg ?? (dark ? _darkText : _lightAccent);
-    return Container(
-      constraints: const BoxConstraints(minWidth: 170),
-      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 10),
-      decoration: BoxDecoration(
-        color: bg ?? (dark ? const Color(0xFF3A3A3A) : _lightSecondary),
-        borderRadius: BorderRadius.circular(10),
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.max,
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          if (icon != null) ...[
-            Icon(icon, size: 16, color: tileFg),
-            const SizedBox(width: 6),
-          ],
-          Text(
-            '$label: ',
-            style: TextStyle(fontWeight: FontWeight.w700, color: tileFg),
-          ),
-          Text(value, style: TextStyle(color: tileFg)),
-        ],
-      ),
-    );
   }
 
   String _deviceMapLabel() {
@@ -862,206 +942,658 @@ class _HomePageState extends State<HomePage> {
 
   Widget _buildClientLanding() {
     final completedJobs = _clientCompletedJobs;
-    final recentCleanings = completedJobs.length;
-    final pendingJobs = _clientPendingJobs.length;
-    final averageDuration = completedJobs
+    final scheduledJobs = _clientJobs.where((job) {
+      final status = job.status.trim().toLowerCase();
+      return status == 'assigned' ||
+          status == 'in_progress' ||
+          status == 'in-progress' ||
+          status == 'in progress';
+    }).length;
+    final start = DateTime(
+      _clientDateRange.start.year,
+      _clientDateRange.start.month,
+      _clientDateRange.start.day,
+    );
+    final end = DateTime(
+      _clientDateRange.end.year,
+      _clientDateRange.end.month,
+      _clientDateRange.end.day,
+      23,
+      59,
+      59,
+    );
+    final jobsInRange =
+        _clientJobs.where((job) {
+          final status = job.status.trim().toLowerCase();
+          final date = _parseJobDate(
+            _isCompletedStatus(status)
+                ? (job.completedAt ?? job.scheduledDate)
+                : job.scheduledDate,
+          );
+          if (date == null) return true;
+          return !date.isBefore(start) && !date.isAfter(end);
+        }).toList()..sort((a, b) {
+          final ad = _parseJobDate(
+            _isCompletedStatus(a.status)
+                ? (a.completedAt ?? a.scheduledDate)
+                : a.scheduledDate,
+          );
+          final bd = _parseJobDate(
+            _isCompletedStatus(b.status)
+                ? (b.completedAt ?? b.scheduledDate)
+                : b.scheduledDate,
+          );
+          if (ad == null && bd == null) {
+            return a.jobNumber.compareTo(b.jobNumber);
+          }
+          if (ad == null) return 1;
+          if (bd == null) return -1;
+          return bd.compareTo(ad);
+        });
+    final averageDurationMinutes = completedJobs
         .where((job) => job.actualDurationMinutes != null)
         .fold<int>(0, (sum, job) => sum + (job.actualDurationMinutes ?? 0));
     final durationCount = completedJobs
         .where((job) => job.actualDurationMinutes != null)
         .length;
+    final averageDuration = durationCount == 0
+        ? 'N/A'
+        : '${(averageDurationMinutes ~/ durationCount) ~/ 60}h ${(averageDurationMinutes ~/ durationCount) % 60}m';
     final averageFrequencyDays = _clientAverageFrequencyDays(completedJobs);
+    final nextCleaning =
+        _clientJobs
+            .where((job) => !_isCompletedStatus(job.status))
+            .map((job) => _parseJobDate(job.scheduledDate))
+            .whereType<DateTime>()
+            .toList()
+          ..sort((a, b) => a.compareTo(b));
     final primaryLocation = _clientLocations.isNotEmpty
         ? _clientLocations.first
         : null;
-
-    Widget historyTile(Job job) {
-      final assignments = _assignmentsForJob(job.id);
-      final latestAssignment = assignments.isNotEmpty
-          ? assignments.first
-          : null;
-      final cleaner = latestAssignment?.employeeName ?? 'Unassigned';
-      final startTime = _formatDateTimeShort(latestAssignment?.startTime);
-      final endTime = _formatDateTimeShort(latestAssignment?.endTime);
-      final duration = job.actualDurationMinutes == null
-          ? 'N/A'
-          : '${job.actualDurationMinutes! ~/ 60}h ${job.actualDurationMinutes! % 60}m';
-      return Card(
-        margin: const EdgeInsets.only(bottom: 8),
-        child: Padding(
-          padding: const EdgeInsets.all(12),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                job.jobNumber,
-                style: const TextStyle(fontWeight: FontWeight.w700),
-              ),
-              const SizedBox(height: 4),
-              Text(
-                'Cleaning date: ${formatDateMdy(job.completedAt ?? job.scheduledDate)}',
-              ),
-              Text('Cleaner: $cleaner'),
-              Text('Start: $startTime'),
-              Text('Stop: $endTime'),
-              Text('Duration: $duration'),
-              if ((job.locationAddress?.trim().isNotEmpty ?? false))
-                Text(
-                  'Location: ${[job.locationAddress?.trim() ?? '', job.locationCity?.trim() ?? '', job.locationState?.trim() ?? '', job.locationZipCode?.trim() ?? ''].where((p) => p.isNotEmpty).join(', ')}',
-                ),
-            ],
-          ),
-        ),
-      );
-    }
+    final welcomeName = _clientProfile?.name.trim().isNotEmpty == true
+        ? _clientProfile!.name.trim()
+        : 'Client';
+    final dark = Theme.of(context).brightness == Brightness.dark;
+    final panelBg = dark ? const Color(0xFF333740) : const Color(0xFFE8F3FA);
+    final panelBorder = dark ? const Color(0xFF4A525F) : _lightSecondary;
+    final panelTitle = dark ? _darkAccent1 : _lightAccent;
+    final panelText = dark ? _darkText : _lightPrimary;
+    final chipBg = dark ? const Color(0xFF5B4432) : const Color(0xFFFFEDD9);
+    final chipBorder = dark ? const Color(0xFFE9A36C) : const Color(0xFFEE7E32);
+    final chipText = dark ? _darkText : _lightAccent;
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        SizedBox(
-          width: double.infinity,
-          child: Card(
-            child: Padding(
-              padding: const EdgeInsets.all(16),
-              child: Wrap(
-                spacing: 10,
-                runSpacing: 10,
-                children: [
-                  _metricTile(
-                    label: 'Recent Cleanings',
-                    value: recentCleanings.toString(),
-                    icon: Icons.cleaning_services_outlined,
-                    bg: const Color.fromRGBO(231, 240, 255, 1),
-                    fg: const Color.fromRGBO(35, 72, 138, 1),
-                  ),
-                  _metricTile(
-                    label: 'Pending Jobs',
-                    value: pendingJobs.toString(),
-                    icon: Icons.pending_actions_outlined,
-                    bg: const Color.fromRGBO(255, 247, 228, 1),
-                    fg: const Color.fromRGBO(132, 92, 18, 1),
-                  ),
-                  _metricTile(
-                    label: 'Avg Duration',
-                    value: durationCount == 0
-                        ? 'N/A'
-                        : '${(averageDuration ~/ durationCount) ~/ 60}h ${(averageDuration ~/ durationCount) % 60}m',
-                    icon: Icons.timer_outlined,
-                    bg: const Color.fromRGBO(236, 246, 240, 1),
-                    fg: const Color.fromRGBO(33, 94, 66, 1),
-                  ),
-                  _metricTile(
-                    label: 'Cleaning Frequency',
-                    value: averageFrequencyDays == 0
-                        ? 'N/A'
-                        : 'Every ${averageFrequencyDays.toStringAsFixed(1)} days',
-                    icon: Icons.repeat,
-                    bg: const Color.fromRGBO(238, 240, 253, 1),
-                    fg: const Color.fromRGBO(55, 66, 132, 1),
-                  ),
-                ],
-              ),
-            ),
+        Card(
+          color: panelBg,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(12),
+            side: BorderSide(color: panelBorder),
           ),
-        ),
-        const SizedBox(height: 12),
-        if (primaryLocation != null)
-          SizedBox(
-            width: double.infinity,
-            child: Card(
-              child: Padding(
-                padding: const EdgeInsets.all(16),
-                child: Column(
-                  children: [
-                    Container(
-                      width: 280,
-                      height: 180,
-                      decoration: BoxDecoration(
-                        borderRadius: BorderRadius.circular(12),
-                        color: const Color.fromRGBO(234, 239, 246, 1),
-                        border: Border.all(
-                          color: const Color.fromRGBO(189, 202, 222, 1),
+          child: Padding(
+            padding: const EdgeInsets.all(16),
+            child: LayoutBuilder(
+              builder: (context, constraints) {
+                if (constraints.maxWidth < 640) {
+                  return Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'Welcome, $welcomeName',
+                        style: TextStyle(
+                          fontWeight: FontWeight.w800,
+                          fontSize: 20,
+                          color: panelTitle,
                         ),
                       ),
-                      child: const Center(
-                        child: Icon(Icons.home_work_outlined, size: 52),
+                      const SizedBox(height: 10),
+                      _requestCleaningButton(dark),
+                    ],
+                  );
+                }
+                return Row(
+                  children: [
+                    Expanded(
+                      child: Text(
+                        'Welcome, $welcomeName',
+                        style: TextStyle(
+                          fontWeight: FontWeight.w800,
+                          fontSize: 20,
+                          color: panelTitle,
+                        ),
                       ),
                     ),
-                    const SizedBox(height: 10),
-                    Text(
-                      primaryLocation.locationNumber,
-                      style: const TextStyle(fontWeight: FontWeight.w700),
-                    ),
-                    Text(
-                      '${primaryLocation.type} • ${primaryLocation.address ?? 'No address on file'}',
-                    ),
+                    _requestCleaningButton(dark),
                   ],
-                ),
+                );
+              },
+            ),
+          ),
+        ),
+        const SizedBox(height: 12),
+        Card(
+          color: panelBg,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(12),
+            side: BorderSide(color: panelBorder),
+          ),
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 18),
+            child: Center(
+              child: _buildClientLocationPhoto(
+                primaryLocation,
+                large: true,
+                onEditPhoto: () => _pickClientLocationPhoto(primaryLocation),
               ),
             ),
           ),
-        const SizedBox(height: 12),
-        _cardList(
-          title: 'Pending Jobs',
-          empty: 'No pending jobs',
-          children: _clientPendingJobs.map((job) {
-            return ListTile(
-              contentPadding: EdgeInsets.zero,
-              dense: true,
-              leading: const Icon(Icons.pending_actions),
-              title: Text(job.jobNumber),
-              subtitle: Text(
-                '${job.status.replaceAll('_', ' ')} • ${formatDateMdy(job.scheduledDate)}',
-              ),
-            );
-          }).toList(),
         ),
         const SizedBox(height: 12),
         SizedBox(
           width: double.infinity,
           child: Card(
+            color: panelBg,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(12),
+              side: BorderSide(color: panelBorder),
+            ),
             child: Padding(
-              padding: const EdgeInsets.all(16),
-              child: Wrap(
-                spacing: 10,
-                runSpacing: 10,
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 14),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(
-                    'Cleaning details since ${_clientCompletedSince.month}-${_clientCompletedSince.day}-${_clientCompletedSince.year}',
-                  ),
-                  TextButton(
-                    onPressed: () {
-                      setState(() {
-                        _clientCompletedSince = DateTime.now().subtract(
-                          const Duration(days: 30),
-                        );
-                      });
+                  LayoutBuilder(
+                    builder: (context, constraints) {
+                      final chipsRow = SingleChildScrollView(
+                        scrollDirection: Axis.horizontal,
+                        child: Row(
+                          children: [
+                            _clientStatChip(
+                              label: 'Next Cleaning',
+                              value: nextCleaning.isEmpty
+                                  ? 'Not scheduled'
+                                  : '${nextCleaning.first.month}-${nextCleaning.first.day}-${nextCleaning.first.year}',
+                              bg: chipBg,
+                              text: chipText,
+                              border: chipBorder,
+                              width: 230,
+                            ),
+                            const SizedBox(width: 10),
+                            _clientStatChip(
+                              label: 'Scheduled Jobs',
+                              value: scheduledJobs.toString(),
+                              bg: chipBg,
+                              text: chipText,
+                              border: chipBorder,
+                              width: 230,
+                            ),
+                            const SizedBox(width: 10),
+                            _clientStatChip(
+                              label: 'Average Duration',
+                              value: averageDuration,
+                              bg: chipBg,
+                              text: chipText,
+                              border: chipBorder,
+                              width: 230,
+                            ),
+                            const SizedBox(width: 10),
+                            _clientStatChip(
+                              label: 'Cleaning Frequency',
+                              value: averageFrequencyDays == 0
+                                  ? 'N/A'
+                                  : 'Every ${averageFrequencyDays.toStringAsFixed(1)} days',
+                              bg: chipBg,
+                              text: chipText,
+                              border: chipBorder,
+                              width: 260,
+                            ),
+                          ],
+                        ),
+                      );
+                      final jobCards = Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          if (jobsInRange.isEmpty)
+                            Text(
+                              'No jobs in selected filter range',
+                              style: TextStyle(color: panelText),
+                            )
+                          else
+                            Wrap(
+                              spacing: 10,
+                              runSpacing: 10,
+                              alignment: WrapAlignment.start,
+                              children: jobsInRange
+                                  .map(
+                                    (job) =>
+                                        _clientJobCard(job: job, dark: dark),
+                                  )
+                                  .toList(),
+                            ),
+                        ],
+                      );
+
+                      return Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Center(child: chipsRow),
+                          const SizedBox(height: 16),
+                          Wrap(
+                            spacing: 8,
+                            runSpacing: 8,
+                            crossAxisAlignment: WrapCrossAlignment.center,
+                            children: [
+                              Text(
+                                'Job Filter',
+                                style: TextStyle(
+                                  color: panelText,
+                                  fontWeight: FontWeight.w700,
+                                ),
+                              ),
+                              OutlinedButton.icon(
+                                onPressed: _pickClientStartDate,
+                                icon: const Icon(Icons.date_range, size: 16),
+                                label: Text(
+                                  '${_clientDateRange.start.month}-${_clientDateRange.start.day}-${_clientDateRange.start.year}',
+                                ),
+                              ),
+                              const Text('to'),
+                              OutlinedButton.icon(
+                                onPressed: _pickClientEndDate,
+                                icon: const Icon(Icons.date_range, size: 16),
+                                label: Text(
+                                  '${_clientDateRange.end.month}-${_clientDateRange.end.day}-${_clientDateRange.end.year}',
+                                ),
+                              ),
+                              TextButton(
+                                onPressed: () {
+                                  setState(() {
+                                    _clientDateRange = _last30DaysRange();
+                                  });
+                                },
+                                child: const Text('Default range'),
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 14),
+                          jobCards,
+                        ],
+                      );
                     },
-                    child: const Text('Last 30 days'),
-                  ),
-                  FilledButton.tonal(
-                    onPressed: _pickClientCompletedSinceDate,
-                    child: const Text('Pick date'),
                   ),
                 ],
               ),
             ),
           ),
-        ),
-        const SizedBox(height: 12),
-        _cardList(
-          title: 'Cleaning History',
-          empty: 'No completed cleanings in selected period',
-          children: completedJobs.map(historyTile).toList(),
         ),
       ],
     );
   }
 
+  Widget _requestCleaningButton(bool dark) {
+    return FilledButton.icon(
+      onPressed: _showScheduleRequestModal,
+      icon: const Icon(Icons.add_task),
+      label: const Text('Request to schedule a cleaning'),
+      style: FilledButton.styleFrom(
+        backgroundColor: dark ? const Color(0xFFB39CD0) : _lightPrimary,
+        foregroundColor: dark ? _darkBg : Colors.white,
+      ),
+    );
+  }
+
+  String _formatLocationAddress(Location? location) {
+    if (location == null) return 'No location on file';
+    final parts = [
+      location.address?.trim() ?? '',
+      location.city?.trim() ?? '',
+      location.state?.trim() ?? '',
+      location.zipCode?.trim() ?? '',
+    ].where((part) => part.isNotEmpty).toList();
+    if (parts.isEmpty) return 'No location on file';
+    return parts.join(', ');
+  }
+
+  Widget _buildClientLocationPhoto(
+    Location? location, {
+    bool large = false,
+    VoidCallback? onEditPhoto,
+  }) {
+    final dark = Theme.of(context).brightness == Brightness.dark;
+    final photoUrl = location?.photoUrl?.trim() ?? '';
+    Widget? image;
+    if (photoUrl.isNotEmpty) {
+      if (photoUrl.startsWith('data:image/')) {
+        final comma = photoUrl.indexOf(',');
+        if (comma > 0 && comma < photoUrl.length - 1) {
+          try {
+            image = Image.memory(
+              base64Decode(photoUrl.substring(comma + 1)),
+              fit: BoxFit.cover,
+            );
+          } catch (_) {
+            image = null;
+          }
+        }
+      } else if (photoUrl.startsWith('/assets/')) {
+        image = Image.asset(photoUrl.replaceFirst('/', ''), fit: BoxFit.cover);
+      } else {
+        image = Image.network(photoUrl, fit: BoxFit.cover);
+      }
+    }
+    final width = large ? 700.0 : 320.0;
+    final height = large ? 380.0 : 200.0;
+    return SizedBox(
+      width: width,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.center,
+        children: [
+          MouseRegion(
+            onEnter: (_) => setState(() => _photoHovering = true),
+            onExit: (_) => setState(() => _photoHovering = false),
+            child: Stack(
+              children: [
+                Container(
+                  width: width,
+                  height: height,
+                  decoration: BoxDecoration(
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(
+                      color: dark ? const Color(0xFF657184) : _lightSecondary,
+                    ),
+                    color: dark
+                        ? const Color(0xFF2F3742)
+                        : const Color(0xFFD7EAF4),
+                  ),
+                  clipBehavior: Clip.antiAlias,
+                  child:
+                      image ??
+                      const Center(child: Icon(Icons.photo_outlined, size: 48)),
+                ),
+                Positioned(
+                  right: 10,
+                  bottom: 10,
+                  child: AnimatedOpacity(
+                    opacity: (!kIsWeb || _photoHovering || _uploadingPhoto)
+                        ? 1
+                        : 0,
+                    duration: const Duration(milliseconds: 150),
+                    child: Material(
+                      color: Colors.transparent,
+                      child: InkWell(
+                        borderRadius: BorderRadius.circular(18),
+                        onTap: _uploadingPhoto ? null : onEditPhoto,
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 10,
+                            vertical: 6,
+                          ),
+                          decoration: BoxDecoration(
+                            color: dark
+                                ? const Color(0xCC2C2C2C)
+                                : const Color(0xCCFFFFFF),
+                            borderRadius: BorderRadius.circular(18),
+                            border: Border.all(
+                              color: dark
+                                  ? const Color(0xFF657184)
+                                  : _lightSecondary,
+                            ),
+                          ),
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              if (_uploadingPhoto)
+                                const SizedBox(
+                                  width: 12,
+                                  height: 12,
+                                  child: CircularProgressIndicator(
+                                    strokeWidth: 2,
+                                  ),
+                                )
+                              else
+                                const Icon(Icons.edit, size: 14),
+                              const SizedBox(width: 5),
+                              const Text(
+                                'Edit',
+                                style: TextStyle(fontSize: 11),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 8),
+          Text(
+            _formatLocationAddress(location),
+            style: TextStyle(
+              fontWeight: FontWeight.w700,
+              color: dark ? _darkAccent1 : _lightAccent,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _clientStatChip({
+    required String label,
+    required String value,
+    required Color bg,
+    required Color text,
+    required Color border,
+    double width = 250,
+  }) {
+    return Container(
+      width: width,
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 10),
+      decoration: BoxDecoration(
+        color: bg,
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: border),
+      ),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Text(
+            '$label: ',
+            style: TextStyle(
+              fontSize: 12,
+              fontWeight: FontWeight.w700,
+              color: text,
+            ),
+            textAlign: TextAlign.center,
+          ),
+          Flexible(
+            child: Text(
+              value,
+              style: TextStyle(fontSize: 12, color: text),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              textAlign: TextAlign.center,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _clientJobCard({required Job job, required bool dark}) {
+    final assignments = _assignmentsForJob(job.id);
+    final latestAssignment = assignments.isNotEmpty ? assignments.first : null;
+    final cleaner = latestAssignment?.employeeName ?? 'Unassigned';
+    final normalized = job.status.trim().toLowerCase();
+    final completed =
+        normalized == 'completed' ||
+        normalized == 'complete' ||
+        normalized == 'done';
+    final scheduledLike =
+        normalized == 'pending' ||
+        normalized == 'assigned' ||
+        normalized == 'in_progress' ||
+        normalized == 'in-progress' ||
+        normalized == 'in progress';
+    final statusLabel = completed ? 'COMPLETED' : 'SCHEDULED';
+    final dateLabel = completed
+        ? 'Completed: ${formatDateMdy(job.completedAt ?? job.scheduledDate)}'
+        : 'Scheduled: ${formatDateMdy(job.scheduledDate)}';
+    final minutes = completed
+        ? job.actualDurationMinutes
+        : job.estimatedDurationMinutes;
+    final duration = minutes == null
+        ? 'Duration: N/A'
+        : 'Duration: ${minutes ~/ 60}h ${minutes % 60}m';
+    final statusBg = completed
+        ? (dark ? const Color(0xFF3B465D) : const Color(0xFFDCEEFF))
+        : (dark ? const Color(0xFF3B4F3F) : const Color(0xFFDDF6EA));
+    final statusFg = completed
+        ? (dark ? _darkAccent1 : _lightPrimary)
+        : (dark ? const Color(0xFFBFEED4) : const Color(0xFF1D7B53));
+
+    return SizedBox(
+      width: 300,
+      child: Card(
+        margin: EdgeInsets.zero,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(12),
+          side: BorderSide(
+            color: dark ? const Color(0xFF657184) : const Color(0xFF8BB3D8),
+          ),
+        ),
+        color: dark ? const Color(0xFF353844) : const Color(0xFFF2F8FC),
+        child: Padding(
+          padding: const EdgeInsets.all(12),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  Chip(
+                    backgroundColor: statusBg,
+                    visualDensity: VisualDensity.compact,
+                    label: Text(
+                      scheduledLike || completed
+                          ? statusLabel
+                          : job.status.toUpperCase(),
+                      style: TextStyle(
+                        fontSize: 11,
+                        fontWeight: FontWeight.w700,
+                        color: statusFg,
+                      ),
+                    ),
+                  ),
+                  const Spacer(),
+                  Text(
+                    dateLabel,
+                    style: TextStyle(
+                      fontSize: 11,
+                      color: dark ? _darkText : _lightAccent,
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 6),
+              Text(
+                job.jobNumber,
+                style: const TextStyle(fontWeight: FontWeight.w700),
+              ),
+              const SizedBox(height: 4),
+              Text('Cleaner: $cleaner', style: const TextStyle(fontSize: 12)),
+              Text(duration, style: const TextStyle(fontSize: 12)),
+              const SizedBox(height: 10),
+              Align(
+                alignment: Alignment.centerRight,
+                child: OutlinedButton.icon(
+                  onPressed: () => Navigator.pushNamed(
+                    context,
+                    '/jobs',
+                    arguments: <String, dynamic>{
+                      'jobId': job.id,
+                      'locationId': job.locationId,
+                      'source': 'client_home',
+                    },
+                  ),
+                  icon: const Icon(Icons.chevron_right, size: 16),
+                  label: const Text('Details'),
+                  style: OutlinedButton.styleFrom(
+                    visualDensity: VisualDensity.compact,
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 10,
+                      vertical: 6,
+                    ),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Future<void> _showScheduleRequestModal() async {
+    final result = await showDialog<_ScheduleRequestFormData>(
+      context: context,
+      builder: (context) => _ScheduleRequestDialog(
+        initialName: _clientProfile?.name ?? '',
+        initialEmail: _clientProfile?.email ?? '',
+        initialPhone: _clientProfile?.phoneNumber ?? '',
+      ),
+    );
+    if (result == null) return;
+    if (!mounted) return;
+    final token = _session?.token ?? '';
+    if (token.isEmpty) {
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('Please sign in again.')));
+      return;
+    }
+
+    final locationId = int.tryParse(
+      _clientLocations.isNotEmpty ? _clientLocations.first.id : '',
+    );
+    final clientId = int.tryParse(_clientProfile?.id ?? '');
+    final requestedDate =
+        '${result.date.year.toString().padLeft(4, '0')}-${result.date.month.toString().padLeft(2, '0')}-${result.date.day.toString().padLeft(2, '0')}';
+    final requestedTime =
+        '${result.time.hour.toString().padLeft(2, '0')}:${result.time.minute.toString().padLeft(2, '0')}';
+
+    try {
+      await ApiService().createCleaningRequest(
+        CleaningRequestCreateInput(
+          clientId: clientId,
+          locationId: locationId,
+          requesterName: result.name,
+          requesterEmail: result.email,
+          requesterPhone: result.phone,
+          requestedDate: requestedDate,
+          requestedTime: requestedTime,
+          cleaningDetails: result.notes,
+        ),
+        bearerToken: token,
+      );
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Cleaning request sent successfully.')),
+      );
+    } catch (requestError) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Request failed: ${requestError.toString()}')),
+      );
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final dark = Theme.of(context).brightness == Brightness.dark;
-    final showEmployeeSurface = _isEmployee;
+    final showRoleSurface = _isEmployee || _isClient;
     return Scaffold(
       bottomNavigationBar: const SafeArea(top: false, child: BackendBanner()),
       appBar: AppBar(
@@ -1077,7 +1609,7 @@ class _HomePageState extends State<HomePage> {
         ],
       ),
       body: Container(
-        decoration: showEmployeeSurface
+        decoration: showRoleSurface
             ? BoxDecoration(
                 gradient: LinearGradient(
                   begin: Alignment.topLeft,
@@ -1125,6 +1657,249 @@ class _HomePageState extends State<HomePage> {
                   ),
                 ),
         ),
+      ),
+    );
+  }
+}
+
+class _ScheduleRequestFormData {
+  const _ScheduleRequestFormData({
+    required this.name,
+    required this.email,
+    required this.phone,
+    required this.date,
+    required this.time,
+    required this.notes,
+  });
+
+  final String name;
+  final String email;
+  final String phone;
+  final DateTime date;
+  final TimeOfDay time;
+  final String notes;
+}
+
+class _ScheduleRequestDialog extends StatefulWidget {
+  const _ScheduleRequestDialog({
+    required this.initialName,
+    required this.initialEmail,
+    required this.initialPhone,
+  });
+
+  final String initialName;
+  final String initialEmail;
+  final String initialPhone;
+
+  @override
+  State<_ScheduleRequestDialog> createState() => _ScheduleRequestDialogState();
+}
+
+class _ScheduleRequestDialogState extends State<_ScheduleRequestDialog> {
+  late final TextEditingController _nameController;
+  late final TextEditingController _emailController;
+  late final TextEditingController _phoneController;
+  late final TextEditingController _notesController;
+  DateTime _selectedDate = DateTime.now().add(const Duration(days: 1));
+  TimeOfDay _selectedTime = const TimeOfDay(hour: 10, minute: 0);
+
+  @override
+  void initState() {
+    super.initState();
+    _nameController = TextEditingController(text: widget.initialName);
+    _emailController = TextEditingController(text: widget.initialEmail);
+    _phoneController = TextEditingController(text: widget.initialPhone);
+    _notesController = TextEditingController();
+  }
+
+  @override
+  void dispose() {
+    _nameController.dispose();
+    _emailController.dispose();
+    _phoneController.dispose();
+    _notesController.dispose();
+    super.dispose();
+  }
+
+  Future<void> _pickDate() async {
+    final now = DateTime.now();
+    final picked = await showDatePicker(
+      context: context,
+      initialDate: _selectedDate,
+      firstDate: DateTime(now.year, now.month, now.day),
+      lastDate: DateTime(now.year + 1, 12, 31),
+    );
+    if (picked == null) return;
+    setState(() => _selectedDate = picked);
+  }
+
+  Future<void> _pickTime() async {
+    final picked = await showTimePicker(
+      context: context,
+      initialTime: _selectedTime,
+    );
+    if (picked == null) return;
+    setState(() => _selectedTime = picked);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final dark = Theme.of(context).brightness == Brightness.dark;
+    final dialogTheme = Theme.of(context).copyWith(
+      dialogTheme: DialogThemeData(
+        backgroundColor: dark ? const Color(0xFF333740) : null,
+        surfaceTintColor: Colors.transparent,
+      ),
+      inputDecorationTheme: InputDecorationTheme(
+        filled: true,
+        fillColor: dark ? const Color(0xFF2C2F36) : Colors.white,
+        border: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(10),
+          borderSide: BorderSide(
+            color: dark ? const Color(0xFF657184) : const Color(0xFFBEDCE4),
+          ),
+        ),
+        enabledBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(10),
+          borderSide: BorderSide(
+            color: dark ? const Color(0xFF657184) : const Color(0xFFBEDCE4),
+          ),
+        ),
+        focusedBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(10),
+          borderSide: BorderSide(
+            color: dark ? const Color(0xFFA8DADC) : const Color(0xFF296273),
+            width: 1.4,
+          ),
+        ),
+        labelStyle: TextStyle(
+          color: dark ? const Color(0xFFE4E4E4) : const Color(0xFF442E6F),
+        ),
+        hintStyle: TextStyle(
+          color: dark ? const Color(0xFFB8BCC4) : const Color(0xFF6A6A6A),
+        ),
+      ),
+    );
+
+    return Theme(
+      data: dialogTheme,
+      child: AlertDialog(
+      title: Row(
+        children: [
+          Expanded(
+            child: Text(
+              'Request Cleaning',
+              style: TextStyle(
+                color: dark ? const Color(0xFFE4E4E4) : null,
+              ),
+            ),
+          ),
+          ClipRRect(
+            borderRadius: BorderRadius.circular(4),
+            child: Image.asset(
+              'assets/images/logo.png',
+              width: 48,
+              height: 48,
+              fit: BoxFit.cover,
+            ),
+          ),
+        ],
+      ),
+      content: SizedBox(
+        width: 520,
+        child: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              TextField(
+                controller: _nameController,
+                decoration: const InputDecoration(
+                  labelText: 'Name',
+                  border: OutlineInputBorder(),
+                ),
+              ),
+              const SizedBox(height: 10),
+              TextField(
+                controller: _emailController,
+                keyboardType: TextInputType.emailAddress,
+                decoration: const InputDecoration(
+                  labelText: 'Email',
+                  border: OutlineInputBorder(),
+                ),
+              ),
+              const SizedBox(height: 10),
+              TextField(
+                controller: _phoneController,
+                keyboardType: TextInputType.phone,
+                decoration: const InputDecoration(
+                  labelText: 'Phone',
+                  border: OutlineInputBorder(),
+                ),
+              ),
+              const SizedBox(height: 10),
+              Row(
+                children: [
+                  Expanded(
+                    child: OutlinedButton.icon(
+                      onPressed: _pickDate,
+                      icon: const Icon(Icons.date_range),
+                      label: Text(
+                        'Date: ${_selectedDate.month}-${_selectedDate.day}-${_selectedDate.year}',
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: OutlinedButton.icon(
+                      onPressed: _pickTime,
+                      icon: const Icon(Icons.access_time),
+                      label: Text('Time: ${_selectedTime.format(context)}'),
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 10),
+              TextField(
+                controller: _notesController,
+                maxLines: 4,
+                decoration: const InputDecoration(
+                  labelText: 'Cleaning Details',
+                  hintText: 'Add cleaning details for this request.',
+                  border: OutlineInputBorder(),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(context),
+          child: const Text('Cancel'),
+        ),
+        FilledButton(
+          onPressed: () {
+            final name = _nameController.text.trim();
+            final email = _emailController.text.trim();
+            final phone = _phoneController.text.trim();
+            if (name.isEmpty || email.isEmpty || phone.isEmpty) {
+              return;
+            }
+            Navigator.pop(
+              context,
+              _ScheduleRequestFormData(
+                name: name,
+                email: email,
+                phone: phone,
+                date: _selectedDate,
+                time: _selectedTime,
+                notes: _notesController.text.trim(),
+              ),
+            );
+          },
+          child: const Text('Submit Request'),
+        ),
+      ],
       ),
     );
   }

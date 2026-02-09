@@ -8,7 +8,7 @@ class BrandAppBarTitle extends StatelessWidget {
   Widget build(BuildContext context) {
     return Text(
       'Anderson Express Cleaning Service',
-      style: GoogleFonts.oregano(fontSize: 34, fontWeight: FontWeight.w600),
+      style: GoogleFonts.oregano(fontSize: 34, fontWeight: FontWeight.w800),
     );
   }
 }

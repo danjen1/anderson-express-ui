@@ -177,6 +177,9 @@ class _LocationsPageState extends State<LocationsPage> {
         city: location.city ?? '',
         state: location.state ?? '',
         zipCode: location.zipCode ?? '',
+        photoUrl: location.photoUrl ?? '',
+        accessNotes: location.accessNotes ?? '',
+        parkingNotes: location.parkingNotes ?? '',
         isCreate: false,
       ),
     );
@@ -366,11 +369,13 @@ class _LocationsPageState extends State<LocationsPage> {
                         final location = _locations[index];
                         return Card(
                           child: ListTile(
-                            leading: const Icon(Icons.location_on),
+                            leading: _locationThumb(location.photoUrl),
                             title: Text(location.locationNumber),
                             subtitle: Text(
-                              'Client ${location.clientId} • ${location.type} • ${location.status}${location.address != null ? ' • ${location.address}' : ''}',
+                              'Client ${location.clientId} • ${location.type} • ${location.status}${location.address != null ? ' • ${location.address}' : ''}'
+                              '${location.accessNotes != null ? '\nAccess: ${location.accessNotes}' : ''}',
                             ),
+                            isThreeLine: location.accessNotes != null,
                             trailing: Wrap(
                               spacing: 8,
                               children: [
@@ -399,6 +404,20 @@ class _LocationsPageState extends State<LocationsPage> {
       ),
     );
   }
+
+  Widget _locationThumb(String? photoUrl) {
+    final url = photoUrl?.trim() ?? '';
+    if (url.isEmpty) {
+      return const CircleAvatar(child: Icon(Icons.location_on));
+    }
+    final image = url.startsWith('/assets/')
+        ? Image.asset(url.replaceFirst('/', ''), fit: BoxFit.cover)
+        : Image.network(url, fit: BoxFit.cover);
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(8),
+      child: SizedBox(width: 40, height: 40, child: image),
+    );
+  }
 }
 
 class _LocationEditorDialog extends StatefulWidget {
@@ -408,6 +427,9 @@ class _LocationEditorDialog extends StatefulWidget {
     this.city = '',
     this.state = '',
     this.zipCode = '',
+    this.photoUrl = '',
+    this.accessNotes = '',
+    this.parkingNotes = '',
     this.isCreate = true,
   });
 
@@ -416,6 +438,9 @@ class _LocationEditorDialog extends StatefulWidget {
   final String city;
   final String state;
   final String zipCode;
+  final String photoUrl;
+  final String accessNotes;
+  final String parkingNotes;
   final bool isCreate;
 
   @override
@@ -430,6 +455,9 @@ class _LocationEditorDialogState extends State<_LocationEditorDialog> {
   late final TextEditingController _city;
   late final TextEditingController _state;
   late final TextEditingController _zipCode;
+  late final TextEditingController _photoUrl;
+  late final TextEditingController _accessNotes;
+  late final TextEditingController _parkingNotes;
   late String _type;
 
   @override
@@ -443,6 +471,9 @@ class _LocationEditorDialogState extends State<_LocationEditorDialog> {
     _city = TextEditingController(text: widget.city);
     _state = TextEditingController(text: widget.state);
     _zipCode = TextEditingController(text: widget.zipCode);
+    _photoUrl = TextEditingController(text: widget.photoUrl);
+    _accessNotes = TextEditingController(text: widget.accessNotes);
+    _parkingNotes = TextEditingController(text: widget.parkingNotes);
   }
 
   @override
@@ -452,6 +483,9 @@ class _LocationEditorDialogState extends State<_LocationEditorDialog> {
     _city.dispose();
     _state.dispose();
     _zipCode.dispose();
+    _photoUrl.dispose();
+    _accessNotes.dispose();
+    _parkingNotes.dispose();
     super.dispose();
   }
 
@@ -501,6 +535,16 @@ class _LocationEditorDialogState extends State<_LocationEditorDialog> {
               _field(_state, 'State'),
               const SizedBox(height: 10),
               _field(_zipCode, 'Zip Code'),
+              const SizedBox(height: 10),
+              _field(
+                _photoUrl,
+                'Photo URL',
+                hint: '/assets/images/locations/loc-9000.jpg',
+              ),
+              const SizedBox(height: 10),
+              _field(_accessNotes, 'Access Notes', maxLines: 3),
+              const SizedBox(height: 10),
+              _field(_parkingNotes, 'Parking Notes', maxLines: 2),
             ],
           ),
         ),
@@ -527,6 +571,9 @@ class _LocationEditorDialogState extends State<_LocationEditorDialog> {
                   city: _nullable(_city.text),
                   state: _nullable(_state.text),
                   zipCode: _nullable(_zipCode.text),
+                  photoUrl: _nullable(_photoUrl.text),
+                  accessNotes: _nullable(_accessNotes.text),
+                  parkingNotes: _nullable(_parkingNotes.text),
                 ),
               );
             } else {
@@ -538,6 +585,9 @@ class _LocationEditorDialogState extends State<_LocationEditorDialog> {
                   city: _nullable(_city.text),
                   state: _nullable(_state.text),
                   zipCode: _nullable(_zipCode.text),
+                  photoUrl: _nullable(_photoUrl.text),
+                  accessNotes: _nullable(_accessNotes.text),
+                  parkingNotes: _nullable(_parkingNotes.text),
                 ),
               );
             }
@@ -548,11 +598,18 @@ class _LocationEditorDialogState extends State<_LocationEditorDialog> {
     );
   }
 
-  Widget _field(TextEditingController controller, String label) {
+  Widget _field(
+    TextEditingController controller,
+    String label, {
+    String? hint,
+    int maxLines = 1,
+  }) {
     return TextField(
       controller: controller,
+      maxLines: maxLines,
       decoration: InputDecoration(
         labelText: label,
+        hintText: hint,
         border: const OutlineInputBorder(),
       ),
     );

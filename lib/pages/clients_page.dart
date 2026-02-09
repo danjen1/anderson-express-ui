@@ -174,6 +174,9 @@ class _ClientsPageState extends State<ClientsPage> {
         city: client.city ?? '',
         state: client.state ?? '',
         zipCode: client.zipCode ?? '',
+        preferredContactMethod: client.preferredContactMethod ?? '',
+        preferredContactWindow: client.preferredContactWindow ?? '',
+        serviceNotes: client.serviceNotes ?? '',
         isCreate: false,
       ),
     );
@@ -349,8 +352,11 @@ class _ClientsPageState extends State<ClientsPage> {
                           child: ListTile(
                             title: Text(client.name),
                             subtitle: Text(
-                              '${client.clientNumber} • ${client.status}${client.email != null ? ' • ${client.email}' : ''}',
+                              '${client.clientNumber} • ${client.status}${client.email != null ? ' • ${client.email}' : ''}'
+                              '${client.preferredContactMethod != null ? '\nContact: ${client.preferredContactMethod}' : ''}'
+                              '${client.preferredContactWindow != null ? ' • ${client.preferredContactWindow}' : ''}',
                             ),
+                            isThreeLine: client.preferredContactMethod != null,
                             trailing: Wrap(
                               spacing: 8,
                               children: [
@@ -389,6 +395,9 @@ class _ClientEditorDialog extends StatefulWidget {
     this.city = '',
     this.state = '',
     this.zipCode = '',
+    this.preferredContactMethod = '',
+    this.preferredContactWindow = '',
+    this.serviceNotes = '',
     this.isCreate = true,
   });
 
@@ -399,6 +408,9 @@ class _ClientEditorDialog extends StatefulWidget {
   final String city;
   final String state;
   final String zipCode;
+  final String preferredContactMethod;
+  final String preferredContactWindow;
+  final String serviceNotes;
   final bool isCreate;
 
   @override
@@ -413,6 +425,9 @@ class _ClientEditorDialogState extends State<_ClientEditorDialog> {
   late final TextEditingController _city;
   late final TextEditingController _state;
   late final TextEditingController _zipCode;
+  late final TextEditingController _preferredContactMethod;
+  late final TextEditingController _preferredContactWindow;
+  late final TextEditingController _serviceNotes;
 
   @override
   void initState() {
@@ -424,6 +439,13 @@ class _ClientEditorDialogState extends State<_ClientEditorDialog> {
     _city = TextEditingController(text: widget.city);
     _state = TextEditingController(text: widget.state);
     _zipCode = TextEditingController(text: widget.zipCode);
+    _preferredContactMethod = TextEditingController(
+      text: widget.preferredContactMethod,
+    );
+    _preferredContactWindow = TextEditingController(
+      text: widget.preferredContactWindow,
+    );
+    _serviceNotes = TextEditingController(text: widget.serviceNotes);
   }
 
   @override
@@ -435,6 +457,9 @@ class _ClientEditorDialogState extends State<_ClientEditorDialog> {
     _city.dispose();
     _state.dispose();
     _zipCode.dispose();
+    _preferredContactMethod.dispose();
+    _preferredContactWindow.dispose();
+    _serviceNotes.dispose();
     super.dispose();
   }
 
@@ -461,6 +486,25 @@ class _ClientEditorDialogState extends State<_ClientEditorDialog> {
               _field(_state, 'State'),
               const SizedBox(height: 10),
               _field(_zipCode, 'Zip Code'),
+              const SizedBox(height: 10),
+              _field(
+                _preferredContactMethod,
+                'Preferred Contact Method',
+                hint: 'email, phone, text',
+              ),
+              const SizedBox(height: 10),
+              _field(
+                _preferredContactWindow,
+                'Preferred Contact Window',
+                hint: 'Weekdays 8am-5pm',
+              ),
+              const SizedBox(height: 10),
+              _field(
+                _serviceNotes,
+                'Service Notes',
+                maxLines: 3,
+                hint: 'Access preferences, special instructions, etc.',
+              ),
             ],
           ),
         ),
@@ -486,6 +530,13 @@ class _ClientEditorDialogState extends State<_ClientEditorDialog> {
                   city: _nullable(_city.text),
                   state: _nullable(_state.text),
                   zipCode: _nullable(_zipCode.text),
+                  preferredContactMethod: _nullable(
+                    _preferredContactMethod.text,
+                  ),
+                  preferredContactWindow: _nullable(
+                    _preferredContactWindow.text,
+                  ),
+                  serviceNotes: _nullable(_serviceNotes.text),
                 ),
               );
             } else {
@@ -499,6 +550,13 @@ class _ClientEditorDialogState extends State<_ClientEditorDialog> {
                   city: _nullable(_city.text),
                   state: _nullable(_state.text),
                   zipCode: _nullable(_zipCode.text),
+                  preferredContactMethod: _nullable(
+                    _preferredContactMethod.text,
+                  ),
+                  preferredContactWindow: _nullable(
+                    _preferredContactWindow.text,
+                  ),
+                  serviceNotes: _nullable(_serviceNotes.text),
                 ),
               );
             }
@@ -509,11 +567,18 @@ class _ClientEditorDialogState extends State<_ClientEditorDialog> {
     );
   }
 
-  Widget _field(TextEditingController controller, String label) {
+  Widget _field(
+    TextEditingController controller,
+    String label, {
+    String? hint,
+    int maxLines = 1,
+  }) {
     return TextField(
       controller: controller,
+      maxLines: maxLines,
       decoration: InputDecoration(
         labelText: label,
+        hintText: hint,
         border: const OutlineInputBorder(),
       ),
     );

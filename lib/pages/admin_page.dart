@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 
 import '../models/backend_config.dart';
 import '../models/cleaning_profile.dart';
+import '../models/cleaning_request.dart';
 import '../models/client.dart';
 import '../models/employee.dart';
 import '../models/job.dart';
@@ -42,6 +43,8 @@ enum _LocationFilter { all, active, inactive }
 
 enum _JobFilter { all, pending, assigned, inProgress, completed, overdue }
 
+enum _CleaningRequestFilter { open, reviewed, scheduled, closed, all }
+
 class AdminPage extends StatefulWidget {
   const AdminPage({super.key});
 
@@ -63,6 +66,7 @@ class _AdminPageState extends State<AdminPage> {
   List<Client> _clients = const [];
   List<Location> _locations = const [];
   List<CleaningProfile> _cleaningProfiles = const [];
+  List<CleaningRequest> _cleaningRequests = const [];
   List<TaskDefinition> _taskDefinitions = const [];
   List<TaskRule> _taskRules = const [];
   List<ProfileTask> _selectedProfileTasks = const [];
@@ -71,6 +75,7 @@ class _AdminPageState extends State<AdminPage> {
   _ClientFilter _clientFilter = _ClientFilter.active;
   _LocationFilter _locationFilter = _LocationFilter.active;
   _JobFilter _jobFilter = _JobFilter.pending;
+  _CleaningRequestFilter _cleaningRequestFilter = _CleaningRequestFilter.open;
   String? _selectedCleaningProfileId;
   bool _loadingProfileTasks = false;
 
@@ -150,6 +155,7 @@ class _AdminPageState extends State<AdminPage> {
       final clientsFuture = _api.listClients(bearerToken: token);
       final locationsFuture = _api.listLocations(bearerToken: token);
       final profilesFuture = _api.listCleaningProfiles(bearerToken: token);
+      final cleaningRequestsFuture = _api.listCleaningRequests(bearerToken: token);
       final taskDefsFuture = _api.listTaskDefinitions(bearerToken: token);
       final taskRulesFuture = _api.listTaskRules(bearerToken: token);
       final results = await Future.wait([
@@ -158,6 +164,7 @@ class _AdminPageState extends State<AdminPage> {
         clientsFuture,
         locationsFuture,
         profilesFuture,
+        cleaningRequestsFuture,
         taskDefsFuture,
         taskRulesFuture,
       ]);
@@ -166,8 +173,9 @@ class _AdminPageState extends State<AdminPage> {
       final clients = results[2] as List<Client>;
       final locations = results[3] as List<Location>;
       final profiles = results[4] as List<CleaningProfile>;
-      final taskDefinitions = results[5] as List<TaskDefinition>;
-      final taskRules = results[6] as List<TaskRule>;
+      final cleaningRequests = results[5] as List<CleaningRequest>;
+      final taskDefinitions = results[6] as List<TaskDefinition>;
+      final taskRules = results[7] as List<TaskRule>;
       final previousSelected = _selectedCleaningProfileId;
       final nextSelected = profiles.any((p) => p.id == previousSelected)
           ? previousSelected
@@ -180,6 +188,7 @@ class _AdminPageState extends State<AdminPage> {
         _clients = clients;
         _locations = locations;
         _cleaningProfiles = profiles;
+        _cleaningRequests = cleaningRequests;
         _taskDefinitions = taskDefinitions;
         _taskRules = taskRules;
         _selectedCleaningProfileId = nextSelected;
@@ -1118,6 +1127,49 @@ class _AdminPageState extends State<AdminPage> {
     return _jobs.where(_isOverdue).length;
   }
 
+  List<CleaningRequest> get _filteredCleaningRequests {
+    return _cleaningRequests.where((request) {
+      final status = request.status.trim().toUpperCase();
+      switch (_cleaningRequestFilter) {
+        case _CleaningRequestFilter.open:
+          return status == 'OPEN';
+        case _CleaningRequestFilter.reviewed:
+          return status == 'REVIEWED';
+        case _CleaningRequestFilter.scheduled:
+          return status == 'SCHEDULED';
+        case _CleaningRequestFilter.closed:
+          return status == 'CLOSED';
+        case _CleaningRequestFilter.all:
+          return true;
+      }
+    }).toList();
+  }
+
+  Future<void> _updateCleaningRequestStatus(
+    CleaningRequest request,
+    String status,
+  ) async {
+    try {
+      await _api.updateCleaningRequestStatus(
+        request.id,
+        status,
+        bearerToken: _token,
+      );
+      await _loadAdminData();
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Request #${request.id} moved to $status.'),
+        ),
+      );
+    } catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(userFacingError(error))));
+    }
+  }
+
   Widget _metricTile({
     required String label,
     required String value,
@@ -1371,6 +1423,162 @@ class _AdminPageState extends State<AdminPage> {
                 Text('Completed throughput'),
                 const SizedBox(height: 6),
                 LinearProgressIndicator(value: utilizationCompleted),
+              ],
+            ),
+          ),
+        ),
+        const SizedBox(height: 12),
+        Card(
+          child: Padding(
+            padding: const EdgeInsets.all(14),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text(
+                  'Cleaning Requests',
+                  style: TextStyle(fontWeight: FontWeight.w700),
+                ),
+                const SizedBox(height: 8),
+                Wrap(
+                  spacing: 8,
+                  runSpacing: 8,
+                  children: [
+                    ChoiceChip(
+                      label: const Text('Open'),
+                      selected: _cleaningRequestFilter == _CleaningRequestFilter.open,
+                      onSelected: (_) => setState(
+                        () => _cleaningRequestFilter = _CleaningRequestFilter.open,
+                      ),
+                    ),
+                    ChoiceChip(
+                      label: const Text('Reviewed'),
+                      selected:
+                          _cleaningRequestFilter == _CleaningRequestFilter.reviewed,
+                      onSelected: (_) => setState(
+                        () =>
+                            _cleaningRequestFilter = _CleaningRequestFilter.reviewed,
+                      ),
+                    ),
+                    ChoiceChip(
+                      label: const Text('Scheduled'),
+                      selected:
+                          _cleaningRequestFilter == _CleaningRequestFilter.scheduled,
+                      onSelected: (_) => setState(
+                        () =>
+                            _cleaningRequestFilter = _CleaningRequestFilter.scheduled,
+                      ),
+                    ),
+                    ChoiceChip(
+                      label: const Text('Closed'),
+                      selected: _cleaningRequestFilter == _CleaningRequestFilter.closed,
+                      onSelected: (_) => setState(
+                        () => _cleaningRequestFilter = _CleaningRequestFilter.closed,
+                      ),
+                    ),
+                    ChoiceChip(
+                      label: const Text('All'),
+                      selected: _cleaningRequestFilter == _CleaningRequestFilter.all,
+                      onSelected: (_) => setState(
+                        () => _cleaningRequestFilter = _CleaningRequestFilter.all,
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 10),
+                if (_filteredCleaningRequests.isEmpty)
+                  Text(
+                    'No requests for the selected status.',
+                    style: TextStyle(color: Theme.of(context).hintColor),
+                  )
+                else
+                  ..._filteredCleaningRequests.take(8).map(
+                    (request) => Container(
+                      margin: const EdgeInsets.only(bottom: 8),
+                      padding: const EdgeInsets.all(10),
+                      decoration: BoxDecoration(
+                        border: Border.all(color: const Color(0xFFD1D9E6)),
+                        borderRadius: BorderRadius.circular(10),
+                      ),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Row(
+                            children: [
+                              Text(
+                                'Request #${request.id}',
+                                style: const TextStyle(
+                                  fontWeight: FontWeight.w700,
+                                ),
+                              ),
+                              const SizedBox(width: 8),
+                              Chip(
+                                visualDensity: VisualDensity.compact,
+                                label: Text(request.status),
+                              ),
+                              const Spacer(),
+                              Text(
+                                '${formatDateMdy(request.requestedDate)} • ${request.requestedTime}',
+                                style: TextStyle(
+                                  color: Theme.of(context).hintColor,
+                                ),
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 4),
+                          Text(
+                            '${_clientNameById(request.clientId)} • ${request.requesterName}',
+                          ),
+                          Text(
+                            '${request.requesterEmail} • ${request.requesterPhone}',
+                            style: TextStyle(color: Theme.of(context).hintColor),
+                          ),
+                          if ((request.cleaningDetails ?? '').trim().isNotEmpty)
+                            Padding(
+                              padding: const EdgeInsets.only(top: 4),
+                              child: Text(
+                                request.cleaningDetails!.trim(),
+                                maxLines: 2,
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                            ),
+                          const SizedBox(height: 8),
+                          Wrap(
+                            spacing: 8,
+                            runSpacing: 8,
+                            children: [
+                              OutlinedButton(
+                                onPressed: request.status == 'REVIEWED'
+                                    ? null
+                                    : () => _updateCleaningRequestStatus(
+                                        request,
+                                        'REVIEWED',
+                                      ),
+                                child: const Text('Mark Reviewed'),
+                              ),
+                              OutlinedButton(
+                                onPressed: request.status == 'SCHEDULED'
+                                    ? null
+                                    : () => _updateCleaningRequestStatus(
+                                        request,
+                                        'SCHEDULED',
+                                      ),
+                                child: const Text('Mark Scheduled'),
+                              ),
+                              OutlinedButton(
+                                onPressed: request.status == 'CLOSED'
+                                    ? null
+                                    : () => _updateCleaningRequestStatus(
+                                        request,
+                                        'CLOSED',
+                                      ),
+                                child: const Text('Close'),
+                              ),
+                            ],
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
               ],
             ),
           ),

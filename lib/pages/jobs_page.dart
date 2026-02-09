@@ -17,7 +17,16 @@ import '../widgets/profile_menu_button.dart';
 import '../widgets/theme_toggle_button.dart';
 
 class JobsPage extends StatefulWidget {
-  const JobsPage({super.key});
+  const JobsPage({
+    super.key,
+    this.initialJobId,
+    this.initialLocationId,
+    this.openedFromClient = false,
+  });
+
+  final String? initialJobId;
+  final int? initialLocationId;
+  final bool openedFromClient;
 
   @override
   State<JobsPage> createState() => _JobsPageState();
@@ -42,6 +51,8 @@ class _JobsPageState extends State<JobsPage> {
   String? _selectedJobId;
   String? _selectedEmployeeId;
   String? get _token => AuthSession.current?.token.trim();
+  bool get _isAdmin => AuthSession.current?.user.isAdmin == true;
+  bool get _isClient => AuthSession.current?.user.isClient == true;
 
   ApiService get _api => ApiService();
   BackendConfig get _backend => BackendRuntime.config;
@@ -61,15 +72,19 @@ class _JobsPageState extends State<JobsPage> {
     }
     WidgetsBinding.instance.addPostFrameCallback((_) async {
       if (!mounted) return;
-      if (!session.user.isAdmin) {
+      if (!session.user.isAdmin && !session.user.isClient) {
         ScaffoldMessenger.of(
           context,
-        ).showSnackBar(const SnackBar(content: Text('Admin access required')));
+        ).showSnackBar(
+          const SnackBar(content: Text('Admin or client access required')),
+        );
         Navigator.pushReplacementNamed(context, '/home');
         return;
       }
       await _loadJobs();
-      await _loadEmployees();
+      if (session.user.isAdmin) {
+        await _loadEmployees();
+      }
     });
   }
 
@@ -119,12 +134,20 @@ class _JobsPageState extends State<JobsPage> {
     setState(() => _loading = true);
     try {
       final jobs = await _api.listJobs(bearerToken: token);
+      final visibleJobs = _isClient && widget.initialLocationId != null
+          ? jobs
+                .where((job) => job.locationId == widget.initialLocationId)
+                .toList()
+          : jobs;
+      final preferredJobId = widget.initialJobId;
+      final selectedJobId = (preferredJobId != null &&
+              visibleJobs.any((job) => job.id == preferredJobId))
+          ? preferredJobId
+          : (visibleJobs.isNotEmpty ? visibleJobs.first.id : null);
       if (!mounted) return;
       setState(() {
-        _jobs = jobs;
-        if (_selectedJobId == null && jobs.isNotEmpty) {
-          _selectedJobId = jobs.first.id;
-        }
+        _jobs = visibleJobs;
+        _selectedJobId = selectedJobId;
       });
       await _loadSelectedJobDetails();
     } catch (error) {
@@ -233,7 +256,7 @@ class _JobsPageState extends State<JobsPage> {
       body: ListView(
         padding: const EdgeInsets.all(16),
         children: [
-          if (BackendRuntime.allowBackendOverride) ...[
+          if (_isAdmin && BackendRuntime.allowBackendOverride) ...[
             const SizedBox(height: 12),
             Wrap(
               spacing: 8,
@@ -272,6 +295,19 @@ class _JobsPageState extends State<JobsPage> {
               ],
             ),
           ],
+          if (_isClient && widget.openedFromClient) ...[
+            Card(
+              child: Padding(
+                padding: const EdgeInsets.all(12),
+                child: Text(
+                  _selectedJobId == null
+                      ? 'No matching jobs were found for this location yet.'
+                      : 'Showing job details from the client dashboard.',
+                ),
+              ),
+            ),
+            const SizedBox(height: 12),
+          ],
           const SizedBox(height: 12),
           if (AppEnv.isDemoMode) ...[
             const DemoModeNotice(
@@ -280,49 +316,51 @@ class _JobsPageState extends State<JobsPage> {
             ),
             const SizedBox(height: 12),
           ],
-          const Text(
-            'Create Job (admin only)',
-            style: TextStyle(fontWeight: FontWeight.bold),
-          ),
-          const SizedBox(height: 8),
-          Row(
-            children: [
-              Expanded(
-                child: TextField(
-                  controller: _profileIdController,
-                  decoration: const InputDecoration(
-                    labelText: 'Profile ID',
-                    border: OutlineInputBorder(),
+          if (_isAdmin) ...[
+            const Text(
+              'Create Job (admin only)',
+              style: TextStyle(fontWeight: FontWeight.bold),
+            ),
+            const SizedBox(height: 8),
+            Row(
+              children: [
+                Expanded(
+                  child: TextField(
+                    controller: _profileIdController,
+                    decoration: const InputDecoration(
+                      labelText: 'Profile ID',
+                      border: OutlineInputBorder(),
+                    ),
                   ),
                 ),
-              ),
-              const SizedBox(width: 8),
-              Expanded(
-                child: TextField(
-                  controller: _locationIdController,
-                  decoration: const InputDecoration(
-                    labelText: 'Location ID',
-                    border: OutlineInputBorder(),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: TextField(
+                    controller: _locationIdController,
+                    decoration: const InputDecoration(
+                      labelText: 'Location ID',
+                      border: OutlineInputBorder(),
+                    ),
                   ),
                 ),
-              ),
-              const SizedBox(width: 8),
-              Expanded(
-                child: TextField(
-                  controller: _dateController,
-                  decoration: const InputDecoration(
-                    labelText: 'YYYY-MM-DD',
-                    border: OutlineInputBorder(),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: TextField(
+                    controller: _dateController,
+                    decoration: const InputDecoration(
+                      labelText: 'YYYY-MM-DD',
+                      border: OutlineInputBorder(),
+                    ),
                   ),
                 ),
-              ),
-              const SizedBox(width: 8),
-              FilledButton(
-                onPressed: _loading || AppEnv.isDemoMode ? null : _createJob,
-                child: const Text('Create'),
-              ),
-            ],
-          ),
+                const SizedBox(width: 8),
+                FilledButton(
+                  onPressed: _loading || AppEnv.isDemoMode ? null : _createJob,
+                  child: const Text('Create'),
+                ),
+              ],
+            ),
+          ],
           if (_error != null) ...[
             const SizedBox(height: 12),
             Text(_error!, style: TextStyle(color: Colors.red.shade700)),
@@ -349,36 +387,37 @@ class _JobsPageState extends State<JobsPage> {
             },
           ),
           const SizedBox(height: 12),
-          Row(
-            children: [
-              Expanded(
-                child: DropdownButtonFormField<String>(
-                  initialValue: _selectedEmployeeId,
-                  decoration: const InputDecoration(
-                    labelText: 'Assign Employee',
-                    border: OutlineInputBorder(),
+          if (_isAdmin)
+            Row(
+              children: [
+                Expanded(
+                  child: DropdownButtonFormField<String>(
+                    initialValue: _selectedEmployeeId,
+                    decoration: const InputDecoration(
+                      labelText: 'Assign Employee',
+                      border: OutlineInputBorder(),
+                    ),
+                    items: _employees
+                        .map(
+                          (employee) => DropdownMenuItem(
+                            value: employee.id,
+                            child: Text('${employee.name} (${employee.id})'),
+                          ),
+                        )
+                        .toList(),
+                    onChanged: (value) =>
+                        setState(() => _selectedEmployeeId = value),
                   ),
-                  items: _employees
-                      .map(
-                        (employee) => DropdownMenuItem(
-                          value: employee.id,
-                          child: Text('${employee.name} (${employee.id})'),
-                        ),
-                      )
-                      .toList(),
-                  onChanged: (value) =>
-                      setState(() => _selectedEmployeeId = value),
                 ),
-              ),
-              const SizedBox(width: 8),
-              FilledButton(
-                onPressed: _loading || AppEnv.isDemoMode
-                    ? null
-                    : _assignEmployee,
-                child: const Text('Assign'),
-              ),
-            ],
-          ),
+                const SizedBox(width: 8),
+                FilledButton(
+                  onPressed: _loading || AppEnv.isDemoMode
+                      ? null
+                      : _assignEmployee,
+                  child: const Text('Assign'),
+                ),
+              ],
+            ),
           const SizedBox(height: 12),
           _ListPane(
             title: 'Assignments (${_assignments.length})',

@@ -10,6 +10,9 @@ class Client {
     this.city,
     this.state,
     this.zipCode,
+    this.preferredContactMethod,
+    this.preferredContactWindow,
+    this.serviceNotes,
   });
 
   final String id;
@@ -22,6 +25,9 @@ class Client {
   final String? city;
   final String? state;
   final String? zipCode;
+  final String? preferredContactMethod;
+  final String? preferredContactWindow;
+  final String? serviceNotes;
 
   factory Client.fromJson(Map<String, dynamic> json) {
     return Client(
@@ -35,6 +41,9 @@ class Client {
       city: json['city']?.toString(),
       state: json['state']?.toString(),
       zipCode: json['zip_code']?.toString(),
+      preferredContactMethod: json['preferred_contact_method']?.toString(),
+      preferredContactWindow: json['preferred_contact_window']?.toString(),
+      serviceNotes: json['service_notes']?.toString(),
     );
   }
 }
@@ -48,6 +57,9 @@ class ClientCreateInput {
     this.city,
     this.state,
     this.zipCode,
+    this.preferredContactMethod,
+    this.preferredContactWindow,
+    this.serviceNotes,
   });
 
   final String name;
@@ -57,6 +69,9 @@ class ClientCreateInput {
   final String? city;
   final String? state;
   final String? zipCode;
+  final String? preferredContactMethod;
+  final String? preferredContactWindow;
+  final String? serviceNotes;
 
   Map<String, dynamic> toJson() => {
     'name': name,
@@ -66,6 +81,9 @@ class ClientCreateInput {
     'city': city,
     'state': state,
     'zip_code': zipCode,
+    'preferred_contact_method': preferredContactMethod,
+    'preferred_contact_window': preferredContactWindow,
+    'service_notes': serviceNotes,
   };
 }
 
@@ -78,6 +96,9 @@ class ClientUpdateInput {
     this.city,
     this.state,
     this.zipCode,
+    this.preferredContactMethod,
+    this.preferredContactWindow,
+    this.serviceNotes,
   });
 
   final String? name;
@@ -87,6 +108,9 @@ class ClientUpdateInput {
   final String? city;
   final String? state;
   final String? zipCode;
+  final String? preferredContactMethod;
+  final String? preferredContactWindow;
+  final String? serviceNotes;
 
   Map<String, dynamic> toJson() {
     final data = <String, dynamic>{};
@@ -97,6 +121,13 @@ class ClientUpdateInput {
     if (city != null) data['city'] = city;
     if (state != null) data['state'] = state;
     if (zipCode != null) data['zip_code'] = zipCode;
+    if (preferredContactMethod != null) {
+      data['preferred_contact_method'] = preferredContactMethod;
+    }
+    if (preferredContactWindow != null) {
+      data['preferred_contact_window'] = preferredContactWindow;
+    }
+    if (serviceNotes != null) data['service_notes'] = serviceNotes;
     return data;
   }
 }

@@ -11,6 +11,9 @@ class Location {
     this.zipCode,
     this.latitude,
     this.longitude,
+    this.photoUrl,
+    this.accessNotes,
+    this.parkingNotes,
   });
 
   final String id;
@@ -24,6 +27,9 @@ class Location {
   final String? zipCode;
   final double? latitude;
   final double? longitude;
+  final String? photoUrl;
+  final String? accessNotes;
+  final String? parkingNotes;
 
   factory Location.fromJson(Map<String, dynamic> json) {
     return Location(
@@ -42,6 +48,9 @@ class Location {
       longitude: json['longitude'] == null
           ? null
           : double.tryParse(json['longitude'].toString()),
+      photoUrl: json['photo_url']?.toString(),
+      accessNotes: json['access_notes']?.toString(),
+      parkingNotes: json['parking_notes']?.toString(),
     );
   }
 }
@@ -56,6 +65,9 @@ class LocationCreateInput {
     this.zipCode,
     this.latitude,
     this.longitude,
+    this.photoUrl,
+    this.accessNotes,
+    this.parkingNotes,
   });
 
   final String type;
@@ -66,6 +78,9 @@ class LocationCreateInput {
   final String? zipCode;
   final double? latitude;
   final double? longitude;
+  final String? photoUrl;
+  final String? accessNotes;
+  final String? parkingNotes;
 
   Map<String, dynamic> toJson() => {
     'type': type,
@@ -76,6 +91,9 @@ class LocationCreateInput {
     'zip_code': zipCode,
     'latitude': latitude,
     'longitude': longitude,
+    'photo_url': photoUrl,
+    'access_notes': accessNotes,
+    'parking_notes': parkingNotes,
   };
 }
 
@@ -88,6 +106,9 @@ class LocationUpdateInput {
     this.zipCode,
     this.latitude,
     this.longitude,
+    this.photoUrl,
+    this.accessNotes,
+    this.parkingNotes,
   });
 
   final String? type;
@@ -97,6 +118,9 @@ class LocationUpdateInput {
   final String? zipCode;
   final double? latitude;
   final double? longitude;
+  final String? photoUrl;
+  final String? accessNotes;
+  final String? parkingNotes;
 
   Map<String, dynamic> toJson() {
     final data = <String, dynamic>{};
@@ -107,6 +131,9 @@ class LocationUpdateInput {
     if (zipCode != null) data['zip_code'] = zipCode;
     if (latitude != null) data['latitude'] = latitude;
     if (longitude != null) data['longitude'] = longitude;
+    if (photoUrl != null) data['photo_url'] = photoUrl;
+    if (accessNotes != null) data['access_notes'] = accessNotes;
+    if (parkingNotes != null) data['parking_notes'] = parkingNotes;
     return data;
   }
 }
