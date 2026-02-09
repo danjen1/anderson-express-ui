@@ -15,10 +15,41 @@ Quick-start scripts for running and deploying the Anderson Express UI.
 **What it does:**
 - Runs Flutter against `http://localhost:9000` (local Rust API)
 - Demo Mode: **OFF** (full CRUD operations enabled)
+- Backend override: **ON** (can switch backends via UI)
 - Perfect for active development
 
 **Prerequisites:**
 - Local Rust API running: `cd ../../rust-api && cargo run`
+
+**Environment variable overrides:**
+```bash
+# Use different port
+API_BASE_URL=http://localhost:8080 ./scripts/run_local.sh
+
+# Use Edge browser
+FLUTTER_DEVICE=edge ./scripts/run_local.sh
+
+# Pass extra flutter args
+./scripts/run_local.sh --web-port=3000
+```
+
+---
+
+### Preview Local (Test Demo Mode Locally)
+
+```bash
+./scripts/run_preview_local.sh
+```
+
+**What it does:**
+- Runs Flutter against `http://localhost:9000` (local Rust API)
+- Demo Mode: **ON** (read-only, disables create/edit/delete)
+- Perfect for testing demo behavior without deploying
+
+**Use when:**
+- Testing demo mode UI locally
+- Verifying read-only mode works correctly
+- Don't want to use deployed backend
 
 ---
 
@@ -130,11 +161,16 @@ open https://anderson-express-ui.fly.dev
 
 ## 🎯 Quick Reference
 
-| Script | API Target | Demo Mode | Use Case |
-|--------|-----------|-----------|----------|
-| `run_local.sh` | localhost:9000 | OFF | Daily development |
-| `run_preview.sh` | fly.dev | ON | Client demos |
-| `run_preview_dev.sh` | fly.dev | OFF | Test deployed backend |
+| Script | Backend | Demo Mode | Debug Override | Use Case |
+|--------|---------|-----------|----------------|----------|
+| `run_local.sh` | localhost:9000 | OFF | ON | Daily development |
+| `run_preview_local.sh` | localhost:9000 | ON | OFF | Test demo mode locally |
+| `run_preview.sh` | fly.dev | ON | OFF | Client demos |
+| `run_preview_dev.sh` | fly.dev | OFF | ON | Test deployed backend |
+
+**All scripts support:**
+- Environment variable overrides (e.g., `API_BASE_URL=...`, `FLUTTER_DEVICE=...`)
+- Extra Flutter arguments (e.g., `./script.sh --web-port=3000`)
 
 ---
 
