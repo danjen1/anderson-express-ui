@@ -6,18 +6,52 @@ Flutter web interface for the Anderson Express cleaning management system.
 
 ## Quick Start
 
+### Using Scripts (Recommended)
+
+```bash
+# Local development (full CRUD)
+./scripts/run_local.sh
+
+# Demo mode (read-only, for client demos)
+./scripts/run_preview.sh
+
+# Test deployed backend (full CRUD)
+./scripts/run_preview_dev.sh
+```
+
+📋 **[See scripts/README.md](scripts/README.md) for full documentation and deployment instructions**
+
+### Manual Commands
+
 ```bash
 # Default (connects to http://localhost:9000)
 flutter run -d chrome --web-port=3000
 
-# Override API endpoint
-flutter run -d chrome --web-port=3000 \
-  --dart-define=API_BASE_URL=http://localhost:9000
+# Local with full CRUD
+flutter run -d chrome \
+  --dart-define=API_BASE_URL=http://localhost:9000 \
+  --dart-define=APP_ENV=development \
+  --dart-define=DEMO_MODE=false
 
-# Connect to remote backend
-flutter run -d chrome --web-port=3000 \
-  --dart-define=BACKEND_HOST=archlinux
+# Preview mode (read-only demo)
+flutter run -d chrome \
+  --dart-define=API_BASE_URL=https://anderson-express-api.fly.dev \
+  --dart-define=APP_ENV=preview \
+  --dart-define=DEMO_MODE=true
 ```
+
+## Deployment
+
+```bash
+# Deploy to Fly.io
+fly deploy
+
+# Verify deployment
+fly status --app anderson-express-ui
+open https://anderson-express-ui.fly.dev
+```
+
+📋 **[Full deployment guide in scripts/README.md](scripts/README.md)**
 
 ## Features
 
