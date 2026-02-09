@@ -114,26 +114,36 @@ curl https://anderson-express-api.fly.dev/healthz
 
 ### Deploy Frontend (Flutter UI)
 
+**⚠️ IMPORTANT: Build FIRST with production settings, THEN deploy!**
+
 ```bash
 # From project root
 cd ui/anderson-express-ui
+
+# 1. Build for production (demo mode, deployed backend)
+./scripts/build_production.sh
+
+# 2. Deploy the built files to Fly.io
 fly deploy
 
-# Verify deployment
+# 3. Verify deployment
 fly status --app anderson-express-ui
-fly logs --app anderson-express-ui --no-tail
-
-# Test in browser
 open https://anderson-express-ui.fly.dev
 ```
 
 **Deployed to:** https://anderson-express-ui.fly.dev  
 **App name:** `anderson-express-ui`
 
-**Note:** The UI deployed to Fly.io uses `lib/config/api_config.dart` which points to:
-```dart
-static const String baseUrl = 'https://anderson-express-api.fly.dev';
-```
+**What `build_production.sh` does:**
+- ✅ Builds Flutter web with `--release` mode
+- ✅ Sets `API_BASE_URL=https://anderson-express-api.fly.dev`
+- ✅ Sets `DEMO_MODE=true` (read-only, safe for clients)
+- ✅ Sets `APP_ENV=preview`
+- ✅ Disables debug backend override
+- ✅ Output: `build/web/` directory (used by Dockerfile)
+
+**⚠️ Common Mistake:**
+Don't just run `fly deploy` without building first! The Dockerfile copies `build/web/`, so you need to build with the right settings first.
 
 ---
 
@@ -149,13 +159,18 @@ fly deploy
 # 2. Test backend is healthy
 curl https://anderson-express-api.fly.dev/healthz
 
-# 3. Deploy frontend
+# 3. Build UI with production settings
 cd ../ui/anderson-express-ui
+./scripts/build_production.sh
+
+# 4. Deploy UI
 fly deploy
 
-# 4. Test UI in browser
+# 5. Test UI in browser
 open https://anderson-express-ui.fly.dev
 ```
+
+**Important:** Always run `build_production.sh` before deploying UI!
 
 ---
 
