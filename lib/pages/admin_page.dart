@@ -1,7 +1,5 @@
-import 'dart:convert';
 
 import 'package:flutter/material.dart';
-import 'package:file_picker/file_picker.dart';
 
 import '../models/backend_config.dart';
 import '../models/cleaning_profile.dart';
@@ -20,7 +18,6 @@ import '../services/auth_session.dart';
 import '../services/backend_runtime.dart';
 import '../theme/crud_modal_theme.dart';
 import '../utils/date_format.dart';
-import '../utils/dialog_utils.dart';
 import '../utils/error_text.dart';
 import '../widgets/admin/dialogs/cleaning_profile_editor_dialog.dart';
 import '../widgets/admin/dialogs/client_editor_dialog.dart';
@@ -30,21 +27,12 @@ import '../widgets/admin/dialogs/location_editor_dialog.dart';
 import '../widgets/admin/dialogs/profile_task_editor_dialog.dart';
 import '../widgets/admin/dialogs/task_definition_editor_dialog.dart';
 import '../widgets/admin/dialogs/task_rule_editor_dialog.dart';
+import '../widgets/admin/admin_sidebar.dart';
 import '../widgets/backend_banner.dart';
 import '../widgets/brand_app_bar_title.dart';
 import '../widgets/demo_mode_notice.dart';
-import '../widgets/duration_picker_fields.dart';
 import '../widgets/profile_menu_button.dart';
 import '../widgets/theme_toggle_button.dart';
-
-enum _AdminSection {
-  dashboard,
-  jobs,
-  cleaningProfiles,
-  management,
-  reports,
-  knowledgeBase,
-}
 
 enum _ManagementModel { employees, clients, locations }
 
@@ -90,7 +78,7 @@ class _AdminPageState extends State<AdminPage> {
   List<TaskDefinition> _taskDefinitions = const [];
   List<TaskRule> _taskRules = const [];
   List<ProfileTask> _selectedProfileTasks = const [];
-  _AdminSection _selectedSection = _AdminSection.dashboard;
+  AdminSection _selectedSection = AdminSection.dashboard;
   _ManagementModel _managementModel = _ManagementModel.employees;
   _EmployeeFilter _employeeFilter = _EmployeeFilter.active;
   _ClientFilter _clientFilter = _ClientFilter.active;
@@ -1766,136 +1754,9 @@ class _AdminPageState extends State<AdminPage> {
 
   void _openJobsOverdue() {
     setState(() {
-      _selectedSection = _AdminSection.jobs;
+      _selectedSection = AdminSection.jobs;
       _jobFilter = _JobFilter.overdue;
     });
-  }
-
-  Widget _buildSidebar({required bool collapsed, bool forDrawer = false}) {
-    final dark = Theme.of(context).brightness == Brightness.dark;
-    final sidebarBg = dark ? const Color(0xFF1F1F1F) : const Color(0xFFF7FCFE);
-    final sidebarBorder = dark
-        ? const Color(0xFF4A525F)
-        : const Color(0xFF296273).withValues(alpha: 0.22);
-    final navSelected = dark
-        ? const Color(0xFFB39CD0).withValues(alpha: 0.24)
-        : const Color(0xFFA8D6F7).withValues(alpha: 0.45);
-    final navFg = dark ? const Color(0xFFE4E4E4) : const Color(0xFF442E6F);
-    final navSelectedFg = dark
-        ? const Color(0xFFB39CD0)
-        : const Color(0xFF296273);
-
-    Widget navTile({
-      required _AdminSection section,
-      required IconData icon,
-      required String title,
-    }) {
-      final selected = _selectedSection == section;
-      final tile = ListTile(
-        dense: true,
-        leading: Icon(icon, size: 24),
-        iconColor: selected ? navSelectedFg : navFg,
-        textColor: selected ? navSelectedFg : navFg,
-        selectedTileColor: navSelected,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-        contentPadding: EdgeInsets.symmetric(horizontal: collapsed ? 12 : 14),
-        title: collapsed ? null : Text(title),
-        selected: selected,
-        onTap: () {
-          setState(() => _selectedSection = section);
-          if (forDrawer) Navigator.pop(context);
-        },
-      );
-      if (collapsed && !forDrawer) {
-        return Tooltip(message: title, child: tile);
-      }
-      return tile;
-    }
-
-    return Container(
-      width: collapsed && !forDrawer ? 78 : 260,
-      decoration: BoxDecoration(
-        color: sidebarBg,
-        border: Border(right: BorderSide(color: sidebarBorder)),
-      ),
-      child: ListView(
-        padding: const EdgeInsets.symmetric(vertical: 8),
-        children: [
-          Padding(
-            padding: EdgeInsets.symmetric(
-              horizontal: collapsed ? 8 : 16,
-              vertical: 8,
-            ),
-            child: Row(
-              children: [
-                if (!collapsed || forDrawer)
-                  Expanded(
-                    child: Text(
-                      'Admin Workspace',
-                      style: TextStyle(
-                        fontWeight: FontWeight.w800,
-                        fontSize: 16,
-                        color: navFg,
-                      ),
-                    ),
-                  ),
-                if (!forDrawer)
-                  IconButton(
-                    visualDensity: VisualDensity.compact,
-                    padding: EdgeInsets.zero,
-                    constraints: const BoxConstraints(
-                      minWidth: 28,
-                      minHeight: 28,
-                    ),
-                    tooltip: collapsed ? 'Expand sidebar' : 'Collapse sidebar',
-                    onPressed: () =>
-                        setState(() => _sidebarCollapsed = !_sidebarCollapsed),
-                    icon: Icon(
-                      collapsed ? Icons.chevron_right : Icons.chevron_left,
-                      color: navFg,
-                    ),
-                  ),
-              ],
-            ),
-          ),
-          if (collapsed && !forDrawer)
-            const SizedBox(height: 2)
-          else
-            const SizedBox(height: 2),
-          navTile(
-            section: _AdminSection.jobs,
-            icon: Icons.work_outline,
-            title: 'Jobs',
-          ),
-          navTile(
-            section: _AdminSection.cleaningProfiles,
-            icon: Icons.checklist_rtl_outlined,
-            title: 'Cleaning Profiles',
-          ),
-          navTile(
-            section: _AdminSection.management,
-            icon: Icons.groups_outlined,
-            title: 'People & Places',
-          ),
-          navTile(
-            section: _AdminSection.reports,
-            icon: Icons.assessment_outlined,
-            title: 'Reports',
-          ),
-          navTile(
-            section: _AdminSection.knowledgeBase,
-            icon: Icons.menu_book_outlined,
-            title: 'Knowledge Base',
-          ),
-          const Divider(height: 24),
-          navTile(
-            section: _AdminSection.dashboard,
-            icon: Icons.dashboard_outlined,
-            title: 'Overview Dashboard',
-          ),
-        ],
-      ),
-    );
   }
 
   Widget _buildSectionHeader(String title, String subtitle) {
@@ -3390,15 +3251,15 @@ class _AdminPageState extends State<AdminPage> {
 
   Widget _buildSectionContent() {
     switch (_selectedSection) {
-      case _AdminSection.dashboard:
+      case AdminSection.dashboard:
         return _buildDashboardSection();
-      case _AdminSection.jobs:
+      case AdminSection.jobs:
         return _buildJobsSection();
-      case _AdminSection.cleaningProfiles:
+      case AdminSection.cleaningProfiles:
         return _buildCleaningProfilesSection();
-      case _AdminSection.management:
+      case AdminSection.management:
         return _buildManagementSection();
-      case _AdminSection.reports:
+      case AdminSection.reports:
         return _buildCrudScaffoldSection(
           title: 'Reports',
           subtitle: 'Reporting workspace scaffold.',
@@ -3412,7 +3273,7 @@ class _AdminPageState extends State<AdminPage> {
           bodyText:
               'Placeholder: report templates for operations, payroll windows, and client service summaries.',
         );
-      case _AdminSection.knowledgeBase:
+      case AdminSection.knowledgeBase:
         return _buildCrudScaffoldSection(
           title: 'Knowledge Base',
           subtitle:
@@ -3540,7 +3401,13 @@ class _AdminPageState extends State<AdminPage> {
       drawer: isCompactLayout
           ? Drawer(
               child: SafeArea(
-                child: _buildSidebar(collapsed: false, forDrawer: true),
+                child: AdminSidebar(
+                  collapsed: false,
+                  forDrawer: true,
+                  selectedSection: _selectedSection,
+                  onSectionChanged: (section) =>
+                      setState(() => _selectedSection = section),
+                ),
               ),
             )
           : null,
@@ -3593,7 +3460,7 @@ class _AdminPageState extends State<AdminPage> {
               child: Row(
                 children: [
                   if (!isCompactLayout)
-                    _buildSidebar(collapsed: _sidebarCollapsed),
+                    AdminSidebar(collapsed: _sidebarCollapsed, selectedSection: _selectedSection, onSectionChanged: (section) => setState(() => _selectedSection = section)),
                   Expanded(
                     child: Padding(
                       padding: const EdgeInsets.all(16),
@@ -3686,11 +3553,6 @@ class JobEditorFormData {
   final int? actualDurationMinutes;
   final String? cleanerEmployeeId;
 }
-
-
-
-
-
 
 class CleaningProfileEditorDialogState
     extends State<CleaningProfileEditorDialog> {
@@ -3829,7 +3691,6 @@ class CleaningProfileEditorDialogState
   }
 }
 
-
 class TaskDefinitionEditorDialogState
     extends State<TaskDefinitionEditorDialog> {
   late final TextEditingController _code;
@@ -3921,5 +3782,4 @@ class TaskDefinitionEditorDialogState
     );
   }
 }
-
 
