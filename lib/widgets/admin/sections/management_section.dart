@@ -24,6 +24,8 @@ class ManagementSection extends StatelessWidget {
     required this.locationSearch,
     required this.jobsSortColumnIndex,
     required this.jobsSortAscending,
+    required this.clientsSortColumnIndex,
+    required this.clientsSortAscending,
     required this.activeOnlyFilter,
     required this.onManagementModelChanged,
     required this.onActiveOnlyFilterChanged,
@@ -34,6 +36,7 @@ class ManagementSection extends StatelessWidget {
     required this.onLocationSearchChanged,
     required this.onJobDateRangeChanged,
     required this.onJobsSort,
+    required this.onClientsSort,
     required this.onShowCreateDialog,
     required this.onShowCreateClientDialog,
     required this.onShowCreateLocationDialog,
@@ -68,6 +71,8 @@ class ManagementSection extends StatelessWidget {
   final String locationSearch;
   final int? jobsSortColumnIndex;
   final bool jobsSortAscending;
+  final int? clientsSortColumnIndex;
+  final bool clientsSortAscending;
   final bool activeOnlyFilter;
   final Function(ManagementModel) onManagementModelChanged;
   final Function(bool) onActiveOnlyFilterChanged;
@@ -78,6 +83,7 @@ class ManagementSection extends StatelessWidget {
   final Function(String) onLocationSearchChanged;
   final Function(DateTimeRange) onJobDateRangeChanged;
   final Function(int, bool) onJobsSort;
+  final Function(int, bool) onClientsSort;
   final VoidCallback onShowCreateDialog;
   final VoidCallback onShowCreateClientDialog;
   final VoidCallback onShowCreateLocationDialog;
@@ -452,12 +458,26 @@ class ManagementSection extends StatelessWidget {
       ManagementModel.clients => DataTable(
         headingTextStyle: const TextStyle(fontWeight: FontWeight.w700),
         columnSpacing: 32,
+        sortColumnIndex: clientsSortColumnIndex,
+        sortAscending: clientsSortAscending,
         columns: [
-          buildTableColumn(''),
-          buildTableColumn('Name'),
-          buildTableColumn('Email'),
-          buildTableColumn('Phone'),
-          buildTableColumn(''),
+          DataColumn(
+            label: const Text(''),
+            onSort: (columnIndex, ascending) => onClientsSort(columnIndex, ascending),
+          ),
+          DataColumn(
+            label: const Text('Name'),
+            onSort: (columnIndex, ascending) => onClientsSort(columnIndex, ascending),
+          ),
+          DataColumn(
+            label: const Text('Email'),
+            onSort: (columnIndex, ascending) => onClientsSort(columnIndex, ascending),
+          ),
+          DataColumn(
+            label: const Text('Phone'),
+            onSort: (columnIndex, ascending) => onClientsSort(columnIndex, ascending),
+          ),
+          const DataColumn(label: Text('')),
         ],
         rows: filteredClients
             .map(

@@ -94,6 +94,8 @@ class _AdminPageState extends State<AdminPage> {
   String _locationSearch = '';
   int? _jobsSortColumnIndex;
   bool _jobsSortAscending = true;
+  int? _clientsSortColumnIndex;
+  bool _clientsSortAscending = true;
   DateTimeRange _jobDateRange = DateTimeRange(
     start: DateTime.now().subtract(const Duration(days: 30)),
     end: DateTime.now().add(const Duration(days: 30)),
@@ -1333,14 +1335,63 @@ class _AdminPageState extends State<AdminPage> {
       }).toList();
     }
     
-    filtered.sort((a, b) {
-      final aDeleted = a.status.trim().toLowerCase() == 'deleted';
-      final bDeleted = b.status.trim().toLowerCase() == 'deleted';
-      if (aDeleted != bDeleted) {
-        return aDeleted ? 1 : -1;
-      }
-      return a.name.toLowerCase().compareTo(b.name.toLowerCase());
-    });
+    // Apply sorting if column selected
+    if (_clientsSortColumnIndex != null) {
+      filtered.sort((a, b) {
+        int comparison = 0;
+        switch (_clientsSortColumnIndex) {
+          case 0: // Status - invited first, then active, deleted last
+            final aStatus = a.status.trim().toLowerCase();
+            final bStatus = b.status.trim().toLowerCase();
+            if (aStatus == 'invited' && bStatus != 'invited') {
+              comparison = -1;
+            } else if (aStatus != 'invited' && bStatus == 'invited') {
+              comparison = 1;
+            } else if (aStatus == 'deleted' && bStatus != 'deleted') {
+              comparison = 1;
+            } else if (aStatus != 'deleted' && bStatus == 'deleted') {
+              comparison = -1;
+            } else {
+              comparison = aStatus.compareTo(bStatus);
+            }
+            break;
+          case 1: // Name
+            comparison = a.name.toLowerCase().compareTo(b.name.toLowerCase());
+            break;
+          case 2: // Email
+            comparison = (a.email ?? '').toLowerCase().compareTo((b.email ?? '').toLowerCase());
+            break;
+          case 3: // Phone
+            comparison = (a.phoneNumber ?? '').compareTo(b.phoneNumber ?? '');
+            break;
+        }
+        return _clientsSortAscending ? comparison : -comparison;
+      });
+    } else {
+      // Default sort: invited first, then active, then others, deleted last
+      filtered.sort((a, b) {
+        final aStatus = a.status.trim().toLowerCase();
+        final bStatus = b.status.trim().toLowerCase();
+        
+        // Invited always comes first
+        if (aStatus == 'invited' && bStatus != 'invited') {
+          return -1;
+        } else if (aStatus != 'invited' && bStatus == 'invited') {
+          return 1;
+        }
+        
+        // Deleted always comes last
+        if (aStatus == 'deleted' && bStatus != 'deleted') {
+          return 1;
+        } else if (aStatus != 'deleted' && bStatus == 'deleted') {
+          return -1;
+        }
+        
+        // Otherwise sort by name
+        return a.name.toLowerCase().compareTo(b.name.toLowerCase());
+      });
+    }
+    
     return filtered;
   }
 
@@ -1793,6 +1844,8 @@ class _AdminPageState extends State<AdminPage> {
               locationSearch: _locationSearch,
               jobsSortColumnIndex: _jobsSortColumnIndex,
               jobsSortAscending: _jobsSortAscending,
+              clientsSortColumnIndex: _clientsSortColumnIndex,
+              clientsSortAscending: _clientsSortAscending,
               activeOnlyFilter: _activeOnlyFilter,
               onManagementModelChanged: (model) => setState(() => _managementModel = model),
               onActiveOnlyFilterChanged: (active) => setState(() => _activeOnlyFilter = active),
@@ -1813,6 +1866,12 @@ class _AdminPageState extends State<AdminPage> {
                 setState(() {
                   _jobsSortColumnIndex = columnIndex;
                   _jobsSortAscending = ascending;
+                });
+              },
+              onClientsSort: (columnIndex, ascending) {
+                setState(() {
+                  _clientsSortColumnIndex = columnIndex;
+                  _clientsSortAscending = ascending;
                 });
               },
               onShowCreateDialog: _showCreateDialog,
