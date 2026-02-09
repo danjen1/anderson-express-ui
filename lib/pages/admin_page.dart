@@ -1,6 +1,7 @@
 import 'dart:convert';
 
 import 'package:flutter/material.dart';
+import 'package:file_picker/file_picker.dart';
 
 import '../models/backend_config.dart';
 import '../models/cleaning_profile.dart';
@@ -46,6 +47,88 @@ enum _LocationFilter { all, active, inactive }
 enum _JobFilter { all, pending, assigned, inProgress, completed, overdue }
 
 enum _CleaningRequestFilter { open, reviewed, scheduled, closed, all }
+
+ThemeData _buildCrudModalTheme(BuildContext context) {
+  final dark = Theme.of(context).brightness == Brightness.dark;
+  return Theme.of(context).copyWith(
+    dialogTheme: DialogThemeData(
+      backgroundColor: dark ? const Color(0xFF2C2C2C) : Colors.white,
+      surfaceTintColor: Colors.transparent,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(14),
+        side: BorderSide(
+          color: dark ? const Color(0xFF4A525F) : const Color(0xFFA8D6F7),
+        ),
+      ),
+    ),
+    inputDecorationTheme: InputDecorationTheme(
+      filled: true,
+      fillColor: dark ? const Color(0xFF1F1F1F) : const Color(0xFFF7FCFE),
+      border: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(10),
+        borderSide: BorderSide(
+          color: dark ? const Color(0xFF657184) : const Color(0xFFBEDCE4),
+        ),
+      ),
+      enabledBorder: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(10),
+        borderSide: BorderSide(
+          color: dark ? const Color(0xFF657184) : const Color(0xFFBEDCE4),
+        ),
+      ),
+      focusedBorder: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(10),
+        borderSide: BorderSide(
+          color: dark ? const Color(0xFFB39CD0) : const Color(0xFF296273),
+          width: 1.4,
+        ),
+      ),
+      labelStyle: TextStyle(
+        color: dark ? const Color(0xFFE4E4E4) : const Color(0xFF442E6F),
+      ),
+      hintStyle: TextStyle(
+        color: dark ? const Color(0xFFB8BCC4) : const Color(0xFF6A6A6A),
+      ),
+    ),
+    textButtonTheme: TextButtonThemeData(
+      style: TextButton.styleFrom(
+        foregroundColor: dark
+            ? const Color(0xFFA8DADC)
+            : const Color(0xFF296273),
+      ),
+    ),
+    outlinedButtonTheme: OutlinedButtonThemeData(
+      style: OutlinedButton.styleFrom(
+        foregroundColor: dark
+            ? const Color(0xFFA8DADC)
+            : const Color(0xFF296273),
+        side: BorderSide(
+          color: dark ? const Color(0xFF657184) : const Color(0xFFBEDCE4),
+        ),
+      ),
+    ),
+    filledButtonTheme: FilledButtonThemeData(
+      style: FilledButton.styleFrom(
+        backgroundColor: dark
+            ? const Color(0xFFB39CD0)
+            : const Color(0xFF442E6F),
+        foregroundColor: dark ? const Color(0xFF1F1F1F) : Colors.white,
+      ),
+    ),
+  );
+}
+
+Color _crudModalTitleColor(BuildContext context) {
+  return Theme.of(context).brightness == Brightness.dark
+      ? const Color(0xFFB39CD0)
+      : const Color(0xFF442E6F);
+}
+
+Color _crudModalRequiredColor(BuildContext context) {
+  return Theme.of(context).brightness == Brightness.dark
+      ? const Color(0xFFFFC1CC)
+      : const Color(0xFF442E6F);
+}
 
 class AdminPage extends StatefulWidget {
   const AdminPage({super.key});
@@ -109,15 +192,24 @@ class _AdminPageState extends State<AdminPage> {
     if (!mounted) return;
     await showDialog<void>(
       context: context,
-      builder: (context) => AlertDialog(
-        title: Text(title),
-        content: Text(message),
-        actions: [
-          FilledButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('Got it'),
+      builder: (context) => Theme(
+        data: _buildCrudModalTheme(context),
+        child: AlertDialog(
+          title: Text(
+            title,
+            style: TextStyle(
+              color: _crudModalTitleColor(context),
+              fontWeight: FontWeight.w800,
+            ),
           ),
-        ],
+          content: Text(message),
+          actions: [
+            FilledButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text('Got it'),
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -126,41 +218,25 @@ class _AdminPageState extends State<AdminPage> {
     required String title,
     required String message,
   }) async {
-    final dark = Theme.of(context).brightness == Brightness.dark;
-    final dialogTheme = Theme.of(context).copyWith(
-      dialogTheme: DialogThemeData(
-        backgroundColor: dark ? const Color(0xFF333740) : null,
-        surfaceTintColor: Colors.transparent,
-      ),
-    );
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (context) => Theme(
-        data: dialogTheme,
+        data: _buildCrudModalTheme(context),
         child: AlertDialog(
           title: Text(
             title,
             style: TextStyle(
-              color: dark ? const Color(0xFFB39CD0) : const Color(0xFF442E6F),
+              color: _crudModalTitleColor(context),
               fontWeight: FontWeight.w800,
             ),
           ),
-          content: Text(
-            message,
-            style: TextStyle(color: dark ? const Color(0xFFE4E4E4) : null),
-          ),
+          content: Text(message),
           actions: [
             TextButton(
               onPressed: () => Navigator.pop(context, false),
               child: const Text('Cancel'),
             ),
             FilledButton(
-              style: FilledButton.styleFrom(
-                backgroundColor: dark
-                    ? const Color(0xFFB39CD0)
-                    : const Color(0xFF442E6F),
-                foregroundColor: dark ? const Color(0xFF1F1F1F) : Colors.white,
-              ),
               onPressed: () => Navigator.pop(context, true),
               child: const Text('Delete'),
             ),
@@ -442,22 +518,9 @@ class _AdminPageState extends State<AdminPage> {
   }
 
   Future<void> _delete(Employee employee) async {
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Delete employee'),
-        content: Text('Delete ${employee.employeeNumber} - ${employee.name}?'),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context, false),
-            child: const Text('Cancel'),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.pop(context, true),
-            child: const Text('Delete'),
-          ),
-        ],
-      ),
+    final confirmed = await _showPolishedDeleteDialog(
+      title: 'Delete employee',
+      message: 'Delete ${employee.employeeNumber} - ${employee.name}?',
     );
 
     if (confirmed != true) return;
@@ -940,47 +1003,10 @@ class _AdminPageState extends State<AdminPage> {
   }
 
   Future<void> _deleteJob(Job job) async {
-    final dark = Theme.of(context).brightness == Brightness.dark;
-    final dialogTheme = Theme.of(context).copyWith(
-      dialogTheme: DialogThemeData(
-        backgroundColor: dark ? const Color(0xFF333740) : null,
-        surfaceTintColor: Colors.transparent,
-      ),
-    );
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (context) => Theme(
-        data: dialogTheme,
-        child: AlertDialog(
-          title: Text(
-            'Delete job',
-            style: TextStyle(
-              color: dark ? const Color(0xFFB39CD0) : const Color(0xFF442E6F),
-              fontWeight: FontWeight.w800,
-            ),
-          ),
-          content: Text(
-            'Delete Job for ${job.clientName ?? 'Unknown Client'} on ${formatDateMdy(job.scheduledDate)}',
-            style: TextStyle(color: dark ? const Color(0xFFE4E4E4) : null),
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(context, false),
-              child: const Text('Cancel'),
-            ),
-            FilledButton(
-              style: FilledButton.styleFrom(
-                backgroundColor: dark
-                    ? const Color(0xFFB39CD0)
-                    : const Color(0xFF442E6F),
-                foregroundColor: dark ? const Color(0xFF1F1F1F) : Colors.white,
-              ),
-              onPressed: () => Navigator.pop(context, true),
-              child: const Text('Delete'),
-            ),
-          ],
-        ),
-      ),
+    final confirmed = await _showPolishedDeleteDialog(
+      title: 'Delete job',
+      message:
+          'Delete Job for ${job.clientName ?? 'Unknown Client'} on ${formatDateMdy(job.scheduledDate)}',
     );
     if (confirmed != true) return;
 
@@ -3906,21 +3932,30 @@ class _JobEditorDialogState extends State<_JobEditorDialog> {
     if (selectedHour < 5 || selectedHour >= 21) {
       final confirmed = await showDialog<bool>(
         context: context,
-        builder: (context) => AlertDialog(
-          title: const Text('Confirm late/early job time'),
-          content: const Text(
-            'This job is scheduled outside normal hours (5:00 AM - 9:00 PM). Continue?',
+        builder: (context) => Theme(
+          data: _buildCrudModalTheme(context),
+          child: AlertDialog(
+            title: Text(
+              'Confirm late/early job time',
+              style: TextStyle(
+                color: _crudModalTitleColor(context),
+                fontWeight: FontWeight.w800,
+              ),
+            ),
+            content: const Text(
+              'This job is scheduled outside normal hours (5:00 AM - 9:00 PM). Continue?',
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(context, false),
+                child: const Text('Cancel'),
+              ),
+              FilledButton(
+                onPressed: () => Navigator.pop(context, true),
+                child: const Text('Continue'),
+              ),
+            ],
           ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(context, false),
-              child: const Text('Cancel'),
-            ),
-            FilledButton(
-              onPressed: () => Navigator.pop(context, true),
-              child: const Text('Continue'),
-            ),
-          ],
         ),
       );
       if (confirmed != true) return;
@@ -3953,53 +3988,8 @@ class _JobEditorDialogState extends State<_JobEditorDialog> {
   Widget build(BuildContext context) {
     final dark = Theme.of(context).brightness == Brightness.dark;
     final clientLocations = _clientLocations;
-    final dialogTheme = Theme.of(context).copyWith(
-      dialogTheme: DialogThemeData(
-        backgroundColor: dark ? const Color(0xFF333740) : null,
-        surfaceTintColor: Colors.transparent,
-      ),
-      inputDecorationTheme: InputDecorationTheme(
-        filled: true,
-        fillColor: dark ? const Color(0xFF2C2F36) : Colors.white,
-        border: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(10),
-          borderSide: BorderSide(
-            color: dark ? const Color(0xFF657184) : const Color(0xFFBEDCE4),
-          ),
-        ),
-        enabledBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(10),
-          borderSide: BorderSide(
-            color: dark ? const Color(0xFF657184) : const Color(0xFFBEDCE4),
-          ),
-        ),
-        focusedBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(10),
-          borderSide: BorderSide(
-            color: dark ? const Color(0xFFA8DADC) : const Color(0xFF296273),
-            width: 1.4,
-          ),
-        ),
-        labelStyle: TextStyle(
-          color: dark ? const Color(0xFFE4E4E4) : const Color(0xFF442E6F),
-        ),
-        hintStyle: TextStyle(
-          color: dark ? const Color(0xFFB8BCC4) : const Color(0xFF6A6A6A),
-        ),
-      ),
-      outlinedButtonTheme: OutlinedButtonThemeData(
-        style: OutlinedButton.styleFrom(
-          foregroundColor: dark
-              ? const Color(0xFFA8DADC)
-              : const Color(0xFF296273),
-          side: BorderSide(
-            color: dark ? const Color(0xFF657184) : const Color(0xFFBEDCE4),
-          ),
-        ),
-      ),
-    );
     return Theme(
-      data: dialogTheme,
+      data: _buildCrudModalTheme(context),
       child: AlertDialog(
         title: Row(
           children: [
@@ -4007,9 +3997,7 @@ class _JobEditorDialogState extends State<_JobEditorDialog> {
               child: Text(
                 widget.isCreate ? 'Create Job' : 'Edit Job',
                 style: TextStyle(
-                  color: dark
-                      ? const Color(0xFFB39CD0)
-                      : const Color(0xFF442E6F),
+                  color: _crudModalTitleColor(context),
                   fontWeight: FontWeight.w800,
                 ),
               ),
@@ -4036,9 +4024,7 @@ class _JobEditorDialogState extends State<_JobEditorDialog> {
                   child: Text(
                     '* Required fields',
                     style: TextStyle(
-                      color: dark
-                          ? const Color(0xFFFFC1CC)
-                          : const Color(0xFF442E6F),
+                      color: _crudModalRequiredColor(context),
                       fontWeight: FontWeight.w700,
                       fontSize: 12,
                     ),
@@ -4273,25 +4259,212 @@ class _EmployeeEditorDialogState extends State<_EmployeeEditorDialog> {
     super.dispose();
   }
 
-  String _assetPath(String? value, {required String fallback}) {
-    final candidate = (value == null || value.trim().isEmpty)
-        ? fallback
-        : value.trim();
-    return candidate.startsWith('/') ? candidate.substring(1) : candidate;
+  String _assetPath(String value) {
+    return value.startsWith('/') ? value.substring(1) : value;
   }
 
-  Future<void> _editPhotoPath() async {
-    final controller = TextEditingController(text: _photoUrl.text);
-    final value = await showDialog<String>(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Employee photo path'),
-        content: TextField(
-          controller: controller,
-          decoration: const InputDecoration(
-            labelText: 'Asset path',
-            hintText: '/assets/images/profiles/employee_default.png',
-            border: OutlineInputBorder(),
+  ImageProvider _photoProvider(String? value, {required String fallback}) {
+    final candidate = value?.trim() ?? '';
+    if (candidate.isEmpty) {
+      return AssetImage(_assetPath(fallback));
+    }
+    if (candidate.startsWith('data:image/')) {
+      final comma = candidate.indexOf(',');
+      if (comma > 0 && comma < candidate.length - 1) {
+        try {
+          return MemoryImage(base64Decode(candidate.substring(comma + 1)));
+        } catch (_) {}
+      }
+      return AssetImage(_assetPath(fallback));
+    }
+    if (candidate.startsWith('/assets/')) {
+      return AssetImage(_assetPath(candidate));
+    }
+    if (candidate.startsWith('http://') || candidate.startsWith('https://')) {
+      return NetworkImage(candidate);
+    }
+    return AssetImage(_assetPath(fallback));
+  }
+
+  Future<void> _pickPhotoFile() async {
+    final result = await FilePicker.platform.pickFiles(
+      type: FileType.custom,
+      allowedExtensions: const ['jpg', 'jpeg', 'png', 'webp'],
+      withData: true,
+    );
+    if (result == null || result.files.isEmpty) return;
+    final file = result.files.first;
+    final bytes = file.bytes;
+    if (bytes == null || bytes.isEmpty) return;
+    if (bytes.length > 500 * 1024) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text(
+            'Image must be under 500KB. Please choose a smaller file.',
+          ),
+        ),
+      );
+      return;
+    }
+
+    final ext = (file.extension ?? '').toLowerCase();
+    final mime = switch (ext) {
+      'png' => 'image/png',
+      'webp' => 'image/webp',
+      _ => 'image/jpeg',
+    };
+    final dataUrl = 'data:$mime;base64,${base64Encode(bytes)}';
+    setState(() => _photoUrl.text = dataUrl);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final dark = Theme.of(context).brightness == Brightness.dark;
+    return Theme(
+      data: _buildCrudModalTheme(context),
+      child: AlertDialog(
+        title: Row(
+          children: [
+            Expanded(
+              child: Text(
+                widget.isCreate ? 'Create Employee' : 'Edit Employee',
+                style: TextStyle(
+                  color: _crudModalTitleColor(context),
+                  fontWeight: FontWeight.w800,
+                ),
+              ),
+            ),
+            ClipRRect(
+              borderRadius: BorderRadius.circular(4),
+              child: Image.asset(
+                'assets/images/logo.png',
+                width: 48,
+                height: 48,
+                fit: BoxFit.cover,
+              ),
+            ),
+          ],
+        ),
+        content: SizedBox(
+          width: 480,
+          child: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                ValueListenableBuilder<TextEditingValue>(
+                  valueListenable: _photoUrl,
+                  builder: (context, value, _) {
+                    final path = value.text.trim().isNotEmpty
+                        ? value.text.trim()
+                        : _defaultEmployeePhotoAsset;
+                    return Stack(
+                      children: [
+                        CircleAvatar(
+                          radius: 56,
+                          backgroundColor: dark
+                              ? const Color(0xFF3B4250)
+                              : const Color(0xFFA8D6F7),
+                          backgroundImage: _photoProvider(
+                            path,
+                            fallback: _defaultEmployeePhotoAsset,
+                          ),
+                        ),
+                        Positioned(
+                          right: -2,
+                          bottom: -2,
+                          child: IconButton(
+                            visualDensity: VisualDensity.compact,
+                            tooltip: 'Upload profile photo',
+                            onPressed: _pickPhotoFile,
+                            icon: const Icon(Icons.edit, size: 18),
+                          ),
+                        ),
+                      ],
+                    );
+                  },
+                ),
+                const SizedBox(height: 10),
+                Row(
+                  children: [
+                    Text(
+                      '* Required fields',
+                      style: TextStyle(
+                        color: _crudModalRequiredColor(context),
+                        fontWeight: FontWeight.w700,
+                        fontSize: 12,
+                      ),
+                    ),
+                    const Spacer(),
+                    Text(
+                      'Employee #: ${widget.employeeNumber.isEmpty ? '—' : widget.employeeNumber}',
+                      style: TextStyle(
+                        color: dark
+                            ? const Color(0xFFE4E4E4)
+                            : const Color(0xFF296273),
+                        fontWeight: FontWeight.w700,
+                        fontSize: 12,
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 10),
+                _field(_name, 'Name', required: true),
+                const SizedBox(height: 10),
+                _field(_email, 'Email', required: true),
+                const SizedBox(height: 10),
+                _field(_phone, 'Phone'),
+                const SizedBox(height: 10),
+                _field(_address, 'Address'),
+                const SizedBox(height: 10),
+                _field(_city, 'City'),
+                const SizedBox(height: 10),
+                _field(_state, 'State'),
+                const SizedBox(height: 10),
+                _field(_zipCode, 'Zip Code'),
+                const SizedBox(height: 10),
+                DropdownButtonFormField<String>(
+                  initialValue: _status,
+                  decoration: const InputDecoration(
+                    labelText: 'Status',
+                    border: OutlineInputBorder(),
+                  ),
+                  items: const [
+                    DropdownMenuItem(value: 'invited', child: Text('Invited')),
+                    DropdownMenuItem(value: 'active', child: Text('Active')),
+                    DropdownMenuItem(
+                      value: 'inactive',
+                      child: Text('Inactive'),
+                    ),
+                    DropdownMenuItem(
+                      value: 'resigned',
+                      child: Text('Resigned'),
+                    ),
+                    DropdownMenuItem(value: 'deleted', child: Text('Deleted')),
+                  ],
+                  onChanged: (value) {
+                    if (value == null) return;
+                    setState(() => _status = value);
+                  },
+                ),
+                if (widget.isCreate)
+                  Padding(
+                    padding: const EdgeInsets.only(top: 8),
+                    child: Align(
+                      alignment: Alignment.centerLeft,
+                      child: Text(
+                        'New employees default to the shared profile image unless changed above.',
+                        style: TextStyle(
+                          fontSize: 12,
+                          color: dark
+                              ? const Color(0xFFE4E4E4)
+                              : const Color(0xFF296273),
+                        ),
+                      ),
+                    ),
+                  ),
+              ],
+            ),
           ),
         ),
         actions: [
@@ -4300,208 +4473,46 @@ class _EmployeeEditorDialogState extends State<_EmployeeEditorDialog> {
             child: const Text('Cancel'),
           ),
           FilledButton(
-            onPressed: () => Navigator.pop(context, controller.text.trim()),
-            child: const Text('Apply'),
-          ),
-        ],
-      ),
-    );
-    if (value == null) return;
-    setState(() {
-      _photoUrl.text = value;
-    });
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final dark = Theme.of(context).brightness == Brightness.dark;
-    return AlertDialog(
-      title: Row(
-        children: [
-          Expanded(
-            child: Text(
-              widget.isCreate ? 'Create Employee' : 'Edit Employee',
-              style: TextStyle(
-                color: dark ? const Color(0xFFB39CD0) : const Color(0xFF442E6F),
-                fontWeight: FontWeight.w800,
-              ),
-            ),
-          ),
-          ClipRRect(
-            borderRadius: BorderRadius.circular(4),
-            child: Image.asset(
-              'assets/images/logo.png',
-              width: 48,
-              height: 48,
-              fit: BoxFit.cover,
-            ),
-          ),
-        ],
-      ),
-      content: SizedBox(
-        width: 480,
-        child: SingleChildScrollView(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              ValueListenableBuilder<TextEditingValue>(
-                valueListenable: _photoUrl,
-                builder: (context, value, _) {
-                  final path = value.text.trim().isNotEmpty
-                      ? value.text.trim()
-                      : _defaultEmployeePhotoAsset;
-                  return Stack(
-                    children: [
-                      CircleAvatar(
-                        radius: 56,
-                        backgroundColor: dark
-                            ? const Color(0xFF3B4250)
-                            : const Color(0xFFA8D6F7),
-                        backgroundImage: AssetImage(
-                          _assetPath(
-                            path,
-                            fallback: _defaultEmployeePhotoAsset,
-                          ),
-                        ),
-                      ),
-                      Positioned(
-                        right: -2,
-                        bottom: -2,
-                        child: IconButton(
-                          visualDensity: VisualDensity.compact,
-                          tooltip: 'Edit photo path',
-                          onPressed: _editPhotoPath,
-                          icon: const Icon(Icons.edit, size: 18),
-                        ),
-                      ),
-                    ],
-                  );
-                },
-              ),
-              const SizedBox(height: 10),
-              Row(
-                children: [
-                  Text(
-                    '* Required fields',
-                    style: TextStyle(
-                      color: dark
-                          ? const Color(0xFFFFC1CC)
-                          : const Color(0xFF442E6F),
-                      fontWeight: FontWeight.w700,
-                      fontSize: 12,
-                    ),
+            onPressed: () {
+              if (widget.isCreate) {
+                if (_name.text.trim().isEmpty || _email.text.trim().isEmpty) {
+                  return;
+                }
+                Navigator.pop(
+                  context,
+                  EmployeeCreateInput(
+                    name: _name.text.trim(),
+                    email: _email.text.trim(),
+                    phoneNumber: _nullable(_phone.text),
+                    address: _nullable(_address.text),
+                    city: _nullable(_city.text),
+                    state: _nullable(_state.text),
+                    zipCode: _nullable(_zipCode.text),
+                    photoUrl: _nullable(_photoUrl.text),
+                    status: _status,
                   ),
-                  const Spacer(),
-                  Text(
-                    'Employee #: ${widget.employeeNumber.isEmpty ? '—' : widget.employeeNumber}',
-                    style: TextStyle(
-                      color: dark
-                          ? const Color(0xFFE4E4E4)
-                          : const Color(0xFF41588E),
-                      fontWeight: FontWeight.w700,
-                      fontSize: 12,
-                    ),
+                );
+              } else {
+                Navigator.pop(
+                  context,
+                  EmployeeUpdateInput(
+                    name: _nullable(_name.text),
+                    email: _nullable(_email.text),
+                    phoneNumber: _nullable(_phone.text),
+                    address: _nullable(_address.text),
+                    city: _nullable(_city.text),
+                    state: _nullable(_state.text),
+                    zipCode: _nullable(_zipCode.text),
+                    photoUrl: _nullable(_photoUrl.text),
+                    status: _status,
                   ),
-                ],
-              ),
-              const SizedBox(height: 10),
-              _field(_name, 'Name', required: true),
-              const SizedBox(height: 10),
-              _field(_email, 'Email', required: true),
-              const SizedBox(height: 10),
-              _field(_phone, 'Phone'),
-              const SizedBox(height: 10),
-              _field(_address, 'Address'),
-              const SizedBox(height: 10),
-              _field(_city, 'City'),
-              const SizedBox(height: 10),
-              _field(_state, 'State'),
-              const SizedBox(height: 10),
-              _field(_zipCode, 'Zip Code'),
-              const SizedBox(height: 10),
-              DropdownButtonFormField<String>(
-                initialValue: _status,
-                decoration: const InputDecoration(
-                  labelText: 'Status',
-                  border: OutlineInputBorder(),
-                ),
-                items: const [
-                  DropdownMenuItem(value: 'invited', child: Text('Invited')),
-                  DropdownMenuItem(value: 'active', child: Text('Active')),
-                  DropdownMenuItem(value: 'inactive', child: Text('Inactive')),
-                  DropdownMenuItem(value: 'resigned', child: Text('Resigned')),
-                  DropdownMenuItem(value: 'deleted', child: Text('Deleted')),
-                ],
-                onChanged: (value) {
-                  if (value == null) return;
-                  setState(() => _status = value);
-                },
-              ),
-              if (widget.isCreate)
-                Padding(
-                  padding: const EdgeInsets.only(top: 8),
-                  child: Align(
-                    alignment: Alignment.centerLeft,
-                    child: Text(
-                      'New employees default to the shared profile image unless changed above.',
-                      style: TextStyle(
-                        fontSize: 12,
-                        color: dark
-                            ? const Color(0xFFE4E4E4)
-                            : const Color(0xFF41588E),
-                      ),
-                    ),
-                  ),
-                ),
-            ],
-          ),
-        ),
-      ),
-      actions: [
-        TextButton(
-          onPressed: () => Navigator.pop(context),
-          child: const Text('Cancel'),
-        ),
-        FilledButton(
-          onPressed: () {
-            if (widget.isCreate) {
-              if (_name.text.trim().isEmpty || _email.text.trim().isEmpty) {
-                return;
+                );
               }
-              Navigator.pop(
-                context,
-                EmployeeCreateInput(
-                  name: _name.text.trim(),
-                  email: _email.text.trim(),
-                  phoneNumber: _nullable(_phone.text),
-                  address: _nullable(_address.text),
-                  city: _nullable(_city.text),
-                  state: _nullable(_state.text),
-                  zipCode: _nullable(_zipCode.text),
-                  photoUrl: _nullable(_photoUrl.text),
-                  status: _status,
-                ),
-              );
-            } else {
-              Navigator.pop(
-                context,
-                EmployeeUpdateInput(
-                  name: _nullable(_name.text),
-                  email: _nullable(_email.text),
-                  phoneNumber: _nullable(_phone.text),
-                  address: _nullable(_address.text),
-                  city: _nullable(_city.text),
-                  state: _nullable(_state.text),
-                  zipCode: _nullable(_zipCode.text),
-                  photoUrl: _nullable(_photoUrl.text),
-                  status: _status,
-                ),
-              );
-            }
-          },
-          child: Text(widget.isCreate ? 'Create' : 'Save'),
-        ),
-      ],
+            },
+            child: Text(widget.isCreate ? 'Create' : 'Save'),
+          ),
+        ],
+      ),
     );
   }
 
@@ -4866,41 +4877,63 @@ class _LocationEditorDialogState extends State<_LocationEditorDialog> {
     super.dispose();
   }
 
-  String _assetPath(String? value, {required String fallback}) {
-    final candidate = (value == null || value.trim().isEmpty)
-        ? fallback
-        : value.trim();
-    return candidate.startsWith('/') ? candidate.substring(1) : candidate;
+  String _assetPath(String value) {
+    return value.startsWith('/') ? value.substring(1) : value;
   }
 
-  Future<void> _editPhotoPath() async {
-    final controller = TextEditingController(text: _photoUrl.text);
-    final value = await showDialog<String>(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Location photo path'),
-        content: TextField(
-          controller: controller,
-          decoration: const InputDecoration(
-            labelText: 'Asset path',
-            hintText: '/assets/images/locations/location_default.png',
-            border: OutlineInputBorder(),
+  ImageProvider _photoProvider(String? value, {required String fallback}) {
+    final candidate = value?.trim() ?? '';
+    if (candidate.isEmpty) {
+      return AssetImage(_assetPath(fallback));
+    }
+    if (candidate.startsWith('data:image/')) {
+      final comma = candidate.indexOf(',');
+      if (comma > 0 && comma < candidate.length - 1) {
+        try {
+          return MemoryImage(base64Decode(candidate.substring(comma + 1)));
+        } catch (_) {}
+      }
+      return AssetImage(_assetPath(fallback));
+    }
+    if (candidate.startsWith('/assets/')) {
+      return AssetImage(_assetPath(candidate));
+    }
+    if (candidate.startsWith('http://') || candidate.startsWith('https://')) {
+      return NetworkImage(candidate);
+    }
+    return AssetImage(_assetPath(fallback));
+  }
+
+  Future<void> _pickPhotoFile() async {
+    final result = await FilePicker.platform.pickFiles(
+      type: FileType.custom,
+      allowedExtensions: const ['jpg', 'jpeg', 'png', 'webp'],
+      withData: true,
+    );
+    if (result == null || result.files.isEmpty) return;
+    final file = result.files.first;
+    final bytes = file.bytes;
+    if (bytes == null || bytes.isEmpty) return;
+    if (bytes.length > 500 * 1024) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text(
+            'Image must be under 500KB. Please choose a smaller file.',
           ),
         ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('Cancel'),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.pop(context, controller.text.trim()),
-            child: const Text('Apply'),
-          ),
-        ],
-      ),
-    );
-    if (value == null) return;
-    setState(() => _photoUrl.text = value);
+      );
+      return;
+    }
+
+    final ext = (file.extension ?? '').toLowerCase();
+    final mime = switch (ext) {
+      'png' => 'image/png',
+      'webp' => 'image/webp',
+      _ => 'image/jpeg',
+    };
+    final dataUrl = 'data:$mime;base64,${base64Encode(bytes)}';
+    setState(() => _photoUrl.text = dataUrl);
   }
 
   @override
@@ -4948,11 +4981,9 @@ class _LocationEditorDialogState extends State<_LocationEditorDialog> {
                         backgroundColor: dark
                             ? const Color(0xFF3B4250)
                             : const Color(0xFFA8D6F7),
-                        backgroundImage: AssetImage(
-                          _assetPath(
-                            path,
-                            fallback: _defaultLocationPhotoAsset,
-                          ),
+                        backgroundImage: _photoProvider(
+                          path,
+                          fallback: _defaultLocationPhotoAsset,
                         ),
                       ),
                       Positioned(
@@ -4960,8 +4991,8 @@ class _LocationEditorDialogState extends State<_LocationEditorDialog> {
                         bottom: -2,
                         child: IconButton(
                           visualDensity: VisualDensity.compact,
-                          tooltip: 'Edit location photo',
-                          onPressed: _editPhotoPath,
+                          tooltip: 'Upload location photo',
+                          onPressed: _pickPhotoFile,
                           icon: const Icon(Icons.edit, size: 18),
                         ),
                       ),
