@@ -9,6 +9,8 @@ import '../../../theme/crud_modal_theme.dart';
 class LocationEditorDialog extends StatefulWidget {
   const LocationEditorDialog({
     required this.clients,
+    this.locationToEdit,
+    this.onDelete,
     this.clientId,
     this.status = 'active',
     this.type = 'residential',
@@ -21,6 +23,8 @@ class LocationEditorDialog extends StatefulWidget {
   });
 
   final List<Client> clients;
+  final dynamic locationToEdit;
+  final VoidCallback? onDelete;
   final int? clientId;
   final String status;
   final String type;
@@ -289,6 +293,15 @@ class LocationEditorDialogState extends State<LocationEditorDialog> {
           ),
         ),
         actions: [
+          if (!widget.isCreate && widget.onDelete != null)
+            TextButton(
+              onPressed: () {
+                Navigator.pop(context);
+                widget.onDelete!();
+              },
+              style: TextButton.styleFrom(foregroundColor: Colors.red),
+              child: const Text('Delete'),
+            ),
           TextButton(
             onPressed: () => Navigator.pop(context),
             child: const Text('Cancel'),

@@ -20,6 +20,7 @@ DateTime? parseFlexibleDate(String raw) {
 String formatDateMdy(String raw) {
   final parsed = parseFlexibleDate(raw);
   if (parsed == null) return raw;
-  return '${parsed.month}-${parsed.day}-${parsed.year}';
+  final twoDigitYear = parsed.year % 100;
+  return '${parsed.month}/${parsed.day}/${twoDigitYear.toString().padLeft(2, '0')}';
 }
 

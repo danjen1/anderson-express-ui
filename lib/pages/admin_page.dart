@@ -30,7 +30,6 @@ import '../widgets/admin/dialogs/task_rule_editor_dialog.dart';
 import '../widgets/admin/admin_sidebar.dart';
 import '../widgets/admin/sections/cleaning_profiles_section.dart';
 import '../widgets/admin/sections/dashboard_section.dart';
-import '../widgets/admin/sections/jobs_section.dart';
 import '../widgets/admin/sections/management_section.dart';
 import '../utils/dialog_utils.dart';
 import '../widgets/backend_banner.dart';
@@ -48,7 +47,7 @@ enum _ClientFilter { all, active, inactive }
 
 enum _LocationFilter { all, active, inactive }
 
-enum _JobFilter { all, pending, assigned, inProgress, completed, overdue }
+enum _JobFilter { all, active }
 
 
 
@@ -81,13 +80,20 @@ class _AdminPageState extends State<AdminPage> {
   List<TaskDefinition> _taskDefinitions = const [];
   List<TaskRule> _taskRules = const [];
   List<ProfileTask> _selectedProfileTasks = const [];
+  Map<String, List<String>> _jobAssignments = {}; // jobId → employee names
   AdminSection _selectedSection = AdminSection.dashboard;
-  ManagementModel _managementModel = ManagementModel.employees;
+  ManagementModel _managementModel = ManagementModel.jobs;
   bool _activeOnlyFilter = true;
   final _EmployeeFilter _employeeFilter = _EmployeeFilter.active;
   final _ClientFilter _clientFilter = _ClientFilter.active;
   final _LocationFilter _locationFilter = _LocationFilter.active;
   _JobFilter _jobFilter = _JobFilter.all;
+  String _jobClientSearch = '';
+  String _employeeSearch = '';
+  String _clientSearch = '';
+  String _locationSearch = '';
+  int? _jobsSortColumnIndex;
+  bool _jobsSortAscending = true;
   DateTimeRange _jobDateRange = DateTimeRange(
     start: DateTime.now().subtract(const Duration(days: 30)),
     end: DateTime.now().add(const Duration(days: 30)),
@@ -234,9 +240,33 @@ class _AdminPageState extends State<AdminPage> {
       final cleaningRequests = results[5] as List<CleaningRequest>;
       final taskDefinitions = results[6] as List<TaskDefinition>;
       final taskRules = results[7] as List<TaskRule>;
-      final cleanerNameById = <String, String>{};
+      
+      // Fetch assignments for all jobs
+      final allAssignments = <JobAssignment>[];
+      for (final job in jobs) {
+        try {
+          final assignments = await _api.listJobAssignments(
+            job.id,
+            bearerToken: token,
+          );
+          allAssignments.addAll(assignments);
+        } catch (e) {
+          // Silently continue if assignment fetch fails for a job
+          continue;
+        }
+      }
+      final employeeNameById = <String, String>{};
       for (final employee in employees) {
-        cleanerNameById[employee.id] = employee.name;
+        employeeNameById[employee.id] = employee.name;
+      }
+      
+      // Build map of jobId → list of assigned employee names
+      final assignmentsByJobId = <String, List<String>>{};
+      for (final assignment in allAssignments) {
+        // Include all assignments (active and inactive) for display purposes
+        final jobId = assignment.jobId.toString();
+        final employeeName = employeeNameById[assignment.employeeId] ?? 'Unknown';
+        assignmentsByJobId.putIfAbsent(jobId, () => []).add(employeeName);
       }
       final previousSelected = _selectedCleaningProfileId;
       final nextSelected = profiles.any((p) => p.id == previousSelected)
@@ -253,6 +283,7 @@ class _AdminPageState extends State<AdminPage> {
         _cleaningRequests = cleaningRequests;
         _taskDefinitions = taskDefinitions;
         _taskRules = taskRules;
+        _jobAssignments = assignmentsByJobId;
         _selectedCleaningProfileId = nextSelected;
         if (nextSelected == null) {
           _selectedProfileTasks = const [];
@@ -329,6 +360,8 @@ class _AdminPageState extends State<AdminPage> {
     final result = await showDialog<EmployeeUpdateInput>(
       context: context,
       builder: (context) => EmployeeEditorDialog(
+        employeeToEdit: employee,
+        onDelete: () => _deleteEmployee(employee),
         employeeNumber: employee.employeeNumber,
         status: employee.status,
         name: employee.name,
@@ -412,6 +445,8 @@ class _AdminPageState extends State<AdminPage> {
     final result = await showDialog<ClientUpdateInput>(
       context: context,
       builder: (context) => ClientEditorDialog(
+        clientToEdit: client,
+        onDelete: () => _deleteClient(client),
         isCreate: false,
         name: client.name,
         status: client.status,
@@ -423,6 +458,7 @@ class _AdminPageState extends State<AdminPage> {
         zipCode: client.zipCode ?? '',
         preferredContactMethod: client.preferredContactMethod ?? '',
         preferredContactWindow: client.preferredContactWindow ?? '',
+        serviceNotes: client.serviceNotes ?? '',
       ),
     );
     if (result == null) return;
@@ -550,6 +586,8 @@ class _AdminPageState extends State<AdminPage> {
       context: context,
       builder: (context) => LocationEditorDialog(
         clients: _clients,
+        locationToEdit: location,
+        onDelete: () => _deleteLocation(location),
         isCreate: false,
         clientId: location.clientId,
         status: location.status,
@@ -738,6 +776,8 @@ class _AdminPageState extends State<AdminPage> {
         clients: _activeClients,
         locations: activeLocations,
         cleaners: _activeCleaners,
+        jobToEdit: job,
+        onDelete: () => _deleteJob(job),
         initialClientId: initialClientId,
         initialLocationId: job.locationId,
         initialScheduledDate: parseFlexibleDate(job.scheduledDate),
@@ -775,9 +815,9 @@ class _AdminPageState extends State<AdminPage> {
       return;
     }
 
-    final currentStatus = job.status.trim().toLowerCase();
-    final normalizedStatus = switch ((
-      currentStatus,
+    // Use the status from the form, or calculate it if not provided
+    final selectedStatus = result.status ?? switch ((
+      job.status.trim().toLowerCase(),
       result.cleanerEmployeeId,
     )) {
       ('completed', null) => 'completed',
@@ -828,7 +868,7 @@ class _AdminPageState extends State<AdminPage> {
           profileId: profileId,
           scheduledDate: result.scheduledDate,
           scheduledStartAt: result.scheduledStartAt,
-          status: normalizedStatus,
+          status: selectedStatus,
           estimatedDurationMinutes: result.estimatedDurationMinutes,
           actualDurationMinutes: result.actualDurationMinutes,
           notes: job.notes,
@@ -1239,7 +1279,7 @@ class _AdminPageState extends State<AdminPage> {
   }
 
   List<Employee> get _filteredEmployees {
-    final filtered = _employees.where((employee) {
+    var filtered = _employees.where((employee) {
       final status = employee.status.trim().toLowerCase();
       switch (_employeeFilter) {
         case _EmployeeFilter.active:
@@ -1250,6 +1290,16 @@ class _AdminPageState extends State<AdminPage> {
           return true;
       }
     }).toList();
+    
+    // Apply search filter
+    if (_employeeSearch.isNotEmpty) {
+      final searchLower = _employeeSearch.toLowerCase();
+      filtered = filtered.where((employee) {
+        return employee.name.toLowerCase().contains(searchLower) ||
+            (employee.email?.toLowerCase().contains(searchLower) ?? false);
+      }).toList();
+    }
+    
     filtered.sort((a, b) {
       final aDeleted = a.status.trim().toLowerCase() == 'deleted';
       final bDeleted = b.status.trim().toLowerCase() == 'deleted';
@@ -1262,17 +1312,27 @@ class _AdminPageState extends State<AdminPage> {
   }
 
   List<Client> get _filteredClients {
-    final filtered = _clients.where((client) {
+    var filtered = _clients.where((client) {
       final status = client.status.trim().toLowerCase();
       switch (_clientFilter) {
         case _ClientFilter.active:
-          return status == 'active';
+          return status == 'active' || status == 'invited';
         case _ClientFilter.inactive:
-          return status != 'active';
+          return status != 'active' && status != 'invited';
         case _ClientFilter.all:
           return true;
       }
     }).toList();
+    
+    // Apply search filter
+    if (_clientSearch.isNotEmpty) {
+      final searchLower = _clientSearch.toLowerCase();
+      filtered = filtered.where((client) {
+        return client.name.toLowerCase().contains(searchLower) ||
+            (client.email?.toLowerCase().contains(searchLower) ?? false);
+      }).toList();
+    }
+    
     filtered.sort((a, b) {
       final aDeleted = a.status.trim().toLowerCase() == 'deleted';
       final bDeleted = b.status.trim().toLowerCase() == 'deleted';
@@ -1285,7 +1345,7 @@ class _AdminPageState extends State<AdminPage> {
   }
 
   List<Location> get _filteredLocations {
-    final filtered = _locations.where((location) {
+    var filtered = _locations.where((location) {
       final status = location.status.trim().toLowerCase();
       switch (_locationFilter) {
         case _LocationFilter.active:
@@ -1296,6 +1356,17 @@ class _AdminPageState extends State<AdminPage> {
           return true;
       }
     }).toList();
+    
+    // Apply search filter
+    if (_locationSearch.isNotEmpty) {
+      final searchLower = _locationSearch.toLowerCase();
+      filtered = filtered.where((location) {
+        return (location.address?.toLowerCase().contains(searchLower) ?? false) ||
+            (location.city?.toLowerCase().contains(searchLower) ?? false) ||
+            location.locationNumber.toLowerCase().contains(searchLower);
+      }).toList();
+    }
+    
     filtered.sort((a, b) {
       final aDeleted = a.status.trim().toLowerCase() == 'deleted';
       final bDeleted = b.status.trim().toLowerCase() == 'deleted';
@@ -1351,23 +1422,79 @@ class _AdminPageState extends State<AdminPage> {
   }
 
   List<Job> get _filteredJobs {
-    return _jobs.where((job) {
+    final filtered = _jobs.where((job) {
+      // Status filter
       final status = job.status.trim().toLowerCase();
-      switch (_jobFilter) {
-        case _JobFilter.pending:
-          return status == 'pending';
-        case _JobFilter.assigned:
-          return status == 'assigned';
-        case _JobFilter.inProgress:
-          return status == 'in_progress';
-        case _JobFilter.completed:
-          return status == 'completed';
-        case _JobFilter.overdue:
-          return _isOverdue(job);
-        case _JobFilter.all:
-          return true;
+      final statusMatches = switch (_jobFilter) {
+        _JobFilter.active => status == 'pending' || status == 'assigned' || status == 'in_progress' || status == 'in-progress',
+        _JobFilter.all => true,
+      };
+      
+      if (!statusMatches) return false;
+      
+      // Client search filter
+      if (_jobClientSearch.isNotEmpty) {
+        final clientName = (job.clientName ?? '').toLowerCase();
+        final searchTerm = _jobClientSearch.toLowerCase();
+        if (!clientName.contains(searchTerm)) {
+          return false;
+        }
       }
+      
+      return true;
     }).toList();
+
+    // Apply sorting
+    if (_jobsSortColumnIndex != null) {
+      filtered.sort((a, b) {
+        int comparison = 0;
+        switch (_jobsSortColumnIndex) {
+          case 0: // Status - Custom order: pending first, then alphabetical
+            final statusA = a.status.trim().toLowerCase();
+            final statusB = b.status.trim().toLowerCase();
+            
+            // Pending always comes first
+            if (statusA == 'pending' && statusB != 'pending') {
+              comparison = -1;
+            } else if (statusA != 'pending' && statusB == 'pending') {
+              comparison = 1;
+            } else {
+              // Both pending or both non-pending, sort alphabetically
+              comparison = a.status.compareTo(b.status);
+            }
+            break;
+          case 1: // Date
+            final dateA = parseFlexibleDate(a.scheduledDate);
+            final dateB = parseFlexibleDate(b.scheduledDate);
+            if (dateA != null && dateB != null) {
+              comparison = dateA.compareTo(dateB);
+            }
+            break;
+          case 2: // Client
+            comparison = (a.clientName ?? '').compareTo(b.clientName ?? '');
+            break;
+          case 3: // Location
+            final locA = a.locationCity ?? a.locationAddress ?? '';
+            final locB = b.locationCity ?? b.locationAddress ?? '';
+            comparison = locA.compareTo(locB);
+            break;
+          case 4: // Cleaner
+            final cleanersA = _jobAssignments[a.id]?.join(', ') ?? '';
+            final cleanersB = _jobAssignments[b.id]?.join(', ') ?? '';
+            comparison = cleanersA.compareTo(cleanersB);
+            break;
+          case 5: // Estimated Duration
+            comparison = (a.estimatedDurationMinutes ?? 0).compareTo(b.estimatedDurationMinutes ?? 0);
+            break;
+          case 6: // Actual Duration
+            comparison = (a.actualDurationMinutes ?? 0).compareTo(b.actualDurationMinutes ?? 0);
+            break;
+        }
+        return _jobsSortAscending ? comparison : -comparison;
+      });
+    }
+
+    return filtered;
   }
 
   String _locationLabel(int? locationId) {
@@ -1559,8 +1686,9 @@ class _AdminPageState extends State<AdminPage> {
 
   void _openJobsOverdue() {
     setState(() {
-      _selectedSection = AdminSection.jobs;
-      _jobFilter = _JobFilter.overdue;
+      _selectedSection = AdminSection.management;
+      _managementModel = ManagementModel.jobs;
+      _jobFilter = _JobFilter.all;
     });
   }
 
@@ -1626,20 +1754,6 @@ class _AdminPageState extends State<AdminPage> {
               buildSectionHeader: _buildSectionHeader,
               buildMetricTile: _metricTile,
             );
-      case AdminSection.jobs:
-        return JobsSection(
-              filteredJobs: _filteredJobs,
-              jobDateRange: _jobDateRange,
-              onDateRangeChanged: (range) => setState(() => _jobDateRange = range),
-              onShowCreateJobDialog: _showCreateJobDialog,
-              onShowEditJobDialog: _showEditJobDialog,
-              onDeleteJob: _deleteJob,
-              buildSectionHeader: _buildSectionHeader,
-              buildCenteredSection: _centeredSectionBody,
-              buildTableColumn: ({required String label, bool numeric = false, double? minWidth}) => _tableColumn(label),
-              buildRowActionButton: _rowActionButton,
-              isOverdue: _isOverdue,
-            );
       case AdminSection.cleaningProfiles:
         return CleaningProfilesSection(
               cleaningProfiles: _cleaningProfiles,
@@ -1669,23 +1783,56 @@ class _AdminPageState extends State<AdminPage> {
               filteredEmployees: _filteredEmployees,
               filteredClients: _filteredClients,
               filteredLocations: _filteredLocations,
+              filteredJobs: _filteredJobs,
+              jobAssignments: _jobAssignments,
+              jobDateRange: _jobDateRange,
+              jobFilter: _jobFilter.name,
+              jobClientSearch: _jobClientSearch,
+              employeeSearch: _employeeSearch,
+              clientSearch: _clientSearch,
+              locationSearch: _locationSearch,
+              jobsSortColumnIndex: _jobsSortColumnIndex,
+              jobsSortAscending: _jobsSortAscending,
               activeOnlyFilter: _activeOnlyFilter,
               onManagementModelChanged: (model) => setState(() => _managementModel = model),
               onActiveOnlyFilterChanged: (active) => setState(() => _activeOnlyFilter = active),
+              onJobFilterChanged: (filter) {
+                setState(() {
+                  _jobFilter = _JobFilter.values.firstWhere(
+                    (f) => f.name == filter,
+                    orElse: () => _JobFilter.all,
+                  );
+                });
+              },
+              onJobClientSearchChanged: (search) => setState(() => _jobClientSearch = search),
+              onEmployeeSearchChanged: (search) => setState(() => _employeeSearch = search),
+              onClientSearchChanged: (search) => setState(() => _clientSearch = search),
+              onLocationSearchChanged: (search) => setState(() => _locationSearch = search),
+              onJobDateRangeChanged: (range) => setState(() => _jobDateRange = range),
+              onJobsSort: (columnIndex, ascending) {
+                setState(() {
+                  _jobsSortColumnIndex = columnIndex;
+                  _jobsSortAscending = ascending;
+                });
+              },
               onShowCreateDialog: _showCreateDialog,
               onShowCreateClientDialog: _showCreateClientDialog,
               onShowCreateLocationDialog: _showCreateLocationDialog,
+              onShowCreateJobDialog: _showCreateJobDialog,
               onShowEditDialog: _showEditDialog,
               onShowEditClientDialog: _showEditClientDialog,
               onShowEditLocationDialog: _showEditLocationDialog,
+              onShowEditJobDialog: _showEditJobDialog,
               onDeleteEmployee: _deleteEmployee,
               onDeleteClient: _deleteClient,
               onDeleteLocation: _deleteLocation,
+              onDeleteJob: _deleteJob,
               buildSectionHeader: _buildSectionHeader,
               buildCenteredSection: _centeredSectionBody,
               buildTableColumn: _tableColumn,
               buildRowActionButton: _rowActionButton,
               getLocationLabel: _locationLabel,
+              isOverdue: _isOverdue,
             );
       case AdminSection.reports:
         return _buildCrudScaffoldSection(

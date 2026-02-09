@@ -27,9 +27,12 @@ class BrandAppBarTitle extends StatelessWidget {
         ),
         const SizedBox(width: 12),
         // Title
-        Text(
-          'Anderson Express Cleaning Service',
-          style: GoogleFonts.oregano(fontSize: 34, fontWeight: FontWeight.w800),
+        Flexible(
+          child: Text(
+            'Anderson Express Cleaning Service',
+            style: GoogleFonts.oregano(fontSize: 34, fontWeight: FontWeight.w800),
+            overflow: TextOverflow.ellipsis,
+          ),
         ),
       ],
     );

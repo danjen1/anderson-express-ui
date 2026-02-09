@@ -11,6 +11,8 @@ class JobEditorDialog extends StatefulWidget {
     required this.clients,
     required this.locations,
     required this.cleaners,
+    this.jobToEdit,
+    this.onDelete,
     this.initialClientId,
     this.initialLocationId,
     this.initialScheduledDate,
@@ -25,6 +27,8 @@ class JobEditorDialog extends StatefulWidget {
   final List<Client> clients;
   final List<Location> locations;
   final List<Employee> cleaners;
+  final dynamic jobToEdit;
+  final VoidCallback? onDelete;
   final int? initialClientId;
   final int? initialLocationId;
   final DateTime? initialScheduledDate;
@@ -42,6 +46,7 @@ class JobEditorDialogState extends State<JobEditorDialog> {
   int? _selectedClientId;
   int? _selectedLocationId;
   String? _selectedCleanerId;
+  String? _selectedStatus;
   String? _formError;
   late DateTime _selectedDate;
   TimeOfDay _selectedTime = const TimeOfDay(hour: 9, minute: 0);
@@ -83,6 +88,7 @@ class JobEditorDialogState extends State<JobEditorDialog> {
     if (!cleanerExists) {
       _selectedCleanerId = null;
     }
+    _selectedStatus = widget.initialStatus ?? 'pending';
     final parsedStartAt = widget.initialScheduledStartAt == null
         ? null
         : DateTime.tryParse(widget.initialScheduledStartAt!);
@@ -93,17 +99,12 @@ class JobEditorDialogState extends State<JobEditorDialog> {
         minute: localStartAt.minute,
       );
     }
-    if (_selectedClientId == null && widget.clients.isNotEmpty) {
-      final firstId = int.tryParse(widget.clients.first.id);
-      if (firstId != null) {
-        _selectedClientId = firstId;
-      }
-    }
+    // Don't auto-select first client - let user choose
     final clientExists = widget.clients.any(
       (client) => int.tryParse(client.id) == _selectedClientId,
     );
-    if (!clientExists && widget.clients.isNotEmpty) {
-      _selectedClientId = int.tryParse(widget.clients.first.id);
+    if (!clientExists) {
+      _selectedClientId = null;
     }
     _syncLocationToClient();
   }
@@ -226,6 +227,7 @@ class JobEditorDialogState extends State<JobEditorDialog> {
         estimatedDurationMinutes: estimatedDuration,
         actualDurationMinutes: actualDuration,
         cleanerEmployeeId: _selectedCleanerId,
+        status: _selectedStatus ?? 'pending',
       ),
     );
   }
@@ -240,12 +242,30 @@ class JobEditorDialogState extends State<JobEditorDialog> {
         title: Row(
           children: [
             Expanded(
-              child: Text(
-                widget.isCreate ? 'Create Job' : 'Edit Job',
-                style: TextStyle(
-                  color: crudModalTitleColor(context),
-                  fontWeight: FontWeight.w800,
-                ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(
+                    widget.isCreate ? 'Create Job' : 'Edit Job',
+                    style: TextStyle(
+                      color: crudModalTitleColor(context),
+                      fontWeight: FontWeight.w800,
+                    ),
+                  ),
+                  if (!widget.isCreate && widget.jobToEdit != null)
+                    Padding(
+                      padding: const EdgeInsets.only(top: 4),
+                      child: Text(
+                        widget.jobToEdit.jobNumber ?? '',
+                        style: TextStyle(
+                          color: crudModalTitleColor(context).withOpacity(0.7),
+                          fontSize: 14,
+                          fontWeight: FontWeight.w500,
+                        ),
+                      ),
+                    ),
+                ],
               ),
             ),
             ClipRRect(
@@ -299,33 +319,68 @@ class JobEditorDialogState extends State<JobEditorDialog> {
                   ],
                 ),
                 const SizedBox(height: 10),
-                DropdownButtonFormField<int>(
-                  initialValue: _selectedClientId,
-                  decoration: const InputDecoration(
-                    labelText: 'Client *',
-                    border: OutlineInputBorder(),
-                  ),
-                  items: widget.clients
-                      .map((client) {
-                        final clientId = int.tryParse(client.id);
-                        if (clientId == null) return null;
-                        return DropdownMenuItem<int>(
-                          value: clientId,
-                          child: Text(client.name),
-                        );
-                      })
-                      .whereType<DropdownMenuItem<int>>()
-                      .toList(),
-                  onChanged: (value) {
+                // Client Autocomplete
+                Autocomplete<Client>(
+                  initialValue: _selectedClientId == null
+                      ? null
+                      : TextEditingValue(
+                          text: widget.clients
+                              .cast<Client?>()
+                              .firstWhere(
+                                (c) => c != null && int.tryParse(c.id) == _selectedClientId,
+                                orElse: () => null,
+                              )?.name ?? '',
+                        ),
+                  displayStringForOption: (Client client) => client.name,
+                  optionsBuilder: (TextEditingValue textEditingValue) {
+                    if (textEditingValue.text.isEmpty) {
+                      return widget.clients;
+                    }
+                    return widget.clients.where((Client client) {
+                      return client.name
+                          .toLowerCase()
+                          .contains(textEditingValue.text.toLowerCase());
+                    });
+                  },
+                  onSelected: (Client client) {
+                    final clientId = int.tryParse(client.id);
                     setState(() {
-                      _selectedClientId = value;
+                      _selectedClientId = clientId;
                       _syncLocationToClient();
                     });
+                  },
+                  fieldViewBuilder: (
+                    BuildContext context,
+                    TextEditingController controller,
+                    FocusNode focusNode,
+                    VoidCallback onFieldSubmitted,
+                  ) {
+                    return TextFormField(
+                      controller: controller,
+                      focusNode: focusNode,
+                      decoration: InputDecoration(
+                        labelText: 'Client *',
+                        hintText: 'Type to search clients...',
+                        border: const OutlineInputBorder(),
+                        suffixIcon: controller.text.isNotEmpty
+                            ? IconButton(
+                                icon: const Icon(Icons.clear),
+                                onPressed: () {
+                                  controller.clear();
+                                  setState(() {
+                                    _selectedClientId = null;
+                                    _syncLocationToClient();
+                                  });
+                                },
+                              )
+                            : null,
+                      ),
+                    );
                   },
                 ),
                 const SizedBox(height: 10),
                 DropdownButtonFormField<int>(
-                  initialValue: _selectedLocationId,
+                  value: _selectedLocationId,
                   decoration: const InputDecoration(
                     labelText: 'Location *',
                     border: OutlineInputBorder(),
@@ -334,12 +389,16 @@ class JobEditorDialogState extends State<JobEditorDialog> {
                       .map((location) {
                         final locationId = int.tryParse(location.id);
                         if (locationId == null) return null;
-                        final line = location.address?.trim().isNotEmpty == true
-                            ? location.address!.trim()
-                            : location.locationNumber;
+                        final String address = location.address?.trim() ?? '';
+                        final city = location.city?.trim() ?? '';
+                        final state = location.state?.trim() ?? '';
+                        final zip = location.zipCode?.trim() ?? '';
+                        final line = '$address, $city, $state $zip'.trim();
                         return DropdownMenuItem<int>(
                           value: locationId,
-                          child: Text(line),
+                          child: Text(
+                            line.isNotEmpty ? line : location.locationNumber,
+                          ),
                         );
                       })
                       .whereType<DropdownMenuItem<int>>()
@@ -366,8 +425,54 @@ class JobEditorDialogState extends State<JobEditorDialog> {
                       ),
                     ),
                   ],
-                  onChanged: (value) =>
-                      setState(() => _selectedCleanerId = value),
+                  onChanged: (value) {
+                    setState(() {
+                      _selectedCleanerId = value;
+                      // If cleaner is set to none, automatically set status to pending
+                      if (value == null) {
+                        _selectedStatus = 'pending';
+                      }
+                    });
+                  },
+                ),
+                const SizedBox(height: 10),
+                DropdownButtonFormField<String>(
+                  initialValue: _selectedStatus,
+                  decoration: const InputDecoration(
+                    labelText: 'Status *',
+                    border: OutlineInputBorder(),
+                  ),
+                  items: [
+                    const DropdownMenuItem(value: 'pending', child: Text('Pending')),
+                    // Only show other statuses if a cleaner is assigned
+                    if (_selectedCleanerId != null) ...[
+                      const DropdownMenuItem(
+                        value: 'assigned',
+                        child: Text('Assigned'),
+                      ),
+                      const DropdownMenuItem(
+                        value: 'in_progress',
+                        child: Text('In Progress'),
+                      ),
+                      const DropdownMenuItem(
+                        value: 'completed',
+                        child: Text('Completed'),
+                      ),
+                      const DropdownMenuItem(
+                        value: 'canceled',
+                        child: Text('Canceled'),
+                      ),
+                    ],
+                  ],
+                  onChanged: (value) {
+                    setState(() {
+                      _selectedStatus = value;
+                      // If status is set to pending, remove cleaner assignment
+                      if (value == 'pending' && _selectedCleanerId != null) {
+                        _selectedCleanerId = null;
+                      }
+                    });
+                  },
                 ),
                 const SizedBox(height: 10),
                 DurationPickerFields(
@@ -418,6 +523,15 @@ class JobEditorDialogState extends State<JobEditorDialog> {
           ),
         ),
         actions: [
+          if (!widget.isCreate && widget.onDelete != null)
+            TextButton(
+              onPressed: () {
+                Navigator.pop(context);
+                widget.onDelete!();
+              },
+              style: TextButton.styleFrom(foregroundColor: Colors.red),
+              child: const Text('Delete'),
+            ),
           TextButton(
             onPressed: () => Navigator.pop(context),
             child: const Text('Cancel'),
@@ -442,6 +556,7 @@ class JobEditorFormData {
     required this.estimatedDurationMinutes,
     this.actualDurationMinutes,
     this.cleanerEmployeeId,
+    this.status,
   });
 
   final int clientId;
@@ -452,7 +567,5 @@ class JobEditorFormData {
   final int estimatedDurationMinutes;
   final int? actualDurationMinutes;
   final String? cleanerEmployeeId;
+  final String? status;
 }
-
-
-

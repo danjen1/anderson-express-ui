@@ -10,6 +10,8 @@ class Client {
     this.city,
     this.state,
     this.zipCode,
+    this.latitude,
+    this.longitude,
     this.preferredContactMethod,
     this.preferredContactWindow,
     this.serviceNotes,
@@ -25,6 +27,8 @@ class Client {
   final String? city;
   final String? state;
   final String? zipCode;
+  final double? latitude;
+  final double? longitude;
   final String? preferredContactMethod;
   final String? preferredContactWindow;
   final String? serviceNotes;
@@ -41,6 +45,8 @@ class Client {
       city: json['city']?.toString(),
       state: json['state']?.toString(),
       zipCode: json['zip_code']?.toString(),
+      latitude: json['latitude']?.toDouble(),
+      longitude: json['longitude']?.toDouble(),
       preferredContactMethod: json['preferred_contact_method']?.toString(),
       preferredContactWindow: json['preferred_contact_window']?.toString(),
       serviceNotes: json['service_notes']?.toString(),

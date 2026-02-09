@@ -6,6 +6,9 @@ class JobsSection extends StatelessWidget {
   const JobsSection({
     super.key,
     required this.filteredJobs,
+    required this.jobAssignments,
+    required this.jobFilter,
+    required this.onJobFilterChanged,
     required this.jobDateRange,
     required this.onDateRangeChanged,
     required this.onShowCreateJobDialog,
@@ -19,6 +22,9 @@ class JobsSection extends StatelessWidget {
   });
 
   final List<Job> filteredJobs;
+  final Map<String, List<String>> jobAssignments;
+  final String jobFilter;
+  final Function(String) onJobFilterChanged;
   final DateTimeRange jobDateRange;
   final Function(DateTimeRange) onDateRangeChanged;
   final VoidCallback onShowCreateJobDialog;
@@ -123,167 +129,198 @@ class JobsSection extends StatelessWidget {
       return bDate.compareTo(aDate);
     });
 
-    return ListView(
-      children: [
-        buildSectionHeader('Jobs', 'Manage all cleaning jobs.'),
-        const SizedBox(height: 8),
-        Card(
-          child: Padding(
-            padding: const EdgeInsets.all(14),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
+    return buildCenteredSection(
+      ConstrainedBox(
+        constraints: const BoxConstraints(maxWidth: 1200),
+        child: ListView(
+          children: [
+            buildSectionHeader('Jobs', 'Manage all cleaning jobs.'),
+            const SizedBox(height: 8),
+            Card(
+              child: Padding(
+                padding: const EdgeInsets.all(14),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Expanded(
-                      child: Text(
-                        'Range: ${formatDateMdy(jobDateRange.start.toIso8601String())} – ${formatDateMdy(jobDateRange.end.toIso8601String())}',
-                      ),
-                    ),
-                    const SizedBox(width: 12),
-                    OutlinedButton.icon(
-                      onPressed: () async {
-                        final picked = await showDateRangePicker(
-                          context: context,
-                          firstDate: DateTime(2020),
-                          lastDate: DateTime(2050),
-                          initialDateRange: jobDateRange,
-                        );
-                        if (picked != null) {
-                          onDateRangeChanged(picked);
-                        }
-                      },
-                      icon: const Icon(Icons.date_range),
-                      label: const Text('Change Range'),
-                    ),
-                    const SizedBox(width: 12),
-                    ElevatedButton.icon(
-                      onPressed: onShowCreateJobDialog,
-                      icon: const Icon(Icons.add),
-                      label: const Text('New Job'),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 12),
-                if (rows.isEmpty)
-                  buildCenteredSection(
-                    Text(
-                      'No jobs in selected date range.',
-                      style: TextStyle(color: Theme.of(context).hintColor),
-                    ),
-                  )
-                else
-                  SizedBox(
-                    width: double.infinity,
-                    child: SingleChildScrollView(
-                      scrollDirection: Axis.horizontal,
-                      child: ConstrainedBox(
-                        constraints: const BoxConstraints(minWidth: 700),
-                        child: DataTable(
-                          headingTextStyle: const TextStyle(
-                            fontWeight: FontWeight.w700,
+                    Row(
+                      children: [
+                        // Status Filter Dropdown
+                        SizedBox(
+                          width: 180,
+                          child: DropdownButtonFormField<String>(
+                            initialValue: jobFilter,
+                            decoration: const InputDecoration(
+                              labelText: 'Filter by Status',
+                              border: OutlineInputBorder(),
+                              contentPadding: EdgeInsets.symmetric(
+                                horizontal: 12,
+                                vertical: 8,
+                              ),
+                            ),
+                            items: const [
+                              DropdownMenuItem(value: 'all', child: Text('All')),
+                              DropdownMenuItem(value: 'pending', child: Text('Pending')),
+                              DropdownMenuItem(value: 'assigned', child: Text('Assigned')),
+                              DropdownMenuItem(value: 'inProgress', child: Text('In Progress')),
+                              DropdownMenuItem(value: 'completed', child: Text('Completed')),
+                              DropdownMenuItem(value: 'overdue', child: Text('Overdue')),
+                            ],
+                            onChanged: (value) {
+                              if (value != null) onJobFilterChanged(value);
+                            },
                           ),
-                          columns: [
-                            buildTableColumn(label: 'S', minWidth: 28),
-                            buildTableColumn(label: 'Job #'),
-                            buildTableColumn(label: 'Client'),
-                            buildTableColumn(label: 'Location'),
-                            buildTableColumn(label: 'Date'),
-                            buildTableColumn(label: 'Cleaner'),
-                            buildTableColumn(label: 'Est.', numeric: true),
-                            buildTableColumn(label: 'Act.', numeric: true),
-                            buildTableColumn(label: 'Status'),
-                            buildTableColumn(label: 'Actions'),
-                          ],
-                          rows: rows
-                              .map(
-                                (job) {
-                                  final badge = _statusBadge(context, job);
-                                  return DataRow(
-                                    cells: [
-                                      DataCell(
-                                        Container(
-                                          width: 18,
-                                          height: 18,
-                                          alignment: Alignment.center,
-                                          decoration: BoxDecoration(
-                                            color: badge.bg,
-                                            border: Border.all(
-                                              color: badge.border,
-                                              width: 1.5,
+                        ),
+                        const Spacer(),
+                        Text(
+                          'Range: ${formatDateMdy(jobDateRange.start.toIso8601String())} – ${formatDateMdy(jobDateRange.end.toIso8601String())}',
+                        ),
+                        const SizedBox(width: 12),
+                        OutlinedButton.icon(
+                          onPressed: () async {
+                            final picked = await showDateRangePicker(
+                              context: context,
+                              firstDate: DateTime(2020),
+                              lastDate: DateTime(2050),
+                              initialDateRange: jobDateRange,
+                            );
+                            if (picked != null) {
+                              onDateRangeChanged(picked);
+                            }
+                          },
+                          icon: const Icon(Icons.date_range),
+                          label: const Text('Change Range'),
+                        ),
+                        const SizedBox(width: 12),
+                        ElevatedButton.icon(
+                          onPressed: onShowCreateJobDialog,
+                          icon: const Icon(Icons.add),
+                          label: const Text('New Job'),
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: const Color(0xFFFF6B35),
+                            foregroundColor: Colors.white,
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 12),
+                    if (rows.isEmpty)
+                      buildCenteredSection(
+                        Text(
+                          'No jobs in selected date range.',
+                          style: TextStyle(color: Theme.of(context).hintColor),
+                        ),
+                      )
+                    else
+                      SizedBox(
+                        width: double.infinity,
+                        child: SingleChildScrollView(
+                          scrollDirection: Axis.horizontal,
+                          child: ConstrainedBox(
+                            constraints: const BoxConstraints(minWidth: 700),
+                            child: DataTable(
+                              headingTextStyle: const TextStyle(
+                                fontWeight: FontWeight.w700,
+                              ),
+                              columnSpacing: 24,
+                              horizontalMargin: 12,
+                              columns: [
+                                buildTableColumn(label: '', minWidth: 28),
+                                buildTableColumn(label: 'Date'),
+                                buildTableColumn(label: 'Location'),
+                                buildTableColumn(label: 'Cleaner'),
+                                buildTableColumn(label: 'Est. Duration', numeric: true),
+                                buildTableColumn(label: 'Actual Duration', numeric: true),
+                                buildTableColumn(label: 'Actions'),
+                              ],
+                              rows: rows
+                                  .map(
+                                    (job) {
+                                      final badge = _statusBadge(context, job);
+                                      final assignedCleaners = jobAssignments[job.id] ?? [];
+                                      final cleanerDisplay = assignedCleaners.isEmpty
+                                          ? 'Unassigned'
+                                          : assignedCleaners.join(', ');
+                                      
+                                      return DataRow(
+                                        cells: [
+                                          DataCell(
+                                            Container(
+                                              padding: EdgeInsets.zero,
+                                              child: Container(
+                                                width: 20,
+                                                height: 20,
+                                                alignment: Alignment.center,
+                                                decoration: BoxDecoration(
+                                                  color: badge.bg,
+                                                  border: Border.all(
+                                                    color: badge.border,
+                                                    width: 1.5,
+                                                  ),
+                                                  borderRadius:
+                                                      BorderRadius.circular(10),
+                                                ),
+                                                child: Text(
+                                                  badge.label,
+                                                  style: TextStyle(
+                                                    fontSize: 11,
+                                                    fontWeight: FontWeight.w700,
+                                                    color: badge.fg,
+                                                  ),
+                                                ),
+                                              ),
                                             ),
-                                            borderRadius:
-                                                BorderRadius.circular(3),
                                           ),
-                                          child: Text(
-                                            badge.label,
-                                            style: TextStyle(
-                                              fontSize: 11,
-                                              fontWeight: FontWeight.w700,
-                                              color: badge.fg,
+                                          DataCell(
+                                            Text(formatDateMdy(job.scheduledDate)),
+                                          ),
+                                          DataCell(
+                                            Text(job.locationAddress ?? 'N/A'),
+                                          ),
+                                          DataCell(
+                                            Text(cleanerDisplay),
+                                          ),
+                                          DataCell(
+                                            Text(_minutesLabel(job.estimatedDurationMinutes)),
+                                          ),
+                                          DataCell(
+                                            Text(_minutesLabel(job.actualDurationMinutes)),
+                                          ),
+                                          DataCell(
+                                            Row(
+                                              mainAxisSize: MainAxisSize.min,
+                                              children: [
+                                                buildRowActionButton(
+                                                  icon: Icons.edit,
+                                                  tooltip: 'Edit',
+                                                  onPressed: () =>
+                                                      onShowEditJobDialog(job),
+                                                ),
+                                                const SizedBox(width: 10),
+                                                buildRowActionButton(
+                                                  icon: Icons.delete,
+                                                  tooltip: 'Delete',
+                                                  onPressed: () =>
+                                                      onDeleteJob(job),
+                                                ),
+                                              ],
                                             ),
                                           ),
-                                        ),
-                                      ),
-                                      DataCell(Text(job.jobNumber)),
-                                      DataCell(
-                                        Text(job.clientName ?? 'N/A'),
-                                      ),
-                                      DataCell(
-                                        Text(job.clientName ?? 'N/A'),
-                                      ),
-                                      DataCell(
-                                        Text(formatDateMdy(job.scheduledDate)),
-                                      ),
-                                      DataCell(
-                                        Text('Unassigned'),
-                                      ),
-                                      DataCell(
-                                        Text(_minutesLabel(job.estimatedDurationMinutes)),
-                                      ),
-                                      DataCell(
-                                        Text(_minutesLabel(job.actualDurationMinutes)),
-                                      ),
-                                      DataCell(
-                                        Text(
-                                          job.status,
-                                          style: const TextStyle(fontSize: 12),
-                                        ),
-                                      ),
-                                      DataCell(
-                                        Row(
-                                          mainAxisSize: MainAxisSize.min,
-                                          children: [
-                                            buildRowActionButton(
-                                              icon: Icons.edit,
-                                              tooltip: 'Edit',
-                                              onPressed: () =>
-                                                  onShowEditJobDialog(job),
-                                            ),
-                                            const SizedBox(width: 10),
-                                            buildRowActionButton(
-                                              icon: Icons.delete,
-                                              tooltip: 'Delete',
-                                              onPressed: () =>
-                                                  onDeleteJob(job),
-                                            ),
-                                          ],
-                                        ),
-                                      ),
-                                    ],
-                                  );
-                                },
-                              )
-                              .toList(),
+                                        ],
+                                      );
+                                    },
+                                  )
+                                  .toList(),
+                            ),
+                          ),
                         ),
                       ),
-                    ),
-                  ),
-              ],
+                  ],
+                ),
+              ),
             ),
-          ),
+          ],
         ),
-      ],
+      ),
     );
   }
 }

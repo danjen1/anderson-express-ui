@@ -2,9 +2,8 @@ import 'package:flutter/material.dart';
 
 enum AdminSection {
   dashboard,
-  jobs,
-  cleaningProfiles,
   management,
+  cleaningProfiles,
   reports,
   knowledgeBase,
 }
@@ -77,29 +76,27 @@ class AdminSidebar extends StatelessWidget {
           if (!forDrawer)
             Padding(
               padding: const EdgeInsets.only(bottom: 8),
-              child: Wrap(
-                spacing: 2,
-                runSpacing: 2,
-              ),
+              child: Wrap(spacing: 2, runSpacing: 2),
             ),
           if (collapsed && !forDrawer)
             const SizedBox(height: 2)
           else
             const SizedBox(height: 2),
           navTile(
-            section: AdminSection.jobs,
-            icon: Icons.work_outline,
-            title: 'Jobs',
+            section: AdminSection.dashboard,
+            icon: Icons.dashboard_outlined,
+            title: 'Overview Dashboard',
+          ),
+          const Divider(height: 24),
+          navTile(
+            section: AdminSection.management,
+            icon: Icons.business_center_outlined,
+            title: 'Management',
           ),
           navTile(
             section: AdminSection.cleaningProfiles,
             icon: Icons.checklist_rtl_outlined,
             title: 'Cleaning Profiles',
-          ),
-          navTile(
-            section: AdminSection.management,
-            icon: Icons.groups_outlined,
-            title: 'People & Places',
           ),
           navTile(
             section: AdminSection.reports,
@@ -110,12 +107,6 @@ class AdminSidebar extends StatelessWidget {
             section: AdminSection.knowledgeBase,
             icon: Icons.menu_book_outlined,
             title: 'Knowledge Base',
-          ),
-          const Divider(height: 24),
-          navTile(
-            section: AdminSection.dashboard,
-            icon: Icons.dashboard_outlined,
-            title: 'Overview Dashboard',
           ),
         ],
       ),

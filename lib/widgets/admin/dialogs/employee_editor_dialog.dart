@@ -7,6 +7,8 @@ import '../../../theme/crud_modal_theme.dart';
 
 class EmployeeEditorDialog extends StatefulWidget {
   const EmployeeEditorDialog({
+    this.employeeToEdit,
+    this.onDelete,
     this.employeeNumber = '',
     this.status = 'invited',
     this.name = '',
@@ -20,6 +22,8 @@ class EmployeeEditorDialog extends StatefulWidget {
     this.isCreate = true,
   });
 
+  final dynamic employeeToEdit;
+  final VoidCallback? onDelete;
   final String employeeNumber;
   final String status;
   final String name;
@@ -285,10 +289,20 @@ class EmployeeEditorDialogState extends State<EmployeeEditorDialog> {
           ),
         ),
         actions: [
+          if (!widget.isCreate && widget.onDelete != null)
+            TextButton(
+              onPressed: () {
+                Navigator.pop(context);
+                widget.onDelete!();
+              },
+              style: TextButton.styleFrom(foregroundColor: Colors.red),
+              child: const Text('Delete'),
+            ),
           TextButton(
             onPressed: () => Navigator.pop(context),
             child: const Text('Cancel'),
           ),
+          
           FilledButton(
             onPressed: () {
               if (widget.isCreate) {
