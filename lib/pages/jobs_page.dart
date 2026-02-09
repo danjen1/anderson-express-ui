@@ -22,11 +22,13 @@ class JobsPage extends StatefulWidget {
     this.initialJobId,
     this.initialLocationId,
     this.openedFromClient = false,
+    this.openedFromEmployee = false,
   });
 
   final String? initialJobId;
   final int? initialLocationId;
   final bool openedFromClient;
+  final bool openedFromEmployee;
 
   @override
   State<JobsPage> createState() => _JobsPageState();
@@ -53,6 +55,7 @@ class _JobsPageState extends State<JobsPage> {
   String? get _token => AuthSession.current?.token.trim();
   bool get _isAdmin => AuthSession.current?.user.isAdmin == true;
   bool get _isClient => AuthSession.current?.user.isClient == true;
+  bool get _isEmployee => AuthSession.current?.user.isEmployee == true;
 
   ApiService get _api => ApiService();
   BackendConfig get _backend => BackendRuntime.config;
@@ -72,11 +75,15 @@ class _JobsPageState extends State<JobsPage> {
     }
     WidgetsBinding.instance.addPostFrameCallback((_) async {
       if (!mounted) return;
-      if (!session.user.isAdmin && !session.user.isClient) {
+      if (!session.user.isAdmin &&
+          !session.user.isClient &&
+          !session.user.isEmployee) {
         ScaffoldMessenger.of(
           context,
         ).showSnackBar(
-          const SnackBar(content: Text('Admin or client access required')),
+          const SnackBar(
+            content: Text('Admin, employee, or client access required'),
+          ),
         );
         Navigator.pushReplacementNamed(context, '/home');
         return;
@@ -303,6 +310,19 @@ class _JobsPageState extends State<JobsPage> {
                   _selectedJobId == null
                       ? 'No matching jobs were found for this location yet.'
                       : 'Showing job details from the client dashboard.',
+                ),
+              ),
+            ),
+            const SizedBox(height: 12),
+          ],
+          if (_isEmployee && widget.openedFromEmployee) ...[
+            Card(
+              child: Padding(
+                padding: const EdgeInsets.all(12),
+                child: Text(
+                  _selectedJobId == null
+                      ? 'No matching jobs were found for this selection.'
+                      : 'Showing job details from the employee dashboard.',
                 ),
               ),
             ),

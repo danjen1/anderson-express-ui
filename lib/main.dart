@@ -67,6 +67,7 @@ class MyApp extends StatelessWidget {
           uri.queryParameters['locationId'] ?? '',
         );
         var openedFromClient = false;
+        var openedFromEmployee = false;
         if (args is Map) {
           final jobIdValue = args['jobId']?.toString();
           if (jobIdValue != null && jobIdValue.isNotEmpty) {
@@ -80,12 +81,15 @@ class MyApp extends StatelessWidget {
           }
           openedFromClient =
               (args['source']?.toString().toLowerCase() == 'client_home');
+          openedFromEmployee =
+              (args['source']?.toString().toLowerCase() == 'employee_home');
         }
         return MaterialPageRoute(
           builder: (_) => JobsPage(
             initialJobId: initialJobId,
             initialLocationId: initialLocationId,
             openedFromClient: openedFromClient,
+            openedFromEmployee: openedFromEmployee,
           ),
           settings: settings,
         );

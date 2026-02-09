@@ -890,8 +890,14 @@ class _HomePageState extends State<HomePage> {
                             distanceLabel: _distanceHintForJob(job),
                             mapsLabel: _deviceMapLabel(),
                             onOpenMaps: () => _openJobInMaps(job),
-                            onOpenDetails: () =>
-                                Navigator.pushNamed(context, '/cleaner'),
+                            onOpenDetails: () => Navigator.pushNamed(
+                              context,
+                              '/jobs',
+                              arguments: <String, dynamic>{
+                                'jobId': job.id,
+                                'source': 'employee_home',
+                              },
+                            ),
                           ),
                         )
                         .toList(),
@@ -926,8 +932,14 @@ class _HomePageState extends State<HomePage> {
                                 'Completed: ${formatDateMdy(job.completedAt ?? job.scheduledDate)}',
                             distanceLabel: _distanceHintForJob(job),
                             onOpenMaps: () => _openJobInMaps(job),
-                            onOpenDetails: () =>
-                                Navigator.pushNamed(context, '/cleaner'),
+                            onOpenDetails: () => Navigator.pushNamed(
+                              context,
+                              '/jobs',
+                              arguments: <String, dynamic>{
+                                'jobId': job.id,
+                                'source': 'employee_home',
+                              },
+                            ),
                           ),
                         )
                         .toList(),
