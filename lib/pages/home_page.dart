@@ -822,28 +822,92 @@ class _HomePageState extends State<HomePage> {
     final sectionBorder = dark ? const Color(0xFF4A4D5A) : null;
     final sectionTitleColor = dark ? _darkAccent1 : null;
     final sectionEmptyColor = dark ? const Color(0xFFBFC3CC) : null;
+    final panelBg = dark ? const Color(0xFF333740) : const Color(0xFFE8F3FA);
+    final panelBorder = dark ? const Color(0xFF4A525F) : _lightSecondary;
+    final panelTitle = dark ? const Color(0xFFB39CD0) : _lightAccent;
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text(
-          'Welcome, $employeeDisplayName',
-          style: TextStyle(
-            fontSize: 22,
-            fontWeight: FontWeight.w800,
-            color: dark ? _darkAccent1 : _lightPrimary,
+        Card(
+          color: panelBg,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(12),
+            side: BorderSide(color: panelBorder),
           ),
-        ),
-        const SizedBox(height: 10),
-        EmployeeDateRangeCard(
-          dark: dark,
-          range: _employeeDateRange,
-          onPickStart: _pickEmployeeStartDate,
-          onPickEnd: _pickEmployeeEndDate,
-          onResetWeek: () =>
-              setState(() => _employeeDateRange = _currentWeekRange()),
-          cardColor: sectionCardBg,
-          borderColor: sectionBorder,
+          child: Padding(
+            padding: const EdgeInsets.all(16),
+            child: LayoutBuilder(
+              builder: (context, constraints) {
+                final controls = Wrap(
+                  spacing: 8,
+                  runSpacing: 8,
+                  crossAxisAlignment: WrapCrossAlignment.center,
+                  children: [
+                    Text(
+                      'Date Range',
+                      style: TextStyle(
+                        color: panelTitle,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                    OutlinedButton.icon(
+                      onPressed: _pickEmployeeStartDate,
+                      icon: const Icon(Icons.date_range, size: 16),
+                      label: Text(
+                        '${_employeeDateRange.start.month}-${_employeeDateRange.start.day}-${_employeeDateRange.start.year}',
+                      ),
+                    ),
+                    const Text('to'),
+                    OutlinedButton.icon(
+                      onPressed: _pickEmployeeEndDate,
+                      icon: const Icon(Icons.date_range, size: 16),
+                      label: Text(
+                        '${_employeeDateRange.end.month}-${_employeeDateRange.end.day}-${_employeeDateRange.end.year}',
+                      ),
+                    ),
+                    TextButton(
+                      onPressed: () => setState(
+                        () => _employeeDateRange = _currentWeekRange(),
+                      ),
+                      child: const Text('Current week'),
+                    ),
+                  ],
+                );
+
+                final welcome = Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    _employeeWelcomeAvatar(),
+                    const SizedBox(width: 10),
+                    Text(
+                      'Welcome, $employeeDisplayName',
+                      style: TextStyle(
+                        fontWeight: FontWeight.w800,
+                        fontSize: 20,
+                        color: panelTitle,
+                      ),
+                    ),
+                  ],
+                );
+
+                if (constraints.maxWidth < 900) {
+                  return Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [welcome, const SizedBox(height: 10), controls],
+                  );
+                }
+
+                return Row(
+                  children: [
+                    Expanded(child: welcome),
+                    const Spacer(),
+                    controls,
+                  ],
+                );
+              },
+            ),
+          ),
         ),
         const SizedBox(height: 12),
         EmployeeJobDashboardCard(
@@ -949,6 +1013,25 @@ class _HomePageState extends State<HomePage> {
           ],
         ),
       ],
+    );
+  }
+
+  Widget _employeeWelcomeAvatar() {
+    final photoUrl = _employeeProfile?.photoUrl?.trim() ?? '';
+    ImageProvider<Object> provider;
+    if (photoUrl.startsWith('/assets/')) {
+      provider = AssetImage(photoUrl.substring(1));
+    } else if (photoUrl.isNotEmpty) {
+      provider = NetworkImage(photoUrl);
+    } else {
+      provider = const AssetImage(
+        'assets/images/profiles/employee_john_cleaner.png',
+      );
+    }
+    return CircleAvatar(
+      radius: 27,
+      backgroundColor: const Color(0xFFA8D6F7),
+      backgroundImage: provider,
     );
   }
 
@@ -1591,13 +1674,37 @@ class _HomePageState extends State<HomePage> {
         bearerToken: token,
       );
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Cleaning request sent successfully.')),
+      await showDialog<void>(
+        context: context,
+        builder: (context) => AlertDialog(
+          title: const Text('Request Submitted'),
+          content: const Text(
+            'Your cleaning request was sent successfully. Our team will follow up shortly.',
+          ),
+          actions: [
+            FilledButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text('OK'),
+            ),
+          ],
+        ),
       );
     } catch (requestError) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Request failed: ${requestError.toString()}')),
+      await showDialog<void>(
+        context: context,
+        builder: (context) => AlertDialog(
+          title: const Text('Request Not Sent'),
+          content: Text(
+            'We could not submit the cleaning request right now.\n\n${requestError.toString()}',
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text('Close'),
+            ),
+          ],
+        ),
       );
     }
   }
@@ -1617,7 +1724,7 @@ class _HomePageState extends State<HomePage> {
             icon: const Icon(Icons.refresh),
             tooltip: 'Refresh',
           ),
-          const ProfileMenuButton(),
+          ProfileMenuButton(onProfileUpdated: _loadDashboard),
         ],
       ),
       body: Container(
@@ -1796,122 +1903,120 @@ class _ScheduleRequestDialogState extends State<_ScheduleRequestDialog> {
     return Theme(
       data: dialogTheme,
       child: AlertDialog(
-      title: Row(
-        children: [
-          Expanded(
-            child: Text(
-              'Request Cleaning',
-              style: TextStyle(
-                color: dark ? const Color(0xFFE4E4E4) : null,
+        title: Row(
+          children: [
+            Expanded(
+              child: Text(
+                'Request Cleaning',
+                style: TextStyle(color: dark ? const Color(0xFFE4E4E4) : null),
               ),
             ),
-          ),
-          ClipRRect(
-            borderRadius: BorderRadius.circular(4),
-            child: Image.asset(
-              'assets/images/logo.png',
-              width: 48,
-              height: 48,
-              fit: BoxFit.cover,
+            ClipRRect(
+              borderRadius: BorderRadius.circular(4),
+              child: Image.asset(
+                'assets/images/logo.png',
+                width: 48,
+                height: 48,
+                fit: BoxFit.cover,
+              ),
             ),
-          ),
-        ],
-      ),
-      content: SizedBox(
-        width: 520,
-        child: SingleChildScrollView(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              TextField(
-                controller: _nameController,
-                decoration: const InputDecoration(
-                  labelText: 'Name',
-                  border: OutlineInputBorder(),
+          ],
+        ),
+        content: SizedBox(
+          width: 520,
+          child: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                TextField(
+                  controller: _nameController,
+                  decoration: const InputDecoration(
+                    labelText: 'Name',
+                    border: OutlineInputBorder(),
+                  ),
                 ),
-              ),
-              const SizedBox(height: 10),
-              TextField(
-                controller: _emailController,
-                keyboardType: TextInputType.emailAddress,
-                decoration: const InputDecoration(
-                  labelText: 'Email',
-                  border: OutlineInputBorder(),
+                const SizedBox(height: 10),
+                TextField(
+                  controller: _emailController,
+                  keyboardType: TextInputType.emailAddress,
+                  decoration: const InputDecoration(
+                    labelText: 'Email',
+                    border: OutlineInputBorder(),
+                  ),
                 ),
-              ),
-              const SizedBox(height: 10),
-              TextField(
-                controller: _phoneController,
-                keyboardType: TextInputType.phone,
-                decoration: const InputDecoration(
-                  labelText: 'Phone',
-                  border: OutlineInputBorder(),
+                const SizedBox(height: 10),
+                TextField(
+                  controller: _phoneController,
+                  keyboardType: TextInputType.phone,
+                  decoration: const InputDecoration(
+                    labelText: 'Phone',
+                    border: OutlineInputBorder(),
+                  ),
                 ),
-              ),
-              const SizedBox(height: 10),
-              Row(
-                children: [
-                  Expanded(
-                    child: OutlinedButton.icon(
-                      onPressed: _pickDate,
-                      icon: const Icon(Icons.date_range),
-                      label: Text(
-                        'Date: ${_selectedDate.month}-${_selectedDate.day}-${_selectedDate.year}',
+                const SizedBox(height: 10),
+                Row(
+                  children: [
+                    Expanded(
+                      child: OutlinedButton.icon(
+                        onPressed: _pickDate,
+                        icon: const Icon(Icons.date_range),
+                        label: Text(
+                          'Date: ${_selectedDate.month}-${_selectedDate.day}-${_selectedDate.year}',
+                        ),
                       ),
                     ),
-                  ),
-                  const SizedBox(width: 8),
-                  Expanded(
-                    child: OutlinedButton.icon(
-                      onPressed: _pickTime,
-                      icon: const Icon(Icons.access_time),
-                      label: Text('Time: ${_selectedTime.format(context)}'),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: OutlinedButton.icon(
+                        onPressed: _pickTime,
+                        icon: const Icon(Icons.access_time),
+                        label: Text('Time: ${_selectedTime.format(context)}'),
+                      ),
                     ),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 10),
-              TextField(
-                controller: _notesController,
-                maxLines: 4,
-                decoration: const InputDecoration(
-                  labelText: 'Cleaning Details',
-                  hintText: 'Add cleaning details for this request.',
-                  border: OutlineInputBorder(),
+                  ],
                 ),
-              ),
-            ],
+                const SizedBox(height: 10),
+                TextField(
+                  controller: _notesController,
+                  maxLines: 4,
+                  decoration: const InputDecoration(
+                    labelText: 'Cleaning Details',
+                    hintText: 'Add cleaning details for this request.',
+                    border: OutlineInputBorder(),
+                  ),
+                ),
+              ],
+            ),
           ),
         ),
-      ),
-      actions: [
-        TextButton(
-          onPressed: () => Navigator.pop(context),
-          child: const Text('Cancel'),
-        ),
-        FilledButton(
-          onPressed: () {
-            final name = _nameController.text.trim();
-            final email = _emailController.text.trim();
-            final phone = _phoneController.text.trim();
-            if (name.isEmpty || email.isEmpty || phone.isEmpty) {
-              return;
-            }
-            Navigator.pop(
-              context,
-              _ScheduleRequestFormData(
-                name: name,
-                email: email,
-                phone: phone,
-                date: _selectedDate,
-                time: _selectedTime,
-                notes: _notesController.text.trim(),
-              ),
-            );
-          },
-          child: const Text('Submit Request'),
-        ),
-      ],
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () {
+              final name = _nameController.text.trim();
+              final email = _emailController.text.trim();
+              final phone = _phoneController.text.trim();
+              if (name.isEmpty || email.isEmpty || phone.isEmpty) {
+                return;
+              }
+              Navigator.pop(
+                context,
+                _ScheduleRequestFormData(
+                  name: name,
+                  email: email,
+                  phone: phone,
+                  date: _selectedDate,
+                  time: _selectedTime,
+                  notes: _notesController.text.trim(),
+                ),
+              );
+            },
+            child: const Text('Submit Request'),
+          ),
+        ],
       ),
     );
   }

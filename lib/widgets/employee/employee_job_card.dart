@@ -29,7 +29,6 @@ class EmployeeJobCard extends StatelessWidget {
   static const Color _lightAccent = Color(0xFF442E6F);
   static const Color _lightCta = Color(0xFFEE7E32);
 
-  static const Color _darkBg = Color(0xFF2C2C2C);
   static const Color _darkText = Color(0xFFE4E4E4);
   static const Color _darkAccent1 = Color(0xFFA8DADC);
   static const Color _darkAccent2 = Color(0xFFFFC1CC);
@@ -198,9 +197,9 @@ class EmployeeJobCard extends StatelessWidget {
                               label: Text(mapsLabel),
                               style: FilledButton.styleFrom(
                                 backgroundColor: dark
-                                    ? _darkCta
+                                    ? const Color(0xFF4A4659)
                                     : _lightPrimary,
-                                foregroundColor: dark ? _darkBg : Colors.white,
+                                foregroundColor: Colors.white,
                                 padding: EdgeInsets.symmetric(
                                   horizontal: isCompact ? 7 : 8,
                                   vertical: isCompact ? 3 : 4,

@@ -5,6 +5,7 @@ class Job {
     required this.profileId,
     required this.locationId,
     required this.scheduledDate,
+    this.scheduledStartAt,
     required this.status,
     this.clientName,
     this.locationAddress,
@@ -25,6 +26,7 @@ class Job {
   final int profileId;
   final int locationId;
   final String scheduledDate;
+  final String? scheduledStartAt;
   final String status;
   final String? clientName;
   final String? locationAddress;
@@ -46,6 +48,7 @@ class Job {
       profileId: int.tryParse(json['profile_id'].toString()) ?? 0,
       locationId: int.tryParse(json['location_id'].toString()) ?? 0,
       scheduledDate: json['scheduled_date']?.toString() ?? '',
+      scheduledStartAt: json['scheduled_start_at']?.toString(),
       status: json['status']?.toString() ?? '',
       clientName: json['client_name']?.toString(),
       locationAddress: json['location_address']?.toString(),
@@ -76,20 +79,26 @@ class JobCreateInput {
     required this.profileId,
     required this.locationId,
     required this.scheduledDate,
+    this.scheduledStartAt,
     this.estimatedDurationMinutes,
+    this.actualDurationMinutes,
   });
 
   final int profileId;
   final int locationId;
   final String scheduledDate;
+  final String? scheduledStartAt;
   final int? estimatedDurationMinutes;
+  final int? actualDurationMinutes;
 
   Map<String, dynamic> toJson() {
     return {
       'profile_id': profileId,
       'location_id': locationId,
       'scheduled_date': scheduledDate,
+      'scheduled_start_at': scheduledStartAt,
       'estimated_duration_minutes': estimatedDurationMinutes,
+      'actual_duration_minutes': actualDurationMinutes,
     };
   }
 }
@@ -98,23 +107,29 @@ class JobUpdateInput {
   const JobUpdateInput({
     required this.profileId,
     required this.scheduledDate,
+    this.scheduledStartAt,
     required this.status,
     this.estimatedDurationMinutes,
+    this.actualDurationMinutes,
     this.notes,
   });
 
   final int profileId;
   final String scheduledDate;
+  final String? scheduledStartAt;
   final String status;
   final int? estimatedDurationMinutes;
+  final int? actualDurationMinutes;
   final String? notes;
 
   Map<String, dynamic> toJson() {
     return {
       'profile_id': profileId,
       'scheduled_date': scheduledDate,
+      'scheduled_start_at': scheduledStartAt,
       'status': status,
       'estimated_duration_minutes': estimatedDurationMinutes,
+      'actual_duration_minutes': actualDurationMinutes,
       'notes': notes,
     };
   }

@@ -8,6 +8,7 @@ import '../models/cleaning_request.dart';
 import '../models/client.dart';
 import '../models/employee.dart';
 import '../models/job.dart';
+import '../models/job_assignment.dart';
 import '../models/location.dart';
 import '../models/profile_task.dart';
 import '../models/task_definition.dart';
@@ -21,6 +22,7 @@ import '../utils/error_text.dart';
 import '../widgets/backend_banner.dart';
 import '../widgets/brand_app_bar_title.dart';
 import '../widgets/demo_mode_notice.dart';
+import '../widgets/duration_picker_fields.dart';
 import '../widgets/profile_menu_button.dart';
 import '../widgets/theme_toggle_button.dart';
 
@@ -28,14 +30,14 @@ enum _AdminSection {
   dashboard,
   jobs,
   cleaningProfiles,
-  clients,
-  employees,
-  locations,
+  management,
   reports,
   knowledgeBase,
 }
 
-enum _EmployeeFilter { all, active, inactive }
+enum _ManagementModel { employees, clients, locations }
+
+enum _EmployeeFilter { all, active, invited }
 
 enum _ClientFilter { all, active, inactive }
 
@@ -53,6 +55,9 @@ class AdminPage extends StatefulWidget {
 }
 
 class _AdminPageState extends State<AdminPage> {
+  static const String _defaultEmployeePhotoAsset =
+      '/assets/images/profiles/employee_default.png';
+  final GlobalKey<ScaffoldState> _scaffoldKey = GlobalKey<ScaffoldState>();
   late BackendKind _selectedBackend;
   late final TextEditingController _hostController;
 
@@ -60,9 +65,11 @@ class _AdminPageState extends State<AdminPage> {
   ApiService get _api => ApiService();
 
   bool _loading = false;
+  bool _sidebarCollapsed = false;
   String? _error;
   List<Employee> _employees = const [];
   List<Job> _jobs = const [];
+  Map<String, String> _jobCleanerNameByJobId = const {};
   List<Client> _clients = const [];
   List<Location> _locations = const [];
   List<CleaningProfile> _cleaningProfiles = const [];
@@ -71,10 +78,15 @@ class _AdminPageState extends State<AdminPage> {
   List<TaskRule> _taskRules = const [];
   List<ProfileTask> _selectedProfileTasks = const [];
   _AdminSection _selectedSection = _AdminSection.dashboard;
+  _ManagementModel _managementModel = _ManagementModel.employees;
   _EmployeeFilter _employeeFilter = _EmployeeFilter.active;
   _ClientFilter _clientFilter = _ClientFilter.active;
   _LocationFilter _locationFilter = _LocationFilter.active;
-  _JobFilter _jobFilter = _JobFilter.pending;
+  _JobFilter _jobFilter = _JobFilter.all;
+  DateTimeRange _jobDateRange = DateTimeRange(
+    start: DateTime.now().subtract(const Duration(days: 30)),
+    end: DateTime.now().add(const Duration(days: 30)),
+  );
   _CleaningRequestFilter _cleaningRequestFilter = _CleaningRequestFilter.open;
   String? _selectedCleaningProfileId;
   bool _loadingProfileTasks = false;
@@ -86,6 +98,75 @@ class _AdminPageState extends State<AdminPage> {
       return 'Coordinates saved (${latitude.toStringAsFixed(5)}, ${longitude.toStringAsFixed(5)})';
     }
     return 'Coordinates unavailable. Check address details.';
+  }
+
+  Future<void> _showDemoCreateDialog({
+    required String title,
+    required String message,
+  }) async {
+    if (!mounted) return;
+    await showDialog<void>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text(title),
+        content: Text(message),
+        actions: [
+          FilledButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Got it'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Future<bool> _showPolishedDeleteDialog({
+    required String title,
+    required String message,
+  }) async {
+    final dark = Theme.of(context).brightness == Brightness.dark;
+    final dialogTheme = Theme.of(context).copyWith(
+      dialogTheme: DialogThemeData(
+        backgroundColor: dark ? const Color(0xFF333740) : null,
+        surfaceTintColor: Colors.transparent,
+      ),
+    );
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => Theme(
+        data: dialogTheme,
+        child: AlertDialog(
+          title: Text(
+            title,
+            style: TextStyle(
+              color: dark ? const Color(0xFFB39CD0) : const Color(0xFF442E6F),
+              fontWeight: FontWeight.w800,
+            ),
+          ),
+          content: Text(
+            message,
+            style: TextStyle(color: dark ? const Color(0xFFE4E4E4) : null),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context, false),
+              child: const Text('Cancel'),
+            ),
+            FilledButton(
+              style: FilledButton.styleFrom(
+                backgroundColor: dark
+                    ? const Color(0xFFB39CD0)
+                    : const Color(0xFF442E6F),
+                foregroundColor: dark ? const Color(0xFF1F1F1F) : Colors.white,
+              ),
+              onPressed: () => Navigator.pop(context, true),
+              child: const Text('Delete'),
+            ),
+          ],
+        ),
+      ),
+    );
+    return confirmed == true;
   }
 
   @override
@@ -150,12 +231,23 @@ class _AdminPageState extends State<AdminPage> {
     });
 
     try {
-      final employeesFuture = _api.listEmployees(bearerToken: token);
+      final employeesFuture = _api.listEmployees(
+        employeeStatus: const [
+          'active',
+          'invited',
+          'inactive',
+          'resigned',
+          'deleted',
+        ],
+        bearerToken: token,
+      );
       final jobsFuture = _api.listJobs(bearerToken: token);
       final clientsFuture = _api.listClients(bearerToken: token);
       final locationsFuture = _api.listLocations(bearerToken: token);
       final profilesFuture = _api.listCleaningProfiles(bearerToken: token);
-      final cleaningRequestsFuture = _api.listCleaningRequests(bearerToken: token);
+      final cleaningRequestsFuture = _api.listCleaningRequests(
+        bearerToken: token,
+      );
       final taskDefsFuture = _api.listTaskDefinitions(bearerToken: token);
       final taskRulesFuture = _api.listTaskRules(bearerToken: token);
       final results = await Future.wait([
@@ -176,6 +268,37 @@ class _AdminPageState extends State<AdminPage> {
       final cleaningRequests = results[5] as List<CleaningRequest>;
       final taskDefinitions = results[6] as List<TaskDefinition>;
       final taskRules = results[7] as List<TaskRule>;
+      final cleanerNameById = <String, String>{};
+      for (final employee in employees) {
+        cleanerNameById[employee.id] = employee.name;
+      }
+      final cleanerByJobId = <String, String>{};
+      for (final job in jobs) {
+        try {
+          final assignments = await _api.listJobAssignments(
+            job.id,
+            bearerToken: token,
+          );
+          JobAssignment? activeAssignment;
+          for (final assignment in assignments) {
+            if (assignment.isActive) {
+              activeAssignment = assignment;
+              break;
+            }
+          }
+          if (activeAssignment != null) {
+            final cleanerName =
+                activeAssignment.employeeName ??
+                cleanerNameById[activeAssignment.employeeId] ??
+                'Unassigned';
+            cleanerByJobId[job.id] = cleanerName;
+          } else {
+            cleanerByJobId[job.id] = 'Unassigned';
+          }
+        } catch (_) {
+          cleanerByJobId[job.id] = 'Unassigned';
+        }
+      }
       final previousSelected = _selectedCleaningProfileId;
       final nextSelected = profiles.any((p) => p.id == previousSelected)
           ? previousSelected
@@ -185,6 +308,7 @@ class _AdminPageState extends State<AdminPage> {
       setState(() {
         _employees = employees;
         _jobs = jobs;
+        _jobCleanerNameByJobId = cleanerByJobId;
         _clients = clients;
         _locations = locations;
         _cleaningProfiles = profiles;
@@ -214,15 +338,6 @@ class _AdminPageState extends State<AdminPage> {
   }
 
   Future<void> _showCreateDialog() async {
-    if (AppEnv.isDemoMode) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Demo mode: create/edit/delete actions are disabled'),
-        ),
-      );
-      return;
-    }
-
     final result = await showDialog<EmployeeCreateInput>(
       context: context,
       builder: (context) => const _EmployeeEditorDialog(),
@@ -230,8 +345,31 @@ class _AdminPageState extends State<AdminPage> {
 
     if (result == null) return;
 
+    if (AppEnv.isDemoMode) {
+      await _showDemoCreateDialog(
+        title: 'Demo Employee Created',
+        message:
+            'Employee "${result.name}" was created in preview mode for walkthrough purposes. No database changes were made.',
+      );
+      return;
+    }
+
     try {
-      final created = await _api.createEmployee(result, bearerToken: _token);
+      final payload = EmployeeCreateInput(
+        name: result.name,
+        email: result.email,
+        accessLevel: result.accessLevel,
+        phoneNumber: result.phoneNumber,
+        address: result.address,
+        city: result.city,
+        state: result.state,
+        zipCode: result.zipCode,
+        photoUrl: (result.photoUrl == null || result.photoUrl!.trim().isEmpty)
+            ? _defaultEmployeePhotoAsset
+            : result.photoUrl,
+        status: result.status,
+      );
+      final created = await _api.createEmployee(payload, bearerToken: _token);
       await _loadAdminData();
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
@@ -250,17 +388,11 @@ class _AdminPageState extends State<AdminPage> {
   }
 
   Future<void> _showEditDialog(Employee employee) async {
-    if (AppEnv.isDemoMode) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Demo mode: create/edit/delete actions are disabled'),
-        ),
-      );
-      return;
-    }
     final result = await showDialog<EmployeeUpdateInput>(
       context: context,
       builder: (context) => _EmployeeEditorDialog(
+        employeeNumber: employee.employeeNumber,
+        status: employee.status,
         name: employee.name,
         email: employee.email ?? '',
         phoneNumber: employee.phoneNumber ?? '',
@@ -268,11 +400,21 @@ class _AdminPageState extends State<AdminPage> {
         city: employee.city ?? '',
         state: employee.state ?? '',
         zipCode: employee.zipCode ?? '',
+        photoUrl: employee.photoUrl ?? '',
         isCreate: false,
       ),
     );
 
     if (result == null) return;
+
+    if (AppEnv.isDemoMode) {
+      await _showDemoCreateDialog(
+        title: 'Demo Employee Updated',
+        message:
+            'Employee "${employee.name}" was updated in preview walkthrough mode. No database changes were made.',
+      );
+      return;
+    }
 
     try {
       final updated = await _api.updateEmployee(
@@ -298,14 +440,6 @@ class _AdminPageState extends State<AdminPage> {
   }
 
   Future<void> _delete(Employee employee) async {
-    if (AppEnv.isDemoMode) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Demo mode: create/edit/delete actions are disabled'),
-        ),
-      );
-      return;
-    }
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
@@ -326,6 +460,15 @@ class _AdminPageState extends State<AdminPage> {
 
     if (confirmed != true) return;
 
+    if (AppEnv.isDemoMode) {
+      await _showDemoCreateDialog(
+        title: 'Demo Employee Deleted',
+        message:
+            'Employee "${employee.name}" was removed in preview walkthrough mode. No database changes were made.',
+      );
+      return;
+    }
+
     try {
       final message = await _api.deleteEmployee(
         employee.id,
@@ -345,20 +488,20 @@ class _AdminPageState extends State<AdminPage> {
   }
 
   Future<void> _showCreateClientDialog() async {
-    if (AppEnv.isDemoMode) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Demo mode: create/edit/delete actions are disabled'),
-        ),
-      );
-      return;
-    }
-
     final result = await showDialog<ClientCreateInput>(
       context: context,
       builder: (context) => const _ClientEditorDialog(),
     );
     if (result == null) return;
+
+    if (AppEnv.isDemoMode) {
+      await _showDemoCreateDialog(
+        title: 'Demo Client Created',
+        message:
+            'Client "${result.name}" was created in preview mode for walkthrough purposes. No database changes were made.',
+      );
+      return;
+    }
 
     try {
       await _api.createClient(result, bearerToken: _token);
@@ -376,15 +519,6 @@ class _AdminPageState extends State<AdminPage> {
   }
 
   Future<void> _showEditClientDialog(Client client) async {
-    if (AppEnv.isDemoMode) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Demo mode: create/edit/delete actions are disabled'),
-        ),
-      );
-      return;
-    }
-
     final result = await showDialog<ClientUpdateInput>(
       context: context,
       builder: (context) => _ClientEditorDialog(
@@ -396,9 +530,20 @@ class _AdminPageState extends State<AdminPage> {
         city: client.city ?? '',
         state: client.state ?? '',
         zipCode: client.zipCode ?? '',
+        preferredContactMethod: client.preferredContactMethod ?? '',
+        preferredContactWindow: client.preferredContactWindow ?? '',
       ),
     );
     if (result == null) return;
+
+    if (AppEnv.isDemoMode) {
+      await _showDemoCreateDialog(
+        title: 'Demo Client Updated',
+        message:
+            'Client "${client.name}" was updated in preview walkthrough mode. No database changes were made.',
+      );
+      return;
+    }
 
     try {
       await _api.updateClient(client.id, result, bearerToken: _token);
@@ -416,32 +561,20 @@ class _AdminPageState extends State<AdminPage> {
   }
 
   Future<void> _deleteClient(Client client) async {
+    final confirmed = await _showPolishedDeleteDialog(
+      title: 'Delete client',
+      message: 'Delete ${client.clientNumber} - ${client.name}?',
+    );
+    if (!confirmed) return;
+
     if (AppEnv.isDemoMode) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Demo mode: create/edit/delete actions are disabled'),
-        ),
+      await _showDemoCreateDialog(
+        title: 'Demo Client Deleted',
+        message:
+            'Client "${client.name}" was removed in preview walkthrough mode. No database changes were made.',
       );
       return;
     }
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Delete client'),
-        content: Text('Delete ${client.clientNumber} - ${client.name}?'),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context, false),
-            child: const Text('Cancel'),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.pop(context, true),
-            child: const Text('Delete'),
-          ),
-        ],
-      ),
-    );
-    if (confirmed != true) return;
 
     try {
       final message = await _api.deleteClient(client.id, bearerToken: _token);
@@ -459,19 +592,25 @@ class _AdminPageState extends State<AdminPage> {
   }
 
   Future<void> _showCreateLocationDialog() async {
-    if (AppEnv.isDemoMode) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Demo mode: create/edit/delete actions are disabled'),
-        ),
-      );
-      return;
-    }
     final result = await showDialog<LocationCreateInput>(
       context: context,
       builder: (context) => _LocationEditorDialog(clients: _clients),
     );
     if (result == null) return;
+
+    if (AppEnv.isDemoMode) {
+      final address = [
+        result.address ?? '',
+        result.city ?? '',
+        result.state ?? '',
+      ].where((p) => p.trim().isNotEmpty).join(', ');
+      await _showDemoCreateDialog(
+        title: 'Demo Location Created',
+        message:
+            'Location "${result.type}"${address.isNotEmpty ? ' at $address' : ''} was created in preview mode for walkthrough purposes. No database changes were made.',
+      );
+      return;
+    }
 
     try {
       final created = await _api.createLocation(result, bearerToken: _token);
@@ -493,14 +632,6 @@ class _AdminPageState extends State<AdminPage> {
   }
 
   Future<void> _showEditLocationDialog(Location location) async {
-    if (AppEnv.isDemoMode) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Demo mode: create/edit/delete actions are disabled'),
-        ),
-      );
-      return;
-    }
     final result = await showDialog<LocationUpdateInput>(
       context: context,
       builder: (context) => _LocationEditorDialog(
@@ -515,6 +646,15 @@ class _AdminPageState extends State<AdminPage> {
       ),
     );
     if (result == null) return;
+
+    if (AppEnv.isDemoMode) {
+      await _showDemoCreateDialog(
+        title: 'Demo Location Updated',
+        message:
+            'Location "${location.locationNumber}" was updated in preview walkthrough mode. No database changes were made.',
+      );
+      return;
+    }
 
     try {
       final updated = await _api.updateLocation(
@@ -540,34 +680,21 @@ class _AdminPageState extends State<AdminPage> {
   }
 
   Future<void> _deleteLocation(Location location) async {
+    final confirmed = await _showPolishedDeleteDialog(
+      title: 'Delete location',
+      message:
+          'Delete ${location.locationNumber} (client ${location.clientId})?',
+    );
+    if (!confirmed) return;
+
     if (AppEnv.isDemoMode) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Demo mode: create/edit/delete actions are disabled'),
-        ),
+      await _showDemoCreateDialog(
+        title: 'Demo Location Deleted',
+        message:
+            'Location "${location.locationNumber}" was removed in preview walkthrough mode. No database changes were made.',
       );
       return;
     }
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Delete location'),
-        content: Text(
-          'Delete ${location.locationNumber} (client ${location.clientId})?',
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context, false),
-            child: const Text('Cancel'),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.pop(context, true),
-            child: const Text('Delete'),
-          ),
-        ],
-      ),
-    );
-    if (confirmed != true) return;
 
     try {
       final message = await _api.deleteLocation(
@@ -588,41 +715,278 @@ class _AdminPageState extends State<AdminPage> {
   }
 
   Future<void> _showCreateJobDialog() async {
-    Navigator.pushNamed(context, '/jobs');
-  }
+    final result = await showDialog<_JobEditorFormData>(
+      context: context,
+      builder: (context) => _JobEditorDialog(
+        isCreate: true,
+        clients: _activeClients,
+        locations: _activeLocations,
+        cleaners: _activeCleaners,
+      ),
+    );
+    if (result == null) return;
 
-  Future<void> _showEditJobDialog(Job job) async {
-    Navigator.pushNamed(context, '/jobs');
-  }
-
-  Future<void> _deleteJob(Job job) async {
     if (AppEnv.isDemoMode) {
+      await _showDemoCreateDialog(
+        title: 'Demo Job Created',
+        message:
+            'Job creation flow completed in preview walkthrough mode. No database changes were made.',
+      );
+      return;
+    }
+
+    final profileId = _profileIdForLocation(result.locationId);
+    if (profileId == null) {
+      if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
-          content: Text('Demo mode: create/edit/delete actions are disabled'),
+          content: Text(
+            'No cleaning profile found for selected location. Create a cleaning profile first.',
+          ),
         ),
       );
       return;
     }
 
+    try {
+      final created = await _api.createJob(
+        JobCreateInput(
+          profileId: profileId,
+          locationId: result.locationId,
+          scheduledDate: result.scheduledDate,
+          scheduledStartAt: result.scheduledStartAt,
+          estimatedDurationMinutes: result.estimatedDurationMinutes,
+          actualDurationMinutes: result.actualDurationMinutes,
+        ),
+        bearerToken: _token,
+      );
+
+      if (result.cleanerEmployeeId != null) {
+        await _api.createJobAssignment(
+          created.id,
+          JobAssignmentCreateInput(employeeId: result.cleanerEmployeeId!),
+          bearerToken: _token,
+        );
+        await _api.updateJob(
+          created.id,
+          JobUpdateInput(
+            profileId: profileId,
+            scheduledDate: result.scheduledDate,
+            scheduledStartAt: result.scheduledStartAt,
+            status: 'assigned',
+            estimatedDurationMinutes: result.estimatedDurationMinutes,
+          ),
+          bearerToken: _token,
+        );
+      }
+
+      await _loadAdminData();
+      if (!mounted) return;
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('Job created')));
+    } catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(userFacingError(error))));
+    }
+  }
+
+  Future<void> _showEditJobDialog(Job job) async {
+    final activeLocations = _activeLocations;
+    String? initialCleanerEmployeeId;
+    try {
+      final existingAssignments = await _api.listJobAssignments(
+        job.id,
+        bearerToken: _token,
+      );
+      for (final assignment in existingAssignments) {
+        if (assignment.isActive) {
+          initialCleanerEmployeeId = assignment.employeeId;
+          break;
+        }
+      }
+    } catch (_) {}
+    if (!mounted) return;
+    int? initialClientId;
+    for (final location in activeLocations) {
+      final locationId = int.tryParse(location.id);
+      if (locationId == job.locationId) {
+        initialClientId = location.clientId;
+        break;
+      }
+    }
+    final result = await showDialog<_JobEditorFormData>(
+      context: context,
+      builder: (context) => _JobEditorDialog(
+        isCreate: false,
+        clients: _activeClients,
+        locations: activeLocations,
+        cleaners: _activeCleaners,
+        initialClientId: initialClientId,
+        initialLocationId: job.locationId,
+        initialScheduledDate: parseFlexibleDate(job.scheduledDate),
+        initialScheduledStartAt: job.scheduledStartAt,
+        initialEstimatedDurationMinutes: job.estimatedDurationMinutes,
+        initialActualDurationMinutes: job.actualDurationMinutes,
+        initialCleanerEmployeeId: initialCleanerEmployeeId,
+        initialStatus: job.status,
+      ),
+    );
+    if (result == null) return;
+
+    if (AppEnv.isDemoMode) {
+      await _showDemoCreateDialog(
+        title: 'Demo Job Updated',
+        message:
+            'Job "${job.jobNumber}" update flow completed in preview walkthrough mode. No database changes were made.',
+      );
+      return;
+    }
+
+    final profileId = _profileIdForLocation(
+      result.locationId,
+      fallbackProfileId: job.profileId,
+    );
+    if (profileId == null) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text(
+            'No cleaning profile found for selected location. Create a cleaning profile first.',
+          ),
+        ),
+      );
+      return;
+    }
+
+    final currentStatus = job.status.trim().toLowerCase();
+    final normalizedStatus = switch ((
+      currentStatus,
+      result.cleanerEmployeeId,
+    )) {
+      ('completed', null) => 'completed',
+      ('canceled', _) || ('cancelled', _) => 'canceled',
+      (_, null) => 'pending',
+      ('pending', _) || ('assigned', _) => 'assigned',
+      _ => job.status,
+    };
+
+    try {
+      final assignments = await _api.listJobAssignments(
+        job.id,
+        bearerToken: _token,
+      );
+      final activeAssignments = assignments
+          .where((assignment) => assignment.isActive)
+          .toList();
+      if (result.cleanerEmployeeId == null) {
+        for (final assignment in activeAssignments) {
+          await _api.deleteJobAssignment(
+            job.id,
+            assignment.id,
+            bearerToken: _token,
+          );
+        }
+      } else {
+        final hasSelectedAssignee = activeAssignments.any(
+          (assignment) => assignment.employeeId == result.cleanerEmployeeId,
+        );
+        if (!hasSelectedAssignee) {
+          for (final assignment in activeAssignments) {
+            await _api.deleteJobAssignment(
+              job.id,
+              assignment.id,
+              bearerToken: _token,
+            );
+          }
+          await _api.createJobAssignment(
+            job.id,
+            JobAssignmentCreateInput(employeeId: result.cleanerEmployeeId!),
+            bearerToken: _token,
+          );
+        }
+      }
+      await _api.updateJob(
+        job.id,
+        JobUpdateInput(
+          profileId: profileId,
+          scheduledDate: result.scheduledDate,
+          scheduledStartAt: result.scheduledStartAt,
+          status: normalizedStatus,
+          estimatedDurationMinutes: result.estimatedDurationMinutes,
+          actualDurationMinutes: result.actualDurationMinutes,
+          notes: job.notes,
+        ),
+        bearerToken: _token,
+      );
+      await _loadAdminData();
+      if (!mounted) return;
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('Job updated')));
+    } catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(userFacingError(error))));
+    }
+  }
+
+  Future<void> _deleteJob(Job job) async {
+    final dark = Theme.of(context).brightness == Brightness.dark;
+    final dialogTheme = Theme.of(context).copyWith(
+      dialogTheme: DialogThemeData(
+        backgroundColor: dark ? const Color(0xFF333740) : null,
+        surfaceTintColor: Colors.transparent,
+      ),
+    );
     final confirmed = await showDialog<bool>(
       context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Delete job'),
-        content: Text('Delete ${job.jobNumber}?'),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context, false),
-            child: const Text('Cancel'),
+      builder: (context) => Theme(
+        data: dialogTheme,
+        child: AlertDialog(
+          title: Text(
+            'Delete job',
+            style: TextStyle(
+              color: dark ? const Color(0xFFB39CD0) : const Color(0xFF442E6F),
+              fontWeight: FontWeight.w800,
+            ),
           ),
-          FilledButton(
-            onPressed: () => Navigator.pop(context, true),
-            child: const Text('Delete'),
+          content: Text(
+            'Delete Job for ${job.clientName ?? 'Unknown Client'} on ${formatDateMdy(job.scheduledDate)}',
+            style: TextStyle(color: dark ? const Color(0xFFE4E4E4) : null),
           ),
-        ],
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context, false),
+              child: const Text('Cancel'),
+            ),
+            FilledButton(
+              style: FilledButton.styleFrom(
+                backgroundColor: dark
+                    ? const Color(0xFFB39CD0)
+                    : const Color(0xFF442E6F),
+                foregroundColor: dark ? const Color(0xFF1F1F1F) : Colors.white,
+              ),
+              onPressed: () => Navigator.pop(context, true),
+              child: const Text('Delete'),
+            ),
+          ],
+        ),
       ),
     );
     if (confirmed != true) return;
+
+    if (AppEnv.isDemoMode) {
+      await _showDemoCreateDialog(
+        title: 'Demo Job Deleted',
+        message:
+            'Job "${job.jobNumber}" was removed in preview walkthrough mode. No database changes were made.',
+      );
+      return;
+    }
 
     try {
       final message = await _api.deleteJob(job.id, bearerToken: _token);
@@ -640,14 +1004,6 @@ class _AdminPageState extends State<AdminPage> {
   }
 
   Future<void> _showCreateCleaningProfileDialog() async {
-    if (AppEnv.isDemoMode) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Demo mode: create/edit/delete actions are disabled'),
-        ),
-      );
-      return;
-    }
     if (_locations.isEmpty) {
       ScaffoldMessenger.of(
         context,
@@ -660,6 +1016,15 @@ class _AdminPageState extends State<AdminPage> {
       builder: (context) => _CleaningProfileEditorDialog(locations: _locations),
     );
     if (result == null) return;
+
+    if (AppEnv.isDemoMode) {
+      await _showDemoCreateDialog(
+        title: 'Demo Cleaning Profile Created',
+        message:
+            'Cleaning profile "${result.name}" was created in preview mode for walkthrough purposes. No database changes were made.',
+      );
+      return;
+    }
 
     try {
       await _api.createCleaningProfile(result, bearerToken: _token);
@@ -797,14 +1162,6 @@ class _AdminPageState extends State<AdminPage> {
   }
 
   Future<void> _showAddProfileTaskDialog() async {
-    if (AppEnv.isDemoMode) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Demo mode: create/edit/delete actions are disabled'),
-        ),
-      );
-      return;
-    }
     if (_selectedCleaningProfileId == null) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Select a cleaning profile first')),
@@ -824,6 +1181,15 @@ class _AdminPageState extends State<AdminPage> {
           _ProfileTaskEditorDialog(taskDefinitions: _taskDefinitions),
     );
     if (result == null) return;
+
+    if (AppEnv.isDemoMode) {
+      await _showDemoCreateDialog(
+        title: 'Demo Profile Task Linked',
+        message:
+            'Task "${_taskDefinitionLabel(result.taskDefinitionId)}" was linked to the selected profile in preview walkthrough mode. No database changes were made.',
+      );
+      return;
+    }
 
     try {
       await _api.createProfileTask(
@@ -938,19 +1304,20 @@ class _AdminPageState extends State<AdminPage> {
   }
 
   Future<void> _showCreateTaskDefinitionDialog() async {
-    if (AppEnv.isDemoMode) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Demo mode: create/edit/delete actions are disabled'),
-        ),
-      );
-      return;
-    }
     final result = await showDialog<TaskDefinitionCreateInput>(
       context: context,
       builder: (context) => const _TaskDefinitionEditorDialog(),
     );
     if (result == null) return;
+
+    if (AppEnv.isDemoMode) {
+      await _showDemoCreateDialog(
+        title: 'Demo Task Definition Created',
+        message:
+            'Task definition "${result.name}" was created in preview mode for walkthrough purposes. No database changes were made.',
+      );
+      return;
+    }
 
     try {
       await _api.createTaskDefinition(result, bearerToken: _token);
@@ -968,14 +1335,6 @@ class _AdminPageState extends State<AdminPage> {
   }
 
   Future<void> _showCreateTaskRuleDialog() async {
-    if (AppEnv.isDemoMode) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Demo mode: create/edit/delete actions are disabled'),
-        ),
-      );
-      return;
-    }
     if (_taskDefinitions.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Create a task definition first')),
@@ -989,6 +1348,15 @@ class _AdminPageState extends State<AdminPage> {
           _TaskRuleEditorDialog(taskDefinitions: _taskDefinitions),
     );
     if (result == null) return;
+
+    if (AppEnv.isDemoMode) {
+      await _showDemoCreateDialog(
+        title: 'Demo Task Rule Created',
+        message:
+            'Task rule for "${_taskDefinitionLabel(result.taskDefinitionId)}" was created in preview mode for walkthrough purposes. No database changes were made.',
+      );
+      return;
+    }
 
     try {
       await _api.createTaskRule(result, bearerToken: _token);
@@ -1006,21 +1374,30 @@ class _AdminPageState extends State<AdminPage> {
   }
 
   List<Employee> get _filteredEmployees {
-    return _employees.where((employee) {
+    final filtered = _employees.where((employee) {
       final status = employee.status.trim().toLowerCase();
       switch (_employeeFilter) {
         case _EmployeeFilter.active:
           return status == 'active';
-        case _EmployeeFilter.inactive:
-          return status != 'active';
+        case _EmployeeFilter.invited:
+          return status == 'invited';
         case _EmployeeFilter.all:
           return true;
       }
     }).toList();
+    filtered.sort((a, b) {
+      final aDeleted = a.status.trim().toLowerCase() == 'deleted';
+      final bDeleted = b.status.trim().toLowerCase() == 'deleted';
+      if (aDeleted != bDeleted) {
+        return aDeleted ? 1 : -1;
+      }
+      return a.name.toLowerCase().compareTo(b.name.toLowerCase());
+    });
+    return filtered;
   }
 
   List<Client> get _filteredClients {
-    return _clients.where((client) {
+    final filtered = _clients.where((client) {
       final status = client.status.trim().toLowerCase();
       switch (_clientFilter) {
         case _ClientFilter.active:
@@ -1031,10 +1408,19 @@ class _AdminPageState extends State<AdminPage> {
           return true;
       }
     }).toList();
+    filtered.sort((a, b) {
+      final aDeleted = a.status.trim().toLowerCase() == 'deleted';
+      final bDeleted = b.status.trim().toLowerCase() == 'deleted';
+      if (aDeleted != bDeleted) {
+        return aDeleted ? 1 : -1;
+      }
+      return a.name.toLowerCase().compareTo(b.name.toLowerCase());
+    });
+    return filtered;
   }
 
   List<Location> get _filteredLocations {
-    return _locations.where((location) {
+    final filtered = _locations.where((location) {
       final status = location.status.trim().toLowerCase();
       switch (_locationFilter) {
         case _LocationFilter.active:
@@ -1045,6 +1431,44 @@ class _AdminPageState extends State<AdminPage> {
           return true;
       }
     }).toList();
+    filtered.sort((a, b) {
+      final aDeleted = a.status.trim().toLowerCase() == 'deleted';
+      final bDeleted = b.status.trim().toLowerCase() == 'deleted';
+      if (aDeleted != bDeleted) {
+        return aDeleted ? 1 : -1;
+      }
+      final aAddress = (a.address ?? '').toLowerCase();
+      final bAddress = (b.address ?? '').toLowerCase();
+      return aAddress.compareTo(bAddress);
+    });
+    return filtered;
+  }
+
+  List<Client> get _activeClients {
+    return _clients
+        .where((client) => client.status.trim().toLowerCase() == 'active')
+        .toList();
+  }
+
+  List<Location> get _activeLocations {
+    return _locations
+        .where((location) => location.status.trim().toLowerCase() == 'active')
+        .toList();
+  }
+
+  List<Employee> get _activeCleaners {
+    return _employees
+        .where((employee) => employee.status.trim().toLowerCase() == 'active')
+        .toList();
+  }
+
+  int? _profileIdForLocation(int locationId, {int? fallbackProfileId}) {
+    for (final profile in _cleaningProfiles) {
+      if (profile.locationId == locationId) {
+        return int.tryParse(profile.id);
+      }
+    }
+    return fallbackProfileId;
   }
 
   bool _isOverdue(Job job) {
@@ -1081,6 +1505,51 @@ class _AdminPageState extends State<AdminPage> {
     }).toList();
   }
 
+  String _jobFilterLabel(_JobFilter filter) {
+    return switch (filter) {
+      _JobFilter.pending => 'Pending',
+      _JobFilter.assigned => 'Assigned',
+      _JobFilter.inProgress => 'In Progress',
+      _JobFilter.completed => 'Completed',
+      _JobFilter.overdue => 'Overdue',
+      _JobFilter.all => 'All',
+    };
+  }
+
+  Future<void> _pickJobStartDate() async {
+    final picked = await showDatePicker(
+      context: context,
+      initialDate: _jobDateRange.start,
+      firstDate: DateTime(2020, 1, 1),
+      lastDate: DateTime(2100, 12, 31),
+    );
+    if (picked == null) return;
+    setState(() {
+      final currentEnd = _jobDateRange.end;
+      _jobDateRange = DateTimeRange(
+        start: picked,
+        end: picked.isAfter(currentEnd) ? picked : currentEnd,
+      );
+    });
+  }
+
+  Future<void> _pickJobEndDate() async {
+    final picked = await showDatePicker(
+      context: context,
+      initialDate: _jobDateRange.end,
+      firstDate: DateTime(2020, 1, 1),
+      lastDate: DateTime(2100, 12, 31),
+    );
+    if (picked == null) return;
+    setState(() {
+      final currentStart = _jobDateRange.start;
+      _jobDateRange = DateTimeRange(
+        start: picked.isBefore(currentStart) ? picked : currentStart,
+        end: picked,
+      );
+    });
+  }
+
   String _locationLabel(int locationId) {
     for (final location in _locations) {
       if (int.tryParse(location.id) == locationId) {
@@ -1088,15 +1557,6 @@ class _AdminPageState extends State<AdminPage> {
       }
     }
     return 'Location $locationId';
-  }
-
-  String _profileLabel(int profileId) {
-    for (final profile in _cleaningProfiles) {
-      if (int.tryParse(profile.id) == profileId) {
-        return profile.name;
-      }
-    }
-    return 'Profile $profileId';
   }
 
   String _taskDefinitionLabel(int taskDefinitionId) {
@@ -1158,9 +1618,7 @@ class _AdminPageState extends State<AdminPage> {
       await _loadAdminData();
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('Request #${request.id} moved to $status.'),
-        ),
+        SnackBar(content: Text('Request #${request.id} moved to $status.')),
       );
     } catch (error) {
       if (!mounted) return;
@@ -1207,10 +1665,52 @@ class _AdminPageState extends State<AdminPage> {
     return DataColumn(label: Text(label, style: _tableHeaderStyle));
   }
 
-  Widget _centeredSectionBody(Widget child) {
+  ({String label, Color bg, Color fg, Color border}) _employeeStatusBadge(
+    Employee employee,
+  ) {
+    final status = employee.status.trim().toLowerCase();
+    return _statusBadgeForValue(status);
+  }
+
+  ({String label, Color bg, Color fg, Color border}) _statusBadgeForValue(
+    String status,
+  ) {
+    switch (status) {
+      case 'active':
+        return (
+          label: 'A',
+          bg: const Color(0xFFE7F4ED),
+          fg: const Color(0xFF1F6A43),
+          border: const Color(0xFF49A07D),
+        );
+      case 'invited':
+        return (
+          label: 'V',
+          bg: const Color(0xFFFFF4E7),
+          fg: const Color(0xFF9B4B12),
+          border: const Color(0xFFEE7E32),
+        );
+      case 'deleted':
+        return (
+          label: 'D',
+          bg: const Color(0xFFFBE7EE),
+          fg: const Color(0xFFE63721),
+          border: const Color(0xFFE63721),
+        );
+      default:
+        return (
+          label: status.isEmpty ? '?' : status[0].toUpperCase(),
+          bg: const Color(0xFFEAF0F5),
+          fg: const Color(0xFF41588E),
+          border: const Color(0xFF8AA4C7),
+        );
+    }
+  }
+
+  Widget _centeredSectionBody(Widget child, {double maxWidth = 1240}) {
     return Center(
       child: ConstrainedBox(
-        constraints: const BoxConstraints(maxWidth: 1240),
+        constraints: BoxConstraints(maxWidth: maxWidth),
         child: child,
       ),
     );
@@ -1225,6 +1725,62 @@ class _AdminPageState extends State<AdminPage> {
     return 'Client $clientId';
   }
 
+  String _adminDisplayName() {
+    final email = AuthSession.current?.loginEmail?.trim() ?? '';
+    if (email.isEmpty) return 'Admin';
+    final local = email
+        .split('@')
+        .first
+        .replaceAll(RegExp(r'[._-]+'), ' ')
+        .trim();
+    if (local.isEmpty) return 'Admin';
+    return local
+        .split(' ')
+        .where((part) => part.isNotEmpty)
+        .map((part) => '${part[0].toUpperCase()}${part.substring(1)}')
+        .join(' ');
+  }
+
+  Widget _buildAdminWelcomeCard(bool dark) {
+    final panelBg = dark ? const Color(0xFF333740) : const Color(0xFFE8F3FA);
+    final panelBorder = dark
+        ? const Color(0xFF4A525F)
+        : const Color(0xFFA8D6F7);
+    final panelTitle = dark ? const Color(0xFFB39CD0) : const Color(0xFF442E6F);
+    return Card(
+      color: panelBg,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(12),
+        side: BorderSide(color: panelBorder),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Row(
+          children: [
+            const CircleAvatar(
+              radius: 27,
+              backgroundColor: Color(0xFFA8D6F7),
+              backgroundImage: AssetImage(
+                'assets/images/profiles/admin_profile.png',
+              ),
+            ),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Text(
+                'Welcome, ${_adminDisplayName()}',
+                style: TextStyle(
+                  fontWeight: FontWeight.w800,
+                  fontSize: 20,
+                  color: panelTitle,
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
   void _openJobsOverdue() {
     setState(() {
       _selectedSection = _AdminSection.jobs;
@@ -1232,41 +1788,97 @@ class _AdminPageState extends State<AdminPage> {
     });
   }
 
-  Widget _buildSidebar() {
+  Widget _buildSidebar({required bool collapsed, bool forDrawer = false}) {
+    final dark = Theme.of(context).brightness == Brightness.dark;
+    final sidebarBg = dark ? const Color(0xFF1F1F1F) : const Color(0xFFF7FCFE);
+    final sidebarBorder = dark
+        ? const Color(0xFF4A525F)
+        : const Color(0xFF296273).withValues(alpha: 0.22);
+    final navSelected = dark
+        ? const Color(0xFFB39CD0).withValues(alpha: 0.24)
+        : const Color(0xFFA8D6F7).withValues(alpha: 0.45);
+    final navFg = dark ? const Color(0xFFE4E4E4) : const Color(0xFF442E6F);
+    final navSelectedFg = dark
+        ? const Color(0xFFB39CD0)
+        : const Color(0xFF296273);
+
     Widget navTile({
       required _AdminSection section,
       required IconData icon,
       required String title,
     }) {
       final selected = _selectedSection == section;
-      return ListTile(
-        leading: Icon(icon),
-        title: Text(title),
+      final tile = ListTile(
+        dense: true,
+        leading: Icon(icon, size: 20),
+        iconColor: selected ? navSelectedFg : navFg,
+        textColor: selected ? navSelectedFg : navFg,
+        selectedTileColor: navSelected,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+        contentPadding: EdgeInsets.symmetric(horizontal: collapsed ? 12 : 14),
+        title: collapsed ? null : Text(title),
         selected: selected,
-        onTap: () => setState(() => _selectedSection = section),
+        onTap: () {
+          setState(() => _selectedSection = section);
+          if (forDrawer) Navigator.pop(context);
+        },
       );
+      if (collapsed && !forDrawer) {
+        return Tooltip(message: title, child: tile);
+      }
+      return tile;
     }
 
     return Container(
-      width: 260,
+      width: collapsed && !forDrawer ? 78 : 260,
       decoration: BoxDecoration(
-        color: Theme.of(context).cardColor,
-        border: Border(
-          right: BorderSide(
-            color: Theme.of(context).dividerColor.withValues(alpha: 0.3),
-          ),
-        ),
+        color: sidebarBg,
+        border: Border(right: BorderSide(color: sidebarBorder)),
       ),
       child: ListView(
         padding: const EdgeInsets.symmetric(vertical: 8),
         children: [
-          const Padding(
-            padding: EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-            child: Text(
-              'Admin Workspace',
-              style: TextStyle(fontWeight: FontWeight.w800, fontSize: 16),
+          Padding(
+            padding: EdgeInsets.symmetric(
+              horizontal: collapsed ? 8 : 16,
+              vertical: 8,
+            ),
+            child: Row(
+              children: [
+                if (!collapsed || forDrawer)
+                  Expanded(
+                    child: Text(
+                      'Admin Workspace',
+                      style: TextStyle(
+                        fontWeight: FontWeight.w800,
+                        fontSize: 16,
+                        color: navFg,
+                      ),
+                    ),
+                  ),
+                if (!forDrawer)
+                  IconButton(
+                    visualDensity: VisualDensity.compact,
+                    padding: EdgeInsets.zero,
+                    constraints: const BoxConstraints(
+                      minWidth: 28,
+                      minHeight: 28,
+                    ),
+                    tooltip: collapsed ? 'Expand sidebar' : 'Collapse sidebar',
+                    onPressed: () =>
+                        setState(() => _sidebarCollapsed = !_sidebarCollapsed),
+                    icon: Icon(
+                      collapsed ? Icons.chevron_right : Icons.chevron_left,
+                      color: navFg,
+                    ),
+                  ),
+              ],
             ),
           ),
+          if (collapsed && !forDrawer)
+            const SizedBox(height: 2)
+          else
+            const SizedBox(height: 2),
           navTile(
             section: _AdminSection.jobs,
             icon: Icons.work_outline,
@@ -1278,19 +1890,9 @@ class _AdminPageState extends State<AdminPage> {
             title: 'Cleaning Profiles',
           ),
           navTile(
-            section: _AdminSection.clients,
-            icon: Icons.business_outlined,
-            title: 'Clients',
-          ),
-          navTile(
-            section: _AdminSection.employees,
-            icon: Icons.badge_outlined,
-            title: 'Employees',
-          ),
-          navTile(
-            section: _AdminSection.locations,
-            icon: Icons.location_on_outlined,
-            title: 'Locations',
+            section: _AdminSection.management,
+            icon: Icons.groups_outlined,
+            title: 'People & Places',
           ),
           navTile(
             section: _AdminSection.reports,
@@ -1374,15 +1976,15 @@ class _AdminPageState extends State<AdminPage> {
                   label: 'In Progress',
                   value: _totalInProgressJobs.toString(),
                   icon: Icons.timelapse_outlined,
-                  bg: const Color.fromRGBO(233, 246, 241, 1),
-                  fg: const Color.fromRGBO(29, 102, 76, 1),
+                  bg: const Color.fromRGBO(231, 239, 252, 1),
+                  fg: const Color.fromRGBO(31, 63, 122, 1),
                 ),
                 _metricTile(
                   label: 'Completed',
                   value: _totalCompletedJobs.toString(),
                   icon: Icons.task_alt,
-                  bg: const Color.fromRGBO(227, 241, 233, 1),
-                  fg: const Color.fromRGBO(22, 89, 56, 1),
+                  bg: const Color.fromRGBO(241, 236, 252, 1),
+                  fg: const Color.fromRGBO(68, 46, 111, 1),
                 ),
                 _metricTile(
                   label: 'Overdue',
@@ -1395,8 +1997,8 @@ class _AdminPageState extends State<AdminPage> {
                   label: 'Employees',
                   value: '${_employees.length} total ($activeEmployees active)',
                   icon: Icons.groups_outlined,
-                  bg: const Color.fromRGBO(236, 244, 240, 1),
-                  fg: const Color.fromRGBO(45, 87, 73, 1),
+                  bg: const Color.fromRGBO(231, 239, 252, 1),
+                  fg: const Color.fromRGBO(31, 63, 122, 1),
                 ),
               ],
             ),
@@ -1445,41 +2047,50 @@ class _AdminPageState extends State<AdminPage> {
                   children: [
                     ChoiceChip(
                       label: const Text('Open'),
-                      selected: _cleaningRequestFilter == _CleaningRequestFilter.open,
+                      selected:
+                          _cleaningRequestFilter == _CleaningRequestFilter.open,
                       onSelected: (_) => setState(
-                        () => _cleaningRequestFilter = _CleaningRequestFilter.open,
+                        () => _cleaningRequestFilter =
+                            _CleaningRequestFilter.open,
                       ),
                     ),
                     ChoiceChip(
                       label: const Text('Reviewed'),
                       selected:
-                          _cleaningRequestFilter == _CleaningRequestFilter.reviewed,
+                          _cleaningRequestFilter ==
+                          _CleaningRequestFilter.reviewed,
                       onSelected: (_) => setState(
-                        () =>
-                            _cleaningRequestFilter = _CleaningRequestFilter.reviewed,
+                        () => _cleaningRequestFilter =
+                            _CleaningRequestFilter.reviewed,
                       ),
                     ),
                     ChoiceChip(
                       label: const Text('Scheduled'),
                       selected:
-                          _cleaningRequestFilter == _CleaningRequestFilter.scheduled,
+                          _cleaningRequestFilter ==
+                          _CleaningRequestFilter.scheduled,
                       onSelected: (_) => setState(
-                        () =>
-                            _cleaningRequestFilter = _CleaningRequestFilter.scheduled,
+                        () => _cleaningRequestFilter =
+                            _CleaningRequestFilter.scheduled,
                       ),
                     ),
                     ChoiceChip(
                       label: const Text('Closed'),
-                      selected: _cleaningRequestFilter == _CleaningRequestFilter.closed,
+                      selected:
+                          _cleaningRequestFilter ==
+                          _CleaningRequestFilter.closed,
                       onSelected: (_) => setState(
-                        () => _cleaningRequestFilter = _CleaningRequestFilter.closed,
+                        () => _cleaningRequestFilter =
+                            _CleaningRequestFilter.closed,
                       ),
                     ),
                     ChoiceChip(
                       label: const Text('All'),
-                      selected: _cleaningRequestFilter == _CleaningRequestFilter.all,
+                      selected:
+                          _cleaningRequestFilter == _CleaningRequestFilter.all,
                       onSelected: (_) => setState(
-                        () => _cleaningRequestFilter = _CleaningRequestFilter.all,
+                        () =>
+                            _cleaningRequestFilter = _CleaningRequestFilter.all,
                       ),
                     ),
                   ],
@@ -1491,94 +2102,100 @@ class _AdminPageState extends State<AdminPage> {
                     style: TextStyle(color: Theme.of(context).hintColor),
                   )
                 else
-                  ..._filteredCleaningRequests.take(8).map(
-                    (request) => Container(
-                      margin: const EdgeInsets.only(bottom: 8),
-                      padding: const EdgeInsets.all(10),
-                      decoration: BoxDecoration(
-                        border: Border.all(color: const Color(0xFFD1D9E6)),
-                        borderRadius: BorderRadius.circular(10),
-                      ),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Row(
+                  ..._filteredCleaningRequests
+                      .take(8)
+                      .map(
+                        (request) => Container(
+                          margin: const EdgeInsets.only(bottom: 8),
+                          padding: const EdgeInsets.all(10),
+                          decoration: BoxDecoration(
+                            border: Border.all(color: const Color(0xFFD1D9E6)),
+                            borderRadius: BorderRadius.circular(10),
+                          ),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
-                              Text(
-                                'Request #${request.id}',
-                                style: const TextStyle(
-                                  fontWeight: FontWeight.w700,
-                                ),
+                              Row(
+                                children: [
+                                  Text(
+                                    'Request #${request.id}',
+                                    style: const TextStyle(
+                                      fontWeight: FontWeight.w700,
+                                    ),
+                                  ),
+                                  const SizedBox(width: 8),
+                                  Chip(
+                                    visualDensity: VisualDensity.compact,
+                                    label: Text(request.status),
+                                  ),
+                                  const Spacer(),
+                                  Text(
+                                    '${formatDateMdy(request.requestedDate)} • ${request.requestedTime}',
+                                    style: TextStyle(
+                                      color: Theme.of(context).hintColor,
+                                    ),
+                                  ),
+                                ],
                               ),
-                              const SizedBox(width: 8),
-                              Chip(
-                                visualDensity: VisualDensity.compact,
-                                label: Text(request.status),
-                              ),
-                              const Spacer(),
+                              const SizedBox(height: 4),
                               Text(
-                                '${formatDateMdy(request.requestedDate)} • ${request.requestedTime}',
+                                '${_clientNameById(request.clientId)} • ${request.requesterName}',
+                              ),
+                              Text(
+                                '${request.requesterEmail} • ${request.requesterPhone}',
                                 style: TextStyle(
                                   color: Theme.of(context).hintColor,
                                 ),
                               ),
-                            ],
-                          ),
-                          const SizedBox(height: 4),
-                          Text(
-                            '${_clientNameById(request.clientId)} • ${request.requesterName}',
-                          ),
-                          Text(
-                            '${request.requesterEmail} • ${request.requesterPhone}',
-                            style: TextStyle(color: Theme.of(context).hintColor),
-                          ),
-                          if ((request.cleaningDetails ?? '').trim().isNotEmpty)
-                            Padding(
-                              padding: const EdgeInsets.only(top: 4),
-                              child: Text(
-                                request.cleaningDetails!.trim(),
-                                maxLines: 2,
-                                overflow: TextOverflow.ellipsis,
-                              ),
-                            ),
-                          const SizedBox(height: 8),
-                          Wrap(
-                            spacing: 8,
-                            runSpacing: 8,
-                            children: [
-                              OutlinedButton(
-                                onPressed: request.status == 'REVIEWED'
-                                    ? null
-                                    : () => _updateCleaningRequestStatus(
-                                        request,
-                                        'REVIEWED',
-                                      ),
-                                child: const Text('Mark Reviewed'),
-                              ),
-                              OutlinedButton(
-                                onPressed: request.status == 'SCHEDULED'
-                                    ? null
-                                    : () => _updateCleaningRequestStatus(
-                                        request,
-                                        'SCHEDULED',
-                                      ),
-                                child: const Text('Mark Scheduled'),
-                              ),
-                              OutlinedButton(
-                                onPressed: request.status == 'CLOSED'
-                                    ? null
-                                    : () => _updateCleaningRequestStatus(
-                                        request,
-                                        'CLOSED',
-                                      ),
-                                child: const Text('Close'),
+                              if ((request.cleaningDetails ?? '')
+                                  .trim()
+                                  .isNotEmpty)
+                                Padding(
+                                  padding: const EdgeInsets.only(top: 4),
+                                  child: Text(
+                                    request.cleaningDetails!.trim(),
+                                    maxLines: 2,
+                                    overflow: TextOverflow.ellipsis,
+                                  ),
+                                ),
+                              const SizedBox(height: 8),
+                              Wrap(
+                                spacing: 8,
+                                runSpacing: 8,
+                                children: [
+                                  OutlinedButton(
+                                    onPressed: request.status == 'REVIEWED'
+                                        ? null
+                                        : () => _updateCleaningRequestStatus(
+                                            request,
+                                            'REVIEWED',
+                                          ),
+                                    child: const Text('Mark Reviewed'),
+                                  ),
+                                  OutlinedButton(
+                                    onPressed: request.status == 'SCHEDULED'
+                                        ? null
+                                        : () => _updateCleaningRequestStatus(
+                                            request,
+                                            'SCHEDULED',
+                                          ),
+                                    child: const Text('Mark Scheduled'),
+                                  ),
+                                  OutlinedButton(
+                                    onPressed: request.status == 'CLOSED'
+                                        ? null
+                                        : () => _updateCleaningRequestStatus(
+                                            request,
+                                            'CLOSED',
+                                          ),
+                                    child: const Text('Close'),
+                                  ),
+                                ],
                               ),
                             ],
                           ),
-                        ],
+                        ),
                       ),
-                    ),
-                  ),
               ],
             ),
           ),
@@ -1676,371 +2293,108 @@ class _AdminPageState extends State<AdminPage> {
     );
   }
 
-  Widget _buildEmployeesSection() {
-    final rows = _filteredEmployees;
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        _buildSectionHeader(
-          'Employees',
-          'Create, edit, delete, and filter employees by status.',
-        ),
-        Expanded(
-          child: _centeredSectionBody(
-            Column(
-              children: [
-                Row(
-                  children: [
-                    Wrap(
-                      spacing: 8,
-                      children: [
-                        ChoiceChip(
-                          label: const Text('Active'),
-                          selected: _employeeFilter == _EmployeeFilter.active,
-                          onSelected: (_) => setState(
-                            () => _employeeFilter = _EmployeeFilter.active,
-                          ),
-                        ),
-                        ChoiceChip(
-                          label: const Text('Inactive'),
-                          selected: _employeeFilter == _EmployeeFilter.inactive,
-                          onSelected: (_) => setState(
-                            () => _employeeFilter = _EmployeeFilter.inactive,
-                          ),
-                        ),
-                        ChoiceChip(
-                          label: const Text('All'),
-                          selected: _employeeFilter == _EmployeeFilter.all,
-                          onSelected: (_) => setState(
-                            () => _employeeFilter = _EmployeeFilter.all,
-                          ),
-                        ),
-                      ],
-                    ),
-                    const Spacer(),
-                    FilledButton.icon(
-                      onPressed: AppEnv.isDemoMode ? null : _showCreateDialog,
-                      icon: const Icon(Icons.person_add),
-                      label: const Text('Create Employee'),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 12),
-                Expanded(
-                  child: Card(
-                    child: SingleChildScrollView(
-                      scrollDirection: Axis.horizontal,
-                      child: SingleChildScrollView(
-                        child: DataTable(
-                          columns: [
-                            _tableColumn('Employee #'),
-                            _tableColumn('Name'),
-                            _tableColumn('Status'),
-                            _tableColumn('Email'),
-                            _tableColumn('Phone'),
-                            _tableColumn('Actions'),
-                          ],
-                          rows: rows
-                              .map(
-                                (employee) => DataRow(
-                                  cells: [
-                                    DataCell(Text(employee.employeeNumber)),
-                                    DataCell(Text(employee.name)),
-                                    DataCell(Text(employee.status)),
-                                    DataCell(Text(employee.email ?? '—')),
-                                    DataCell(Text(employee.phoneNumber ?? '—')),
-                                    DataCell(
-                                      Row(
-                                        children: [
-                                          IconButton(
-                                            icon: const Icon(Icons.edit),
-                                            tooltip: 'Edit',
-                                            onPressed: AppEnv.isDemoMode
-                                                ? null
-                                                : () =>
-                                                      _showEditDialog(employee),
-                                          ),
-                                          IconButton(
-                                            icon: const Icon(Icons.delete),
-                                            tooltip: 'Delete',
-                                            onPressed: AppEnv.isDemoMode
-                                                ? null
-                                                : () => _delete(employee),
-                                          ),
-                                        ],
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                              )
-                              .toList(),
-                        ),
-                      ),
-                    ),
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ),
-      ],
-    );
-  }
-
-  Widget _buildClientsSection() {
-    final rows = _filteredClients;
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        _buildSectionHeader(
-          'Clients',
-          'Create, edit, delete, and filter clients by status.',
-        ),
-        Expanded(
-          child: _centeredSectionBody(
-            Column(
-              children: [
-                Row(
-                  children: [
-                    Wrap(
-                      spacing: 8,
-                      children: [
-                        ChoiceChip(
-                          label: const Text('Active'),
-                          selected: _clientFilter == _ClientFilter.active,
-                          onSelected: (_) => setState(
-                            () => _clientFilter = _ClientFilter.active,
-                          ),
-                        ),
-                        ChoiceChip(
-                          label: const Text('Inactive'),
-                          selected: _clientFilter == _ClientFilter.inactive,
-                          onSelected: (_) => setState(
-                            () => _clientFilter = _ClientFilter.inactive,
-                          ),
-                        ),
-                        ChoiceChip(
-                          label: const Text('All'),
-                          selected: _clientFilter == _ClientFilter.all,
-                          onSelected: (_) =>
-                              setState(() => _clientFilter = _ClientFilter.all),
-                        ),
-                      ],
-                    ),
-                    const Spacer(),
-                    FilledButton.icon(
-                      onPressed: AppEnv.isDemoMode
-                          ? null
-                          : _showCreateClientDialog,
-                      icon: const Icon(Icons.business),
-                      label: const Text('Create Client'),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 12),
-                Expanded(
-                  child: Card(
-                    child: SingleChildScrollView(
-                      scrollDirection: Axis.horizontal,
-                      child: SingleChildScrollView(
-                        child: DataTable(
-                          columns: [
-                            _tableColumn('Client #'),
-                            _tableColumn('Name'),
-                            _tableColumn('Status'),
-                            _tableColumn('Email'),
-                            _tableColumn('Phone'),
-                            _tableColumn('Actions'),
-                          ],
-                          rows: rows
-                              .map(
-                                (client) => DataRow(
-                                  cells: [
-                                    DataCell(Text(client.clientNumber)),
-                                    DataCell(Text(client.name)),
-                                    DataCell(Text(client.status)),
-                                    DataCell(Text(client.email ?? '—')),
-                                    DataCell(Text(client.phoneNumber ?? '—')),
-                                    DataCell(
-                                      Row(
-                                        children: [
-                                          IconButton(
-                                            icon: const Icon(Icons.edit),
-                                            tooltip: 'Edit',
-                                            onPressed: AppEnv.isDemoMode
-                                                ? null
-                                                : () => _showEditClientDialog(
-                                                    client,
-                                                  ),
-                                          ),
-                                          IconButton(
-                                            icon: const Icon(Icons.delete),
-                                            tooltip: 'Delete',
-                                            onPressed: AppEnv.isDemoMode
-                                                ? null
-                                                : () => _deleteClient(client),
-                                          ),
-                                        ],
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                              )
-                              .toList(),
-                        ),
-                      ),
-                    ),
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ),
-      ],
-    );
-  }
-
-  Widget _buildLocationsSection() {
-    final rows = _filteredLocations;
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        _buildSectionHeader(
-          'Locations',
-          'Create, edit, delete, and filter locations by status.',
-        ),
-        Expanded(
-          child: _centeredSectionBody(
-            Column(
-              children: [
-                Row(
-                  children: [
-                    Wrap(
-                      spacing: 8,
-                      children: [
-                        ChoiceChip(
-                          label: const Text('Active'),
-                          selected: _locationFilter == _LocationFilter.active,
-                          onSelected: (_) => setState(
-                            () => _locationFilter = _LocationFilter.active,
-                          ),
-                        ),
-                        ChoiceChip(
-                          label: const Text('Inactive'),
-                          selected: _locationFilter == _LocationFilter.inactive,
-                          onSelected: (_) => setState(
-                            () => _locationFilter = _LocationFilter.inactive,
-                          ),
-                        ),
-                        ChoiceChip(
-                          label: const Text('All'),
-                          selected: _locationFilter == _LocationFilter.all,
-                          onSelected: (_) => setState(
-                            () => _locationFilter = _LocationFilter.all,
-                          ),
-                        ),
-                      ],
-                    ),
-                    const Spacer(),
-                    FilledButton.icon(
-                      onPressed: AppEnv.isDemoMode
-                          ? null
-                          : _showCreateLocationDialog,
-                      icon: const Icon(Icons.add_location_alt),
-                      label: const Text('Create Location'),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 12),
-                Expanded(
-                  child: Card(
-                    child: SingleChildScrollView(
-                      scrollDirection: Axis.horizontal,
-                      child: SingleChildScrollView(
-                        child: DataTable(
-                          columns: [
-                            _tableColumn('Photo'),
-                            _tableColumn('Client'),
-                            _tableColumn('Type'),
-                            _tableColumn('Status'),
-                            _tableColumn('Address'),
-                            _tableColumn('Actions'),
-                          ],
-                          rows: rows
-                              .map(
-                                (location) => DataRow(
-                                  cells: [
-                                    const DataCell(
-                                      CircleAvatar(
-                                        radius: 14,
-                                        child: Icon(Icons.photo, size: 16),
-                                      ),
-                                    ),
-                                    DataCell(
-                                      Text(_clientNameById(location.clientId)),
-                                    ),
-                                    DataCell(Text(location.type)),
-                                    DataCell(Text(location.status)),
-                                    DataCell(
-                                      Text(
-                                        [
-                                              location.address ?? '',
-                                              location.city ?? '',
-                                              location.state ?? '',
-                                              location.zipCode ?? '',
-                                            ]
-                                            .where((e) => e.trim().isNotEmpty)
-                                            .join(', '),
-                                      ),
-                                    ),
-                                    DataCell(
-                                      Row(
-                                        children: [
-                                          IconButton(
-                                            icon: const Icon(Icons.edit),
-                                            tooltip: 'Edit',
-                                            onPressed: AppEnv.isDemoMode
-                                                ? null
-                                                : () => _showEditLocationDialog(
-                                                    location,
-                                                  ),
-                                          ),
-                                          IconButton(
-                                            icon: const Icon(Icons.delete),
-                                            tooltip: 'Delete',
-                                            onPressed: AppEnv.isDemoMode
-                                                ? null
-                                                : () =>
-                                                      _deleteLocation(location),
-                                          ),
-                                        ],
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                              )
-                              .toList(),
-                        ),
-                      ),
-                    ),
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ),
-      ],
-    );
-  }
-
   Widget _buildJobsSection() {
-    final rows = _filteredJobs;
+    final dark = Theme.of(context).brightness == Brightness.dark;
+    final rangeStart = DateTime(
+      _jobDateRange.start.year,
+      _jobDateRange.start.month,
+      _jobDateRange.start.day,
+    );
+    final rangeEnd = DateTime(
+      _jobDateRange.end.year,
+      _jobDateRange.end.month,
+      _jobDateRange.end.day,
+      23,
+      59,
+      59,
+    );
+    final rows = _filteredJobs.where((job) {
+      final scheduled = parseFlexibleDate(job.scheduledDate);
+      if (scheduled == null) return true;
+      return !scheduled.isBefore(rangeStart) && !scheduled.isAfter(rangeEnd);
+    }).toList();
+    rows.sort((a, b) {
+      final aDate = parseFlexibleDate(a.scheduledDate);
+      final bDate = parseFlexibleDate(b.scheduledDate);
+      if (aDate == null && bDate == null) return 0;
+      if (aDate == null) return 1;
+      if (bDate == null) return -1;
+      return bDate.compareTo(aDate);
+    });
+
+    String minutesLabel(int? value) {
+      if (value == null || value < 0) return '—';
+      final hours = value ~/ 60;
+      final minutes = value % 60;
+      if (hours == 0) return '${minutes}m';
+      return '${hours}h ${minutes}m';
+    }
+
+    ({String label, Color bg, Color fg, Color border}) statusBadge(Job job) {
+      final status = job.status.trim().toLowerCase();
+      if (_isOverdue(job)) {
+        return (
+          label: 'O',
+          bg: dark ? const Color(0xFF4A2D35) : const Color(0xFFFFE5EC),
+          fg: dark ? const Color(0xFFFFC1CC) : const Color(0xFFE63721),
+          border: dark ? const Color(0xFFB85B74) : const Color(0xFFE63721),
+        );
+      }
+      return switch (status) {
+        'assigned' => (
+          label: 'A',
+          bg: dark ? const Color(0xFF5A5530) : const Color(0xFFFFF7C5),
+          fg: dark ? const Color(0xFFF7EFAE) : const Color(0xFF7A6F00),
+          border: dark ? const Color(0xFFCADA56) : const Color(0xFFB3A846),
+        ),
+        'pending' => (
+          label: 'P',
+          bg: dark ? const Color(0xFF4B3D2A) : const Color(0xFFFFE3CC),
+          fg: dark ? const Color(0xFFFFD3AD) : const Color(0xFF8A4E17),
+          border: dark ? const Color(0xFFB17945) : const Color(0xFFEE7E32),
+        ),
+        'in_progress' || 'in progress' || 'in-progress' => (
+          label: 'I',
+          bg: dark ? const Color(0xFF3D3550) : const Color(0xFFE8DDF7),
+          fg: dark ? const Color(0xFFE4E4E4) : const Color(0xFF442E6F),
+          border: dark ? const Color(0xFF8C74B2) : const Color(0xFF7A56A5),
+        ),
+        'completed' => (
+          label: 'C',
+          bg: dark ? const Color(0xFF2C4A40) : const Color(0xFFDBF3E8),
+          fg: dark ? const Color(0xFFE4E4E4) : const Color(0xFF1E6A4F),
+          border: dark ? const Color(0xFF6DB598) : const Color(0xFF49A07D),
+        ),
+        _ => (
+          label: '?',
+          bg: dark ? const Color(0xFF41424B) : const Color(0xFFE9EEF2),
+          fg: dark ? const Color(0xFFE4E4E4) : const Color(0xFF41588E),
+          border: dark ? const Color(0xFF7A7E8C) : const Color(0xFFBEDCE4),
+        ),
+      };
+    }
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        _buildSectionHeader(
-          'Jobs',
-          'Create jobs, link location + cleaning profile, and monitor status.',
+        Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Expanded(
+              child: Padding(
+                padding: EdgeInsets.only(bottom: 12),
+                child: Text(
+                  'Jobs',
+                  style: TextStyle(fontSize: 20, fontWeight: FontWeight.w800),
+                ),
+              ),
+            ),
+            FilledButton.icon(
+              onPressed: _showCreateJobDialog,
+              icon: const Icon(Icons.add),
+              label: const Text('Create Job'),
+            ),
+          ],
         ),
         Expanded(
           child: _centeredSectionBody(
@@ -2048,119 +2402,182 @@ class _AdminPageState extends State<AdminPage> {
               children: [
                 Row(
                   children: [
-                    Expanded(
-                      child: Wrap(
-                        spacing: 8,
-                        runSpacing: 8,
-                        children: [
-                          ChoiceChip(
-                            label: const Text('Pending'),
-                            selected: _jobFilter == _JobFilter.pending,
-                            onSelected: (_) =>
-                                setState(() => _jobFilter = _JobFilter.pending),
-                          ),
-                          ChoiceChip(
-                            label: const Text('Assigned'),
-                            selected: _jobFilter == _JobFilter.assigned,
-                            onSelected: (_) => setState(
-                              () => _jobFilter = _JobFilter.assigned,
-                            ),
-                          ),
-                          ChoiceChip(
-                            label: const Text('In Progress'),
-                            selected: _jobFilter == _JobFilter.inProgress,
-                            onSelected: (_) => setState(
-                              () => _jobFilter = _JobFilter.inProgress,
-                            ),
-                          ),
-                          ChoiceChip(
-                            label: const Text('Completed'),
-                            selected: _jobFilter == _JobFilter.completed,
-                            onSelected: (_) => setState(
-                              () => _jobFilter = _JobFilter.completed,
-                            ),
-                          ),
-                          ChoiceChip(
-                            label: const Text('Overdue'),
-                            selected: _jobFilter == _JobFilter.overdue,
-                            onSelected: (_) =>
-                                setState(() => _jobFilter = _JobFilter.overdue),
-                          ),
-                          ChoiceChip(
-                            label: const Text('All'),
-                            selected: _jobFilter == _JobFilter.all,
-                            onSelected: (_) =>
-                                setState(() => _jobFilter = _JobFilter.all),
-                          ),
-                        ],
+                    SizedBox(
+                      width: 210,
+                      child: DropdownButtonFormField<_JobFilter>(
+                        initialValue: _jobFilter,
+                        decoration: const InputDecoration(
+                          labelText: 'Status Filter',
+                          border: OutlineInputBorder(),
+                          isDense: true,
+                        ),
+                        items: _JobFilter.values
+                            .map(
+                              (filter) => DropdownMenuItem(
+                                value: filter,
+                                child: Text(_jobFilterLabel(filter)),
+                              ),
+                            )
+                            .toList(),
+                        onChanged: (next) {
+                          if (next == null) return;
+                          setState(() => _jobFilter = next);
+                        },
+                      ),
+                    ),
+                    const Spacer(),
+                    Text(
+                      'Date range',
+                      style: TextStyle(
+                        color: Theme.of(context).hintColor,
+                        fontWeight: FontWeight.w700,
                       ),
                     ),
                     const SizedBox(width: 8),
-                    FilledButton.icon(
-                      onPressed: AppEnv.isDemoMode
-                          ? null
-                          : _showCreateJobDialog,
-                      icon: const Icon(Icons.add),
-                      label: const Text('Create Job'),
+                    OutlinedButton.icon(
+                      onPressed: _pickJobStartDate,
+                      icon: const Icon(Icons.date_range, size: 16),
+                      label: Text(
+                        '${_jobDateRange.start.month}-${_jobDateRange.start.day}-${_jobDateRange.start.year}',
+                      ),
+                    ),
+                    const SizedBox(width: 6),
+                    const Text('to'),
+                    const SizedBox(width: 6),
+                    OutlinedButton.icon(
+                      onPressed: _pickJobEndDate,
+                      icon: const Icon(Icons.date_range, size: 16),
+                      label: Text(
+                        '${_jobDateRange.end.month}-${_jobDateRange.end.day}-${_jobDateRange.end.year}',
+                      ),
                     ),
                   ],
                 ),
                 const SizedBox(height: 12),
                 Expanded(
-                  child: Card(
-                    child: SingleChildScrollView(
-                      scrollDirection: Axis.horizontal,
+                  child: LayoutBuilder(
+                    builder: (context, constraints) => Card(
                       child: SingleChildScrollView(
-                        child: DataTable(
-                          columns: [
-                            _tableColumn('Job #'),
-                            _tableColumn('Client'),
-                            _tableColumn('Status'),
-                            _tableColumn('Scheduled'),
-                            _tableColumn('Location'),
-                            _tableColumn('Cleaning Profile'),
-                            _tableColumn('Actions'),
-                          ],
-                          rows: rows
-                              .map(
-                                (job) => DataRow(
-                                  cells: [
-                                    DataCell(Text(job.jobNumber)),
-                                    DataCell(Text(job.clientName ?? '—')),
-                                    DataCell(Text(job.status)),
-                                    DataCell(
-                                      Text(formatDateMdy(job.scheduledDate)),
-                                    ),
-                                    DataCell(
-                                      Text(_locationLabel(job.locationId)),
-                                    ),
-                                    DataCell(
-                                      Text(_profileLabel(job.profileId)),
-                                    ),
-                                    DataCell(
-                                      Row(
-                                        children: [
-                                          IconButton(
-                                            icon: const Icon(Icons.edit),
-                                            tooltip: 'Edit',
-                                            onPressed: AppEnv.isDemoMode
-                                                ? null
-                                                : () => _showEditJobDialog(job),
+                        scrollDirection: Axis.horizontal,
+                        child: ConstrainedBox(
+                          constraints: BoxConstraints(
+                            minWidth: constraints.maxWidth,
+                          ),
+                          child: SingleChildScrollView(
+                            child: DataTable(
+                              columns: [
+                                _tableColumn(''),
+                                _tableColumn('Scheduled'),
+                                _tableColumn('Client'),
+                                _tableColumn('Cleaner'),
+                                _tableColumn('Est. Duration'),
+                                _tableColumn('Actual Duration'),
+                                _tableColumn('Actions'),
+                              ],
+                              rows: rows
+                                  .map(
+                                    (job) => DataRow(
+                                      cells: [
+                                        DataCell(
+                                          Builder(
+                                            builder: (context) {
+                                              final badge = statusBadge(job);
+                                              return Container(
+                                                width: 28,
+                                                height: 28,
+                                                alignment: Alignment.center,
+                                                decoration: BoxDecoration(
+                                                  shape: BoxShape.circle,
+                                                  color: badge.bg,
+                                                  border: Border.all(
+                                                    color: badge.border,
+                                                    width: 1.1,
+                                                  ),
+                                                ),
+                                                child: Text(
+                                                  badge.label,
+                                                  style: TextStyle(
+                                                    color: badge.fg,
+                                                    fontWeight: FontWeight.w800,
+                                                    fontSize: 12,
+                                                  ),
+                                                ),
+                                              );
+                                            },
                                           ),
-                                          IconButton(
-                                            icon: const Icon(Icons.delete),
-                                            tooltip: 'Delete',
-                                            onPressed: AppEnv.isDemoMode
-                                                ? null
-                                                : () => _deleteJob(job),
+                                        ),
+                                        DataCell(
+                                          Text(
+                                            formatDateMdy(job.scheduledDate),
                                           ),
-                                        ],
-                                      ),
+                                        ),
+                                        DataCell(Text(job.clientName ?? '—')),
+                                        DataCell(
+                                          Text(
+                                            _jobCleanerNameByJobId[job.id] ??
+                                                'Unassigned',
+                                          ),
+                                        ),
+                                        DataCell(
+                                          Text(
+                                            minutesLabel(
+                                              job.estimatedDurationMinutes,
+                                            ),
+                                          ),
+                                        ),
+                                        DataCell(
+                                          Text(
+                                            minutesLabel(
+                                              job.actualDurationMinutes,
+                                            ),
+                                          ),
+                                        ),
+                                        DataCell(
+                                          Row(
+                                            mainAxisSize: MainAxisSize.min,
+                                            children: [
+                                              IconButton(
+                                                icon: const Icon(Icons.edit),
+                                                tooltip: 'Edit',
+                                                visualDensity:
+                                                    VisualDensity.compact,
+                                                padding: EdgeInsets.zero,
+                                                constraints:
+                                                    const BoxConstraints(
+                                                      minWidth: 24,
+                                                      minHeight: 24,
+                                                    ),
+                                                splashRadius: 14,
+                                                iconSize: 18,
+                                                onPressed: () =>
+                                                    _showEditJobDialog(job),
+                                              ),
+                                              const SizedBox(width: 10),
+                                              IconButton(
+                                                icon: const Icon(Icons.delete),
+                                                tooltip: 'Delete',
+                                                visualDensity:
+                                                    VisualDensity.compact,
+                                                padding: EdgeInsets.zero,
+                                                constraints:
+                                                    const BoxConstraints(
+                                                      minWidth: 24,
+                                                      minHeight: 24,
+                                                    ),
+                                                splashRadius: 14,
+                                                iconSize: 18,
+                                                onPressed: () =>
+                                                    _deleteJob(job),
+                                              ),
+                                            ],
+                                          ),
+                                        ),
+                                      ],
                                     ),
-                                  ],
-                                ),
-                              )
-                              .toList(),
+                                  )
+                                  .toList(),
+                            ),
+                          ),
                         ),
                       ),
                     ),
@@ -2168,6 +2585,462 @@ class _AdminPageState extends State<AdminPage> {
                 ),
               ],
             ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  String get _managementModelSubtitle {
+    switch (_managementModel) {
+      case _ManagementModel.employees:
+        return '';
+      case _ManagementModel.clients:
+        return 'Client records and status filters.';
+      case _ManagementModel.locations:
+        return 'Location records and status filters.';
+    }
+  }
+
+  Widget _buildManagementSection() {
+    final rowsCount = switch (_managementModel) {
+      _ManagementModel.employees => _filteredEmployees.length,
+      _ManagementModel.clients => _filteredClients.length,
+      _ManagementModel.locations => _filteredLocations.length,
+    };
+
+    final createButton = switch (_managementModel) {
+      _ManagementModel.employees => (
+        label: 'Create Employee',
+        icon: Icons.person_add,
+        onPressed: _showCreateDialog,
+      ),
+      _ManagementModel.clients => (
+        label: 'Create Client',
+        icon: Icons.business,
+        onPressed: _showCreateClientDialog,
+      ),
+      _ManagementModel.locations => (
+        label: 'Create Location',
+        icon: Icons.add_location_alt,
+        onPressed: _showCreateLocationDialog,
+      ),
+    };
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        _buildSectionHeader(
+          'People & Places',
+          'Manage employees, clients, and locations.',
+        ),
+        Expanded(
+          child: _centeredSectionBody(
+            SizedBox(
+              width: double.infinity,
+              child: Card(
+                child: Padding(
+                  padding: const EdgeInsets.all(32),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        children: [
+                          SizedBox(
+                            width: 300,
+                            child: DropdownButtonFormField<_ManagementModel>(
+                              initialValue: _managementModel,
+                              decoration: const InputDecoration(
+                                labelText: 'Management Type',
+                                border: OutlineInputBorder(),
+                                isDense: true,
+                              ),
+                              items: const [
+                                DropdownMenuItem(
+                                  value: _ManagementModel.employees,
+                                  child: Text('Employees'),
+                                ),
+                                DropdownMenuItem(
+                                  value: _ManagementModel.clients,
+                                  child: Text('Clients'),
+                                ),
+                                DropdownMenuItem(
+                                  value: _ManagementModel.locations,
+                                  child: Text('Locations'),
+                                ),
+                              ],
+                              onChanged: (next) {
+                                if (next == null) return;
+                                setState(() => _managementModel = next);
+                              },
+                            ),
+                          ),
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: Text(
+                              _managementModelSubtitle,
+                              style: TextStyle(
+                                color: Theme.of(context).hintColor,
+                              ),
+                            ),
+                          ),
+                          const SizedBox(width: 12),
+                          FilledButton.icon(
+                            onPressed: createButton.onPressed,
+                            icon: Icon(createButton.icon),
+                            label: Text(createButton.label),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 12),
+                      Row(
+                        children: [
+                          Expanded(
+                            child: Wrap(
+                              spacing: 8,
+                              runSpacing: 8,
+                              children: [
+                                ChoiceChip(
+                                  label: const Text('Active'),
+                                  selected: switch (_managementModel) {
+                                    _ManagementModel.employees =>
+                                      _employeeFilter == _EmployeeFilter.active,
+                                    _ManagementModel.clients =>
+                                      _clientFilter == _ClientFilter.active,
+                                    _ManagementModel.locations =>
+                                      _locationFilter == _LocationFilter.active,
+                                  },
+                                  onSelected: (_) => setState(() {
+                                    switch (_managementModel) {
+                                      case _ManagementModel.employees:
+                                        _employeeFilter =
+                                            _EmployeeFilter.active;
+                                      case _ManagementModel.clients:
+                                        _clientFilter = _ClientFilter.active;
+                                      case _ManagementModel.locations:
+                                        _locationFilter =
+                                            _LocationFilter.active;
+                                    }
+                                  }),
+                                ),
+                                ChoiceChip(
+                                  label: Text(
+                                    _managementModel ==
+                                            _ManagementModel.employees
+                                        ? 'Invited'
+                                        : 'Inactive',
+                                  ),
+                                  selected: switch (_managementModel) {
+                                    _ManagementModel.employees =>
+                                      _employeeFilter ==
+                                          _EmployeeFilter.invited,
+                                    _ManagementModel.clients =>
+                                      _clientFilter == _ClientFilter.inactive,
+                                    _ManagementModel.locations =>
+                                      _locationFilter ==
+                                          _LocationFilter.inactive,
+                                  },
+                                  onSelected: (_) => setState(() {
+                                    switch (_managementModel) {
+                                      case _ManagementModel.employees:
+                                        _employeeFilter =
+                                            _EmployeeFilter.invited;
+                                      case _ManagementModel.clients:
+                                        _clientFilter = _ClientFilter.inactive;
+                                      case _ManagementModel.locations:
+                                        _locationFilter =
+                                            _LocationFilter.inactive;
+                                    }
+                                  }),
+                                ),
+                                ChoiceChip(
+                                  label: const Text('All'),
+                                  selected: switch (_managementModel) {
+                                    _ManagementModel.employees =>
+                                      _employeeFilter == _EmployeeFilter.all,
+                                    _ManagementModel.clients =>
+                                      _clientFilter == _ClientFilter.all,
+                                    _ManagementModel.locations =>
+                                      _locationFilter == _LocationFilter.all,
+                                  },
+                                  onSelected: (_) => setState(() {
+                                    switch (_managementModel) {
+                                      case _ManagementModel.employees:
+                                        _employeeFilter = _EmployeeFilter.all;
+                                      case _ManagementModel.clients:
+                                        _clientFilter = _ClientFilter.all;
+                                      case _ManagementModel.locations:
+                                        _locationFilter = _LocationFilter.all;
+                                    }
+                                  }),
+                                ),
+                              ],
+                            ),
+                          ),
+                          const SizedBox(width: 12),
+                          Text(
+                            '$rowsCount records',
+                            style: TextStyle(
+                              color: Theme.of(context).hintColor,
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 12),
+                      Expanded(
+                        child: SingleChildScrollView(
+                          scrollDirection: Axis.horizontal,
+                          child: SingleChildScrollView(
+                            child: DataTable(
+                              columns: switch (_managementModel) {
+                                _ManagementModel.employees => [
+                                  _tableColumn(''),
+                                  _tableColumn('Name'),
+                                  _tableColumn('Email'),
+                                  _tableColumn('Phone'),
+                                  _tableColumn('Employee #'),
+                                  _tableColumn('Actions'),
+                                ],
+                                _ManagementModel.clients => [
+                                  _tableColumn('Client #'),
+                                  _tableColumn('Name'),
+                                  _tableColumn('Status'),
+                                  _tableColumn('Email'),
+                                  _tableColumn('Phone'),
+                                  _tableColumn('Actions'),
+                                ],
+                                _ManagementModel.locations => [
+                                  _tableColumn('Photo'),
+                                  _tableColumn('Client'),
+                                  _tableColumn('Type'),
+                                  _tableColumn('Status'),
+                                  _tableColumn('Address'),
+                                  _tableColumn('Actions'),
+                                ],
+                              },
+                              rows: switch (_managementModel) {
+                                _ManagementModel.employees =>
+                                  _filteredEmployees
+                                      .map(
+                                        (employee) => DataRow(
+                                          cells: [
+                                            DataCell(
+                                              Builder(
+                                                builder: (context) {
+                                                  final badge =
+                                                      _employeeStatusBadge(
+                                                        employee,
+                                                      );
+                                                  return Container(
+                                                    width: 28,
+                                                    height: 28,
+                                                    alignment: Alignment.center,
+                                                    decoration: BoxDecoration(
+                                                      shape: BoxShape.circle,
+                                                      color: badge.bg,
+                                                      border: Border.all(
+                                                        color: badge.border,
+                                                        width: 1.1,
+                                                      ),
+                                                    ),
+                                                    child: Text(
+                                                      badge.label,
+                                                      style: TextStyle(
+                                                        color: badge.fg,
+                                                        fontWeight:
+                                                            FontWeight.w800,
+                                                        fontSize: 12,
+                                                      ),
+                                                    ),
+                                                  );
+                                                },
+                                              ),
+                                            ),
+                                            DataCell(Text(employee.name)),
+                                            DataCell(
+                                              Text(employee.email ?? '—'),
+                                            ),
+                                            DataCell(
+                                              Text(employee.phoneNumber ?? '—'),
+                                            ),
+                                            DataCell(
+                                              Text(employee.employeeNumber),
+                                            ),
+                                            DataCell(
+                                              Row(
+                                                mainAxisSize: MainAxisSize.min,
+                                                children: [
+                                                  IconButton(
+                                                    icon: const Icon(
+                                                      Icons.edit,
+                                                    ),
+                                                    tooltip: 'Edit',
+                                                    visualDensity:
+                                                        VisualDensity.compact,
+                                                    padding: EdgeInsets.zero,
+                                                    constraints:
+                                                        const BoxConstraints(
+                                                          minWidth: 24,
+                                                          minHeight: 24,
+                                                        ),
+                                                    splashRadius: 14,
+                                                    iconSize: 18,
+                                                    onPressed: () =>
+                                                        _showEditDialog(
+                                                          employee,
+                                                        ),
+                                                  ),
+                                                  const SizedBox(width: 10),
+                                                  IconButton(
+                                                    icon: const Icon(
+                                                      Icons.delete,
+                                                    ),
+                                                    tooltip: 'Delete',
+                                                    visualDensity:
+                                                        VisualDensity.compact,
+                                                    padding: EdgeInsets.zero,
+                                                    constraints:
+                                                        const BoxConstraints(
+                                                          minWidth: 24,
+                                                          minHeight: 24,
+                                                        ),
+                                                    splashRadius: 14,
+                                                    iconSize: 18,
+                                                    onPressed:
+                                                        employee.status
+                                                                .trim()
+                                                                .toLowerCase() ==
+                                                            'deleted'
+                                                        ? null
+                                                        : () =>
+                                                              _delete(employee),
+                                                  ),
+                                                ],
+                                              ),
+                                            ),
+                                          ],
+                                        ),
+                                      )
+                                      .toList(),
+                                _ManagementModel.clients =>
+                                  _filteredClients
+                                      .map(
+                                        (client) => DataRow(
+                                          cells: [
+                                            DataCell(Text(client.clientNumber)),
+                                            DataCell(Text(client.name)),
+                                            DataCell(Text(client.status)),
+                                            DataCell(Text(client.email ?? '—')),
+                                            DataCell(
+                                              Text(client.phoneNumber ?? '—'),
+                                            ),
+                                            DataCell(
+                                              Row(
+                                                children: [
+                                                  IconButton(
+                                                    icon: const Icon(
+                                                      Icons.edit,
+                                                    ),
+                                                    tooltip: 'Edit',
+                                                    onPressed: () =>
+                                                        _showEditClientDialog(
+                                                          client,
+                                                        ),
+                                                  ),
+                                                  IconButton(
+                                                    icon: const Icon(
+                                                      Icons.delete,
+                                                    ),
+                                                    tooltip: 'Delete',
+                                                    onPressed: () =>
+                                                        _deleteClient(client),
+                                                  ),
+                                                ],
+                                              ),
+                                            ),
+                                          ],
+                                        ),
+                                      )
+                                      .toList(),
+                                _ManagementModel.locations =>
+                                  _filteredLocations
+                                      .map(
+                                        (location) => DataRow(
+                                          cells: [
+                                            const DataCell(
+                                              CircleAvatar(
+                                                radius: 14,
+                                                child: Icon(
+                                                  Icons.photo,
+                                                  size: 16,
+                                                ),
+                                              ),
+                                            ),
+                                            DataCell(
+                                              Text(
+                                                _clientNameById(
+                                                  location.clientId,
+                                                ),
+                                              ),
+                                            ),
+                                            DataCell(Text(location.type)),
+                                            DataCell(Text(location.status)),
+                                            DataCell(
+                                              Text(
+                                                [
+                                                      location.address ?? '',
+                                                      location.city ?? '',
+                                                      location.state ?? '',
+                                                      location.zipCode ?? '',
+                                                    ]
+                                                    .where(
+                                                      (e) =>
+                                                          e.trim().isNotEmpty,
+                                                    )
+                                                    .join(', '),
+                                              ),
+                                            ),
+                                            DataCell(
+                                              Row(
+                                                children: [
+                                                  IconButton(
+                                                    icon: const Icon(
+                                                      Icons.edit,
+                                                    ),
+                                                    tooltip: 'Edit',
+                                                    onPressed: () =>
+                                                        _showEditLocationDialog(
+                                                          location,
+                                                        ),
+                                                  ),
+                                                  IconButton(
+                                                    icon: const Icon(
+                                                      Icons.delete,
+                                                    ),
+                                                    tooltip: 'Delete',
+                                                    onPressed: () =>
+                                                        _deleteLocation(
+                                                          location,
+                                                        ),
+                                                  ),
+                                                ],
+                                              ),
+                                            ),
+                                          ],
+                                        ),
+                                      )
+                                      .toList(),
+                              },
+                            ),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+            maxWidth: 1220,
           ),
         ),
       ],
@@ -2187,26 +3060,22 @@ class _AdminPageState extends State<AdminPage> {
           runSpacing: 8,
           children: [
             FilledButton.icon(
-              onPressed: AppEnv.isDemoMode
-                  ? null
-                  : _showCreateCleaningProfileDialog,
+              onPressed: _showCreateCleaningProfileDialog,
               icon: const Icon(Icons.add_task),
               label: const Text('Create Profile'),
             ),
             OutlinedButton.icon(
-              onPressed: AppEnv.isDemoMode
-                  ? null
-                  : _showCreateTaskDefinitionDialog,
+              onPressed: _showCreateTaskDefinitionDialog,
               icon: const Icon(Icons.playlist_add),
               label: const Text('Create Task Definition'),
             ),
             OutlinedButton.icon(
-              onPressed: AppEnv.isDemoMode ? null : _showCreateTaskRuleDialog,
+              onPressed: _showCreateTaskRuleDialog,
               icon: const Icon(Icons.rule),
               label: const Text('Create Task Rule'),
             ),
             FilledButton.icon(
-              onPressed: AppEnv.isDemoMode ? null : _showAddProfileTaskDialog,
+              onPressed: _showAddProfileTaskDialog,
               icon: const Icon(Icons.link),
               label: const Text('Link Task To Selected Profile'),
             ),
@@ -2491,16 +3360,12 @@ class _AdminPageState extends State<AdminPage> {
     switch (_selectedSection) {
       case _AdminSection.dashboard:
         return _buildDashboardSection();
-      case _AdminSection.employees:
-        return _buildEmployeesSection();
       case _AdminSection.jobs:
         return _buildJobsSection();
       case _AdminSection.cleaningProfiles:
         return _buildCleaningProfilesSection();
-      case _AdminSection.clients:
-        return _buildClientsSection();
-      case _AdminSection.locations:
-        return _buildLocationsSection();
+      case _AdminSection.management:
+        return _buildManagementSection();
       case _AdminSection.reports:
         return _buildCrudScaffoldSection(
           title: 'Reports',
@@ -2536,34 +3401,134 @@ class _AdminPageState extends State<AdminPage> {
   @override
   Widget build(BuildContext context) {
     final baseTheme = Theme.of(context);
+    final isDark = baseTheme.brightness == Brightness.dark;
+    const lightPrimary = Color(0xFF296273);
+    const lightAccent = Color(0xFF442E6F);
+    const lightCta = Color(0xFFEE7E32);
+    const lightSupport = Color(0xFFA8D6F7);
+    const darkSurface = Color(0xFF1F1F1F);
+    const darkBg = Color(0xFF2C2C2C);
+    const darkText = Color(0xFFE4E4E4);
+    const darkAccent = Color(0xFFA8DADC);
+    const darkCta = Color(0xFFB39CD0);
+    final isCompactLayout = MediaQuery.sizeOf(context).width < 1024;
+
     final adminTheme = baseTheme.copyWith(
+      scaffoldBackgroundColor: isDark ? darkBg : Colors.white,
+      canvasColor: isDark ? darkBg : Colors.white,
+      cardColor: isDark ? darkSurface : const Color(0xFFF7FCFE),
+      cardTheme: CardThemeData(
+        color: isDark ? const Color(0xFF333740) : const Color(0xFFF7FCFE),
+        surfaceTintColor: Colors.transparent,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(12),
+          side: BorderSide(
+            color: isDark
+                ? const Color(0xFF4A525F)
+                : lightPrimary.withValues(alpha: 0.28),
+          ),
+        ),
+      ),
+      dataTableTheme: DataTableThemeData(
+        headingRowColor: WidgetStatePropertyAll(
+          isDark ? const Color(0xFF2D3139) : const Color(0xFFEAF5FA),
+        ),
+        dataRowColor: WidgetStatePropertyAll(
+          isDark ? const Color(0xFF333740) : const Color(0xFFF7FCFE),
+        ),
+        headingTextStyle: TextStyle(
+          color: isDark ? darkText : lightAccent,
+          fontWeight: FontWeight.w800,
+        ),
+        dataTextStyle: TextStyle(color: isDark ? darkText : lightPrimary),
+      ),
+      dividerColor: isDark
+          ? darkAccent.withValues(alpha: 0.25)
+          : lightPrimary.withValues(alpha: 0.25),
       filledButtonTheme: FilledButtonThemeData(
         style: FilledButton.styleFrom(
-          backgroundColor: const Color.fromRGBO(41, 98, 255, 1),
+          backgroundColor: isDark ? darkCta : lightCta,
           foregroundColor: Colors.white,
         ),
       ),
       outlinedButtonTheme: OutlinedButtonThemeData(
         style: OutlinedButton.styleFrom(
-          foregroundColor: const Color.fromRGBO(31, 63, 122, 1),
-          side: const BorderSide(color: Color.fromRGBO(106, 142, 214, 1)),
+          foregroundColor: isDark ? darkAccent : lightAccent,
+          side: BorderSide(
+            color: isDark
+                ? darkAccent.withValues(alpha: 0.45)
+                : lightPrimary.withValues(alpha: 0.45),
+          ),
+        ),
+      ),
+      inputDecorationTheme: baseTheme.inputDecorationTheme.copyWith(
+        filled: true,
+        fillColor: isDark
+            ? const Color(0xFF2A2A2A)
+            : lightSupport.withValues(alpha: 0.25),
+        border: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(10),
+          borderSide: BorderSide(
+            color: isDark
+                ? darkAccent.withValues(alpha: 0.35)
+                : lightPrimary.withValues(alpha: 0.35),
+          ),
+        ),
+        enabledBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(10),
+          borderSide: BorderSide(
+            color: isDark
+                ? darkAccent.withValues(alpha: 0.35)
+                : lightPrimary.withValues(alpha: 0.35),
+          ),
         ),
       ),
       chipTheme: baseTheme.chipTheme.copyWith(
-        backgroundColor: const Color.fromRGBO(238, 243, 252, 1),
-        selectedColor: const Color.fromRGBO(205, 220, 246, 1),
-        side: const BorderSide(color: Color.fromRGBO(154, 181, 228, 1)),
-        labelStyle: const TextStyle(
-          color: Color.fromRGBO(31, 63, 122, 1),
+        backgroundColor: isDark
+            ? const Color(0xFF2A2A2A)
+            : lightSupport.withValues(alpha: 0.3),
+        selectedColor: isDark
+            ? darkCta.withValues(alpha: 0.28)
+            : lightAccent.withValues(alpha: 0.2),
+        side: BorderSide(
+          color: isDark
+              ? darkAccent.withValues(alpha: 0.45)
+              : lightPrimary.withValues(alpha: 0.35),
+        ),
+        labelStyle: TextStyle(
+          color: isDark ? darkText : lightAccent,
           fontWeight: FontWeight.w600,
         ),
       ),
     );
 
     return Scaffold(
+      key: _scaffoldKey,
+      backgroundColor: isDark ? darkBg : Colors.white,
+      drawer: isCompactLayout
+          ? Drawer(
+              child: SafeArea(
+                child: _buildSidebar(collapsed: false, forDrawer: true),
+              ),
+            )
+          : null,
+      bottomNavigationBar: const SafeArea(top: false, child: BackendBanner()),
       appBar: AppBar(
+        leading: isCompactLayout
+            ? IconButton(
+                tooltip: 'Menu',
+                icon: const Icon(Icons.menu),
+                onPressed: () => _scaffoldKey.currentState?.openDrawer(),
+              )
+            : IconButton(
+                tooltip: _sidebarCollapsed
+                    ? 'Expand sidebar'
+                    : 'Collapse sidebar',
+                icon: Icon(_sidebarCollapsed ? Icons.menu_open : Icons.menu),
+                onPressed: () =>
+                    setState(() => _sidebarCollapsed = !_sidebarCollapsed),
+              ),
         title: const BrandAppBarTitle(),
-        bottom: const BackendBanner(),
         actions: [
           const ThemeToggleButton(),
           IconButton(
@@ -2571,73 +3536,96 @@ class _AdminPageState extends State<AdminPage> {
             icon: const Icon(Icons.refresh),
             tooltip: 'Refresh',
           ),
-          const ProfileMenuButton(),
+          ProfileMenuButton(onProfileUpdated: _loadAdminData),
         ],
       ),
       body: Theme(
         data: adminTheme,
-        child: SelectionArea(
-          child: Row(
-            children: [
-              _buildSidebar(),
-              Expanded(
-                child: Padding(
-                  padding: const EdgeInsets.all(16),
-                  child: Column(
-                    children: [
-                      if (BackendRuntime.allowBackendOverride) ...[
-                        Row(
-                          children: [
-                            Expanded(
-                              child: TextField(
-                                controller: _hostController,
-                                decoration: const InputDecoration(
-                                  labelText: 'Backend Host',
-                                  border: OutlineInputBorder(),
+        child: Container(
+          decoration: BoxDecoration(
+            gradient: LinearGradient(
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+              colors: isDark
+                  ? const [
+                      Color(0xFF2C2C2C),
+                      Color(0xFF26262B),
+                      Color(0xFF30303A),
+                    ]
+                  : const [Colors.white, Color(0xFFA8D6F7), Color(0xFFE7F3FB)],
+              stops: const [0.0, 0.55, 1.0],
+            ),
+          ),
+          child: SafeArea(
+            child: SelectionArea(
+              child: Row(
+                children: [
+                  if (!isCompactLayout)
+                    _buildSidebar(collapsed: _sidebarCollapsed),
+                  Expanded(
+                    child: Padding(
+                      padding: const EdgeInsets.all(16),
+                      child: Column(
+                        children: [
+                          _buildAdminWelcomeCard(isDark),
+                          const SizedBox(height: 12),
+                          if (BackendRuntime.allowBackendOverride) ...[
+                            Row(
+                              children: [
+                                Expanded(
+                                  child: TextField(
+                                    controller: _hostController,
+                                    decoration: const InputDecoration(
+                                      labelText: 'Backend Host',
+                                      border: OutlineInputBorder(),
+                                    ),
+                                  ),
                                 ),
+                                const SizedBox(width: 8),
+                                FilledButton.icon(
+                                  onPressed: _applyBackendSelection,
+                                  icon: const Icon(Icons.check),
+                                  label: const Text('Apply'),
+                                ),
+                              ],
+                            ),
+                            const SizedBox(height: 12),
+                          ],
+                          if (AppEnv.isDemoMode) ...[
+                            const DemoModeNotice(
+                              message:
+                                  'Demo mode is enabled: create flows are interactive, but no data is persisted.',
+                            ),
+                            const SizedBox(height: 12),
+                          ],
+                          if (_error != null)
+                            Container(
+                              width: double.infinity,
+                              margin: const EdgeInsets.only(bottom: 12),
+                              padding: const EdgeInsets.all(12),
+                              decoration: BoxDecoration(
+                                color: Colors.red.shade50,
+                                borderRadius: BorderRadius.circular(8),
+                              ),
+                              child: Text(
+                                _error!,
+                                style: TextStyle(color: Colors.red.shade700),
                               ),
                             ),
-                            const SizedBox(width: 8),
-                            FilledButton.icon(
-                              onPressed: _applyBackendSelection,
-                              icon: const Icon(Icons.check),
-                              label: const Text('Apply'),
-                            ),
-                          ],
-                        ),
-                        const SizedBox(height: 12),
-                      ],
-                      if (AppEnv.isDemoMode) ...[
-                        const DemoModeNotice(
-                          message:
-                              'Demo mode is enabled: destructive actions are disabled in preview.',
-                        ),
-                        const SizedBox(height: 12),
-                      ],
-                      if (_error != null)
-                        Container(
-                          width: double.infinity,
-                          margin: const EdgeInsets.only(bottom: 12),
-                          padding: const EdgeInsets.all(12),
-                          decoration: BoxDecoration(
-                            color: Colors.red.shade50,
-                            borderRadius: BorderRadius.circular(8),
+                          Expanded(
+                            child: _loading
+                                ? const Center(
+                                    child: CircularProgressIndicator(),
+                                  )
+                                : _buildSectionContent(),
                           ),
-                          child: Text(
-                            _error!,
-                            style: TextStyle(color: Colors.red.shade700),
-                          ),
-                        ),
-                      Expanded(
-                        child: _loading
-                            ? const Center(child: CircularProgressIndicator())
-                            : _buildSectionContent(),
+                        ],
                       ),
-                    ],
+                    ),
                   ),
-                ),
+                ],
               ),
-            ],
+            ),
           ),
         ),
       ),
@@ -2645,8 +3633,499 @@ class _AdminPageState extends State<AdminPage> {
   }
 }
 
+class _JobEditorFormData {
+  const _JobEditorFormData({
+    required this.clientId,
+    required this.locationId,
+    required this.scheduledDate,
+    required this.scheduledStartAt,
+    required this.scheduledTime,
+    required this.estimatedDurationMinutes,
+    this.actualDurationMinutes,
+    this.cleanerEmployeeId,
+  });
+
+  final int clientId;
+  final int locationId;
+  final String scheduledDate;
+  final String scheduledStartAt;
+  final TimeOfDay scheduledTime;
+  final int estimatedDurationMinutes;
+  final int? actualDurationMinutes;
+  final String? cleanerEmployeeId;
+}
+
+class _JobEditorDialog extends StatefulWidget {
+  const _JobEditorDialog({
+    required this.isCreate,
+    required this.clients,
+    required this.locations,
+    required this.cleaners,
+    this.initialClientId,
+    this.initialLocationId,
+    this.initialScheduledDate,
+    this.initialScheduledStartAt,
+    this.initialEstimatedDurationMinutes,
+    this.initialActualDurationMinutes,
+    this.initialCleanerEmployeeId,
+    this.initialStatus,
+  });
+
+  final bool isCreate;
+  final List<Client> clients;
+  final List<Location> locations;
+  final List<Employee> cleaners;
+  final int? initialClientId;
+  final int? initialLocationId;
+  final DateTime? initialScheduledDate;
+  final String? initialScheduledStartAt;
+  final int? initialEstimatedDurationMinutes;
+  final int? initialActualDurationMinutes;
+  final String? initialCleanerEmployeeId;
+  final String? initialStatus;
+
+  @override
+  State<_JobEditorDialog> createState() => _JobEditorDialogState();
+}
+
+class _JobEditorDialogState extends State<_JobEditorDialog> {
+  int? _selectedClientId;
+  int? _selectedLocationId;
+  String? _selectedCleanerId;
+  String? _formError;
+  late DateTime _selectedDate;
+  TimeOfDay _selectedTime = const TimeOfDay(hour: 9, minute: 0);
+  int _estimatedHours = 2;
+  int _estimatedMinutesStep = 0;
+  bool _includeActualDuration = false;
+  int _actualHours = 0;
+  int _actualMinutesStep = 0;
+
+  @override
+  void initState() {
+    super.initState();
+    _selectedClientId = widget.initialClientId;
+    _selectedLocationId = widget.initialLocationId;
+    _selectedDate =
+        widget.initialScheduledDate ??
+        DateTime.now().add(const Duration(days: 1));
+    final estimatedMinutes = widget.initialEstimatedDurationMinutes ?? 120;
+    _estimatedHours = estimatedMinutes ~/ 60;
+    _estimatedMinutesStep = estimatedMinutes % 60;
+    if (!DurationPickerFields.quarterHourSteps.contains(
+      _estimatedMinutesStep,
+    )) {
+      _estimatedMinutesStep = 0;
+    }
+    final actualMinutes = widget.initialActualDurationMinutes;
+    if (actualMinutes != null && actualMinutes >= 0) {
+      _includeActualDuration = true;
+      _actualHours = actualMinutes ~/ 60;
+      _actualMinutesStep = actualMinutes % 60;
+      if (!DurationPickerFields.quarterHourSteps.contains(_actualMinutesStep)) {
+        _actualMinutesStep = 0;
+      }
+    }
+    _selectedCleanerId = widget.initialCleanerEmployeeId;
+    final cleanerExists = widget.cleaners.any(
+      (cleaner) => cleaner.id == _selectedCleanerId,
+    );
+    if (!cleanerExists) {
+      _selectedCleanerId = null;
+    }
+    final parsedStartAt = widget.initialScheduledStartAt == null
+        ? null
+        : DateTime.tryParse(widget.initialScheduledStartAt!);
+    if (parsedStartAt != null) {
+      final localStartAt = parsedStartAt.toLocal();
+      _selectedTime = TimeOfDay(
+        hour: localStartAt.hour,
+        minute: localStartAt.minute,
+      );
+    }
+    if (_selectedClientId == null && widget.clients.isNotEmpty) {
+      final firstId = int.tryParse(widget.clients.first.id);
+      if (firstId != null) {
+        _selectedClientId = firstId;
+      }
+    }
+    final clientExists = widget.clients.any(
+      (client) => int.tryParse(client.id) == _selectedClientId,
+    );
+    if (!clientExists && widget.clients.isNotEmpty) {
+      _selectedClientId = int.tryParse(widget.clients.first.id);
+    }
+    _syncLocationToClient();
+  }
+
+  List<Location> get _clientLocations {
+    final selectedClientId = _selectedClientId;
+    if (selectedClientId == null) return const [];
+    return widget.locations
+        .where((location) => location.clientId == selectedClientId)
+        .toList();
+  }
+
+  void _syncLocationToClient() {
+    final locations = _clientLocations;
+    final selectedLocationId = _selectedLocationId;
+    final hasSelected = locations.any(
+      (location) => int.tryParse(location.id) == selectedLocationId,
+    );
+    if (!hasSelected) {
+      if (locations.isEmpty) {
+        _selectedLocationId = null;
+      } else {
+        _selectedLocationId = int.tryParse(locations.first.id);
+      }
+    }
+  }
+
+  Future<void> _pickDate() async {
+    final now = DateTime.now();
+    final picked = await showDatePicker(
+      context: context,
+      initialDate: _selectedDate,
+      firstDate: DateTime(now.year - 1, 1, 1),
+      lastDate: DateTime(now.year + 2, 12, 31),
+    );
+    if (picked == null) return;
+    setState(() => _selectedDate = picked);
+  }
+
+  Future<void> _pickTime() async {
+    final picked = await showTimePicker(
+      context: context,
+      initialTime: _selectedTime,
+    );
+    if (picked == null) return;
+    setState(() => _selectedTime = picked);
+  }
+
+  Future<void> _submit() async {
+    final clientId = _selectedClientId;
+    final locationId = _selectedLocationId;
+    final estimatedDuration = (_estimatedHours * 60) + _estimatedMinutesStep;
+    final actualDuration = _includeActualDuration
+        ? ((_actualHours * 60) + _actualMinutesStep)
+        : null;
+    final initialStatus = widget.initialStatus?.trim().toLowerCase();
+    if (initialStatus == 'completed' && _selectedCleanerId == null) {
+      setState(() {
+        _formError =
+            'Completed jobs must remain assigned to a cleaner (cannot be set to None).';
+      });
+      return;
+    }
+    if (clientId == null || locationId == null || estimatedDuration <= 0) {
+      setState(() {
+        _formError =
+            'Complete all required fields (date, client, location, estimated duration).';
+      });
+      return;
+    }
+    final selectedHour = _selectedTime.hour;
+    if (selectedHour < 5 || selectedHour >= 21) {
+      final confirmed = await showDialog<bool>(
+        context: context,
+        builder: (context) => AlertDialog(
+          title: const Text('Confirm late/early job time'),
+          content: const Text(
+            'This job is scheduled outside normal hours (5:00 AM - 9:00 PM). Continue?',
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context, false),
+              child: const Text('Cancel'),
+            ),
+            FilledButton(
+              onPressed: () => Navigator.pop(context, true),
+              child: const Text('Continue'),
+            ),
+          ],
+        ),
+      );
+      if (confirmed != true) return;
+    }
+    if (!mounted) return;
+
+    Navigator.pop(
+      context,
+      _JobEditorFormData(
+        clientId: clientId,
+        locationId: locationId,
+        scheduledDate:
+            '${_selectedDate.year.toString().padLeft(4, '0')}-${_selectedDate.month.toString().padLeft(2, '0')}-${_selectedDate.day.toString().padLeft(2, '0')}',
+        scheduledStartAt: DateTime(
+          _selectedDate.year,
+          _selectedDate.month,
+          _selectedDate.day,
+          _selectedTime.hour,
+          _selectedTime.minute,
+        ).toUtc().toIso8601String(),
+        scheduledTime: _selectedTime,
+        estimatedDurationMinutes: estimatedDuration,
+        actualDurationMinutes: actualDuration,
+        cleanerEmployeeId: _selectedCleanerId,
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final dark = Theme.of(context).brightness == Brightness.dark;
+    final clientLocations = _clientLocations;
+    final dialogTheme = Theme.of(context).copyWith(
+      dialogTheme: DialogThemeData(
+        backgroundColor: dark ? const Color(0xFF333740) : null,
+        surfaceTintColor: Colors.transparent,
+      ),
+      inputDecorationTheme: InputDecorationTheme(
+        filled: true,
+        fillColor: dark ? const Color(0xFF2C2F36) : Colors.white,
+        border: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(10),
+          borderSide: BorderSide(
+            color: dark ? const Color(0xFF657184) : const Color(0xFFBEDCE4),
+          ),
+        ),
+        enabledBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(10),
+          borderSide: BorderSide(
+            color: dark ? const Color(0xFF657184) : const Color(0xFFBEDCE4),
+          ),
+        ),
+        focusedBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(10),
+          borderSide: BorderSide(
+            color: dark ? const Color(0xFFA8DADC) : const Color(0xFF296273),
+            width: 1.4,
+          ),
+        ),
+        labelStyle: TextStyle(
+          color: dark ? const Color(0xFFE4E4E4) : const Color(0xFF442E6F),
+        ),
+        hintStyle: TextStyle(
+          color: dark ? const Color(0xFFB8BCC4) : const Color(0xFF6A6A6A),
+        ),
+      ),
+      outlinedButtonTheme: OutlinedButtonThemeData(
+        style: OutlinedButton.styleFrom(
+          foregroundColor: dark
+              ? const Color(0xFFA8DADC)
+              : const Color(0xFF296273),
+          side: BorderSide(
+            color: dark ? const Color(0xFF657184) : const Color(0xFFBEDCE4),
+          ),
+        ),
+      ),
+    );
+    return Theme(
+      data: dialogTheme,
+      child: AlertDialog(
+        title: Row(
+          children: [
+            Expanded(
+              child: Text(
+                widget.isCreate ? 'Create Job' : 'Edit Job',
+                style: TextStyle(
+                  color: dark
+                      ? const Color(0xFFB39CD0)
+                      : const Color(0xFF442E6F),
+                  fontWeight: FontWeight.w800,
+                ),
+              ),
+            ),
+            ClipRRect(
+              borderRadius: BorderRadius.circular(4),
+              child: Image.asset(
+                'assets/images/logo.png',
+                width: 48,
+                height: 48,
+                fit: BoxFit.cover,
+              ),
+            ),
+          ],
+        ),
+        content: SizedBox(
+          width: 520,
+          child: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Align(
+                  alignment: Alignment.centerLeft,
+                  child: Text(
+                    '* Required fields',
+                    style: TextStyle(
+                      color: dark
+                          ? const Color(0xFFFFC1CC)
+                          : const Color(0xFF442E6F),
+                      fontWeight: FontWeight.w700,
+                      fontSize: 12,
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 10),
+                Row(
+                  children: [
+                    Expanded(
+                      child: OutlinedButton.icon(
+                        onPressed: _pickDate,
+                        icon: const Icon(Icons.date_range),
+                        label: Text(
+                          'Date *: ${_selectedDate.month}-${_selectedDate.day}-${_selectedDate.year}',
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: OutlinedButton.icon(
+                        onPressed: _pickTime,
+                        icon: const Icon(Icons.access_time),
+                        label: Text('Time: ${_selectedTime.format(context)}'),
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 10),
+                DropdownButtonFormField<int>(
+                  initialValue: _selectedClientId,
+                  decoration: const InputDecoration(
+                    labelText: 'Client *',
+                    border: OutlineInputBorder(),
+                  ),
+                  items: widget.clients
+                      .map((client) {
+                        final clientId = int.tryParse(client.id);
+                        if (clientId == null) return null;
+                        return DropdownMenuItem<int>(
+                          value: clientId,
+                          child: Text(client.name),
+                        );
+                      })
+                      .whereType<DropdownMenuItem<int>>()
+                      .toList(),
+                  onChanged: (value) {
+                    setState(() {
+                      _selectedClientId = value;
+                      _syncLocationToClient();
+                    });
+                  },
+                ),
+                const SizedBox(height: 10),
+                DropdownButtonFormField<int>(
+                  initialValue: _selectedLocationId,
+                  decoration: const InputDecoration(
+                    labelText: 'Location *',
+                    border: OutlineInputBorder(),
+                  ),
+                  items: clientLocations
+                      .map((location) {
+                        final locationId = int.tryParse(location.id);
+                        if (locationId == null) return null;
+                        final line = location.address?.trim().isNotEmpty == true
+                            ? location.address!.trim()
+                            : location.locationNumber;
+                        return DropdownMenuItem<int>(
+                          value: locationId,
+                          child: Text(line),
+                        );
+                      })
+                      .whereType<DropdownMenuItem<int>>()
+                      .toList(),
+                  onChanged: (value) =>
+                      setState(() => _selectedLocationId = value),
+                ),
+                const SizedBox(height: 10),
+                DropdownButtonFormField<String?>(
+                  initialValue: _selectedCleanerId,
+                  decoration: const InputDecoration(
+                    labelText: 'Cleaner',
+                    border: OutlineInputBorder(),
+                  ),
+                  items: [
+                    const DropdownMenuItem<String?>(
+                      value: null,
+                      child: Text('None (Pending)'),
+                    ),
+                    ...widget.cleaners.map(
+                      (cleaner) => DropdownMenuItem<String?>(
+                        value: cleaner.id,
+                        child: Text(cleaner.name),
+                      ),
+                    ),
+                  ],
+                  onChanged: (value) =>
+                      setState(() => _selectedCleanerId = value),
+                ),
+                const SizedBox(height: 10),
+                DurationPickerFields(
+                  label: 'Estimated Duration *',
+                  hours: _estimatedHours,
+                  minutesStep: _estimatedMinutesStep,
+                  onHoursChanged: (value) =>
+                      setState(() => _estimatedHours = value),
+                  onMinutesChanged: (value) =>
+                      setState(() => _estimatedMinutesStep = value),
+                ),
+                const SizedBox(height: 10),
+                SwitchListTile.adaptive(
+                  contentPadding: EdgeInsets.zero,
+                  title: const Text('Include Actual Duration'),
+                  value: _includeActualDuration,
+                  onChanged: (value) =>
+                      setState(() => _includeActualDuration = value),
+                ),
+                if (_includeActualDuration)
+                  DurationPickerFields(
+                    label: 'Actual Duration',
+                    hours: _actualHours,
+                    minutesStep: _actualMinutesStep,
+                    onHoursChanged: (value) =>
+                        setState(() => _actualHours = value),
+                    onMinutesChanged: (value) =>
+                        setState(() => _actualMinutesStep = value),
+                  ),
+                if (_formError != null) ...[
+                  const SizedBox(height: 10),
+                  Align(
+                    alignment: Alignment.centerLeft,
+                    child: Text(
+                      _formError!,
+                      style: TextStyle(
+                        color: dark
+                            ? const Color(0xFFFFC1CC)
+                            : const Color(0xFFE63721),
+                        fontSize: 12,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                  ),
+                ],
+              ],
+            ),
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: _submit,
+            child: Text(widget.isCreate ? 'Create' : 'Save'),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
 class _EmployeeEditorDialog extends StatefulWidget {
   const _EmployeeEditorDialog({
+    this.employeeNumber = '',
+    this.status = 'invited',
     this.name = '',
     this.email = '',
     this.phoneNumber = '',
@@ -2654,9 +4133,12 @@ class _EmployeeEditorDialog extends StatefulWidget {
     this.city = '',
     this.state = '',
     this.zipCode = '',
+    this.photoUrl = '',
     this.isCreate = true,
   });
 
+  final String employeeNumber;
+  final String status;
   final String name;
   final String email;
   final String phoneNumber;
@@ -2664,6 +4146,7 @@ class _EmployeeEditorDialog extends StatefulWidget {
   final String city;
   final String state;
   final String zipCode;
+  final String photoUrl;
   final bool isCreate;
 
   @override
@@ -2671,6 +4154,8 @@ class _EmployeeEditorDialog extends StatefulWidget {
 }
 
 class _EmployeeEditorDialogState extends State<_EmployeeEditorDialog> {
+  static const String _defaultEmployeePhotoAsset =
+      '/assets/images/profiles/employee_default.png';
   late final TextEditingController _name;
   late final TextEditingController _email;
   late final TextEditingController _phone;
@@ -2678,6 +4163,8 @@ class _EmployeeEditorDialogState extends State<_EmployeeEditorDialog> {
   late final TextEditingController _city;
   late final TextEditingController _state;
   late final TextEditingController _zipCode;
+  late final TextEditingController _photoUrl;
+  late String _status;
 
   @override
   void initState() {
@@ -2689,6 +4176,10 @@ class _EmployeeEditorDialogState extends State<_EmployeeEditorDialog> {
     _city = TextEditingController(text: widget.city);
     _state = TextEditingController(text: widget.state);
     _zipCode = TextEditingController(text: widget.zipCode);
+    _photoUrl = TextEditingController(text: widget.photoUrl);
+    _status = widget.status.trim().isEmpty
+        ? 'invited'
+        : widget.status.trim().toLowerCase();
   }
 
   @override
@@ -2700,22 +4191,145 @@ class _EmployeeEditorDialogState extends State<_EmployeeEditorDialog> {
     _city.dispose();
     _state.dispose();
     _zipCode.dispose();
+    _photoUrl.dispose();
     super.dispose();
+  }
+
+  String _assetPath(String? value, {required String fallback}) {
+    final candidate = (value == null || value.trim().isEmpty)
+        ? fallback
+        : value.trim();
+    return candidate.startsWith('/') ? candidate.substring(1) : candidate;
+  }
+
+  Future<void> _editPhotoPath() async {
+    final controller = TextEditingController(text: _photoUrl.text);
+    final value = await showDialog<String>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Employee photo path'),
+        content: TextField(
+          controller: controller,
+          decoration: const InputDecoration(
+            labelText: 'Asset path',
+            hintText: '/assets/images/profiles/employee_default.png',
+            border: OutlineInputBorder(),
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(context, controller.text.trim()),
+            child: const Text('Apply'),
+          ),
+        ],
+      ),
+    );
+    if (value == null) return;
+    setState(() {
+      _photoUrl.text = value;
+    });
   }
 
   @override
   Widget build(BuildContext context) {
+    final dark = Theme.of(context).brightness == Brightness.dark;
     return AlertDialog(
-      title: Text(widget.isCreate ? 'Create Employee' : 'Edit Employee'),
+      title: Row(
+        children: [
+          Expanded(
+            child: Text(
+              widget.isCreate ? 'Create Employee' : 'Edit Employee',
+              style: TextStyle(
+                color: dark ? const Color(0xFFB39CD0) : const Color(0xFF442E6F),
+                fontWeight: FontWeight.w800,
+              ),
+            ),
+          ),
+          ClipRRect(
+            borderRadius: BorderRadius.circular(4),
+            child: Image.asset(
+              'assets/images/logo.png',
+              width: 48,
+              height: 48,
+              fit: BoxFit.cover,
+            ),
+          ),
+        ],
+      ),
       content: SizedBox(
         width: 480,
         child: SingleChildScrollView(
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              _field(_name, 'Name'),
+              ValueListenableBuilder<TextEditingValue>(
+                valueListenable: _photoUrl,
+                builder: (context, value, _) {
+                  final path = value.text.trim().isNotEmpty
+                      ? value.text.trim()
+                      : _defaultEmployeePhotoAsset;
+                  return Stack(
+                    children: [
+                      CircleAvatar(
+                        radius: 56,
+                        backgroundColor: dark
+                            ? const Color(0xFF3B4250)
+                            : const Color(0xFFA8D6F7),
+                        backgroundImage: AssetImage(
+                          _assetPath(
+                            path,
+                            fallback: _defaultEmployeePhotoAsset,
+                          ),
+                        ),
+                      ),
+                      Positioned(
+                        right: -2,
+                        bottom: -2,
+                        child: IconButton(
+                          visualDensity: VisualDensity.compact,
+                          tooltip: 'Edit photo path',
+                          onPressed: _editPhotoPath,
+                          icon: const Icon(Icons.edit, size: 18),
+                        ),
+                      ),
+                    ],
+                  );
+                },
+              ),
               const SizedBox(height: 10),
-              _field(_email, 'Email'),
+              Row(
+                children: [
+                  Text(
+                    '* Required fields',
+                    style: TextStyle(
+                      color: dark
+                          ? const Color(0xFFFFC1CC)
+                          : const Color(0xFF442E6F),
+                      fontWeight: FontWeight.w700,
+                      fontSize: 12,
+                    ),
+                  ),
+                  const Spacer(),
+                  Text(
+                    'Employee #: ${widget.employeeNumber.isEmpty ? '—' : widget.employeeNumber}',
+                    style: TextStyle(
+                      color: dark
+                          ? const Color(0xFFE4E4E4)
+                          : const Color(0xFF41588E),
+                      fontWeight: FontWeight.w700,
+                      fontSize: 12,
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 10),
+              _field(_name, 'Name', required: true),
+              const SizedBox(height: 10),
+              _field(_email, 'Email', required: true),
               const SizedBox(height: 10),
               _field(_phone, 'Phone'),
               const SizedBox(height: 10),
@@ -2727,25 +4341,40 @@ class _EmployeeEditorDialogState extends State<_EmployeeEditorDialog> {
               const SizedBox(height: 10),
               _field(_zipCode, 'Zip Code'),
               const SizedBox(height: 10),
-              Container(
-                width: double.infinity,
-                padding: const EdgeInsets.all(10),
-                decoration: BoxDecoration(
-                  color: Theme.of(context).brightness == Brightness.dark
-                      ? const Color(0xFF2F313A)
-                      : const Color(0xFFEAF4FA),
-                  borderRadius: BorderRadius.circular(8),
-                  border: Border.all(
-                    color: Theme.of(context).brightness == Brightness.dark
-                        ? const Color(0xFF4A4D5A)
-                        : const Color(0xFFA8D6F7),
+              DropdownButtonFormField<String>(
+                initialValue: _status,
+                decoration: const InputDecoration(
+                  labelText: 'Status',
+                  border: OutlineInputBorder(),
+                ),
+                items: const [
+                  DropdownMenuItem(value: 'invited', child: Text('Invited')),
+                  DropdownMenuItem(value: 'active', child: Text('Active')),
+                  DropdownMenuItem(value: 'inactive', child: Text('Inactive')),
+                  DropdownMenuItem(value: 'resigned', child: Text('Resigned')),
+                  DropdownMenuItem(value: 'deleted', child: Text('Deleted')),
+                ],
+                onChanged: (value) {
+                  if (value == null) return;
+                  setState(() => _status = value);
+                },
+              ),
+              if (widget.isCreate)
+                Padding(
+                  padding: const EdgeInsets.only(top: 8),
+                  child: Align(
+                    alignment: Alignment.centerLeft,
+                    child: Text(
+                      'New employees default to the shared profile image unless changed above.',
+                      style: TextStyle(
+                        fontSize: 12,
+                        color: dark
+                            ? const Color(0xFFE4E4E4)
+                            : const Color(0xFF41588E),
+                      ),
+                    ),
                   ),
                 ),
-                child: const Text(
-                  'Coordinates are auto-filled from address on save when not provided.',
-                  style: TextStyle(fontSize: 12),
-                ),
-              ),
             ],
           ),
         ),
@@ -2771,6 +4400,8 @@ class _EmployeeEditorDialogState extends State<_EmployeeEditorDialog> {
                   city: _nullable(_city.text),
                   state: _nullable(_state.text),
                   zipCode: _nullable(_zipCode.text),
+                  photoUrl: _nullable(_photoUrl.text),
+                  status: _status,
                 ),
               );
             } else {
@@ -2784,6 +4415,8 @@ class _EmployeeEditorDialogState extends State<_EmployeeEditorDialog> {
                   city: _nullable(_city.text),
                   state: _nullable(_state.text),
                   zipCode: _nullable(_zipCode.text),
+                  photoUrl: _nullable(_photoUrl.text),
+                  status: _status,
                 ),
               );
             }
@@ -2794,11 +4427,15 @@ class _EmployeeEditorDialogState extends State<_EmployeeEditorDialog> {
     );
   }
 
-  Widget _field(TextEditingController controller, String label) {
+  Widget _field(
+    TextEditingController controller,
+    String label, {
+    bool required = false,
+  }) {
     return TextField(
       controller: controller,
       decoration: InputDecoration(
-        labelText: label,
+        labelText: required ? '$label *' : label,
         border: const OutlineInputBorder(),
       ),
     );
@@ -2819,6 +4456,8 @@ class _ClientEditorDialog extends StatefulWidget {
     this.city = '',
     this.state = '',
     this.zipCode = '',
+    this.preferredContactMethod = '',
+    this.preferredContactWindow = '',
     this.isCreate = true,
   });
 
@@ -2829,6 +4468,8 @@ class _ClientEditorDialog extends StatefulWidget {
   final String city;
   final String state;
   final String zipCode;
+  final String preferredContactMethod;
+  final String preferredContactWindow;
   final bool isCreate;
 
   @override
@@ -2843,6 +4484,8 @@ class _ClientEditorDialogState extends State<_ClientEditorDialog> {
   late final TextEditingController _city;
   late final TextEditingController _state;
   late final TextEditingController _zipCode;
+  late final TextEditingController _preferredContactWindow;
+  late String _preferredContactMethod;
 
   @override
   void initState() {
@@ -2854,6 +4497,12 @@ class _ClientEditorDialogState extends State<_ClientEditorDialog> {
     _city = TextEditingController(text: widget.city);
     _state = TextEditingController(text: widget.state);
     _zipCode = TextEditingController(text: widget.zipCode);
+    _preferredContactWindow = TextEditingController(
+      text: widget.preferredContactWindow,
+    );
+    _preferredContactMethod = widget.preferredContactMethod.trim().isEmpty
+        ? 'phone'
+        : widget.preferredContactMethod.trim().toLowerCase();
   }
 
   @override
@@ -2865,22 +4514,59 @@ class _ClientEditorDialogState extends State<_ClientEditorDialog> {
     _city.dispose();
     _state.dispose();
     _zipCode.dispose();
+    _preferredContactWindow.dispose();
     super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
+    final dark = Theme.of(context).brightness == Brightness.dark;
     return AlertDialog(
-      title: Text(widget.isCreate ? 'Create Client' : 'Edit Client'),
+      title: Row(
+        children: [
+          Expanded(
+            child: Text(
+              widget.isCreate ? 'Create Client' : 'Edit Client',
+              style: TextStyle(
+                color: dark ? const Color(0xFFB39CD0) : const Color(0xFF442E6F),
+                fontWeight: FontWeight.w800,
+              ),
+            ),
+          ),
+          ClipRRect(
+            borderRadius: BorderRadius.circular(4),
+            child: Image.asset(
+              'assets/images/logo.png',
+              width: 48,
+              height: 48,
+              fit: BoxFit.cover,
+            ),
+          ),
+        ],
+      ),
       content: SizedBox(
         width: 480,
         child: SingleChildScrollView(
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              _field(_name, 'Name'),
+              Align(
+                alignment: Alignment.centerLeft,
+                child: Text(
+                  '* Required fields',
+                  style: TextStyle(
+                    color: dark
+                        ? const Color(0xFFFFC1CC)
+                        : const Color(0xFF442E6F),
+                    fontWeight: FontWeight.w700,
+                    fontSize: 12,
+                  ),
+                ),
+              ),
               const SizedBox(height: 10),
-              _field(_email, 'Email'),
+              _field(_name, 'Name', required: true),
+              const SizedBox(height: 10),
+              _field(_email, 'Email', required: true),
               const SizedBox(height: 10),
               _field(_phone, 'Phone'),
               const SizedBox(height: 10),
@@ -2891,6 +4577,25 @@ class _ClientEditorDialogState extends State<_ClientEditorDialog> {
               _field(_state, 'State'),
               const SizedBox(height: 10),
               _field(_zipCode, 'Zip Code'),
+              const SizedBox(height: 10),
+              DropdownButtonFormField<String>(
+                initialValue: _preferredContactMethod,
+                decoration: const InputDecoration(
+                  labelText: 'Preferred Contact Method',
+                  border: OutlineInputBorder(),
+                ),
+                items: const [
+                  DropdownMenuItem(value: 'phone', child: Text('Phone')),
+                  DropdownMenuItem(value: 'email', child: Text('Email')),
+                  DropdownMenuItem(value: 'sms', child: Text('SMS')),
+                ],
+                onChanged: (value) {
+                  if (value == null) return;
+                  setState(() => _preferredContactMethod = value);
+                },
+              ),
+              const SizedBox(height: 10),
+              _field(_preferredContactWindow, 'Preferred Contact Window'),
               const SizedBox(height: 10),
               Container(
                 width: double.infinity,
@@ -2936,6 +4641,10 @@ class _ClientEditorDialogState extends State<_ClientEditorDialog> {
                   city: _nullable(_city.text),
                   state: _nullable(_state.text),
                   zipCode: _nullable(_zipCode.text),
+                  preferredContactMethod: _nullable(_preferredContactMethod),
+                  preferredContactWindow: _nullable(
+                    _preferredContactWindow.text,
+                  ),
                 ),
               );
             } else {
@@ -2949,6 +4658,10 @@ class _ClientEditorDialogState extends State<_ClientEditorDialog> {
                   city: _nullable(_city.text),
                   state: _nullable(_state.text),
                   zipCode: _nullable(_zipCode.text),
+                  preferredContactMethod: _nullable(_preferredContactMethod),
+                  preferredContactWindow: _nullable(
+                    _preferredContactWindow.text,
+                  ),
                 ),
               );
             }
@@ -2959,11 +4672,15 @@ class _ClientEditorDialogState extends State<_ClientEditorDialog> {
     );
   }
 
-  Widget _field(TextEditingController controller, String label) {
+  Widget _field(
+    TextEditingController controller,
+    String label, {
+    bool required = false,
+  }) {
     return TextField(
       controller: controller,
       decoration: InputDecoration(
-        labelText: label,
+        labelText: required ? '$label *' : label,
         border: const OutlineInputBorder(),
       ),
     );
@@ -3034,19 +4751,55 @@ class _LocationEditorDialogState extends State<_LocationEditorDialog> {
 
   @override
   Widget build(BuildContext context) {
+    final dark = Theme.of(context).brightness == Brightness.dark;
     return AlertDialog(
-      title: Text(widget.isCreate ? 'Create Location' : 'Edit Location'),
+      title: Row(
+        children: [
+          Expanded(
+            child: Text(
+              widget.isCreate ? 'Create Location' : 'Edit Location',
+              style: TextStyle(
+                color: dark ? const Color(0xFFB39CD0) : const Color(0xFF442E6F),
+                fontWeight: FontWeight.w800,
+              ),
+            ),
+          ),
+          ClipRRect(
+            borderRadius: BorderRadius.circular(4),
+            child: Image.asset(
+              'assets/images/logo.png',
+              width: 48,
+              height: 48,
+              fit: BoxFit.cover,
+            ),
+          ),
+        ],
+      ),
       content: SizedBox(
         width: 520,
         child: SingleChildScrollView(
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
+              Align(
+                alignment: Alignment.centerLeft,
+                child: Text(
+                  '* Required fields',
+                  style: TextStyle(
+                    color: dark
+                        ? const Color(0xFFFFC1CC)
+                        : const Color(0xFF442E6F),
+                    fontWeight: FontWeight.w700,
+                    fontSize: 12,
+                  ),
+                ),
+              ),
+              const SizedBox(height: 10),
               if (widget.isCreate)
                 DropdownButtonFormField<int>(
                   initialValue: _selectedClientId,
                   decoration: const InputDecoration(
-                    labelText: 'Client',
+                    labelText: 'Client *',
                     border: OutlineInputBorder(),
                   ),
                   items: widget.clients
@@ -3066,7 +4819,7 @@ class _LocationEditorDialogState extends State<_LocationEditorDialog> {
               DropdownButtonFormField<String>(
                 initialValue: _type,
                 decoration: const InputDecoration(
-                  labelText: 'Type',
+                  labelText: 'Type *',
                   border: OutlineInputBorder(),
                 ),
                 items: const [
@@ -3085,13 +4838,13 @@ class _LocationEditorDialogState extends State<_LocationEditorDialog> {
                 },
               ),
               const SizedBox(height: 10),
-              _field(_address, 'Address'),
+              _field(_address, 'Address', required: true),
               const SizedBox(height: 10),
-              _field(_city, 'City'),
+              _field(_city, 'City', required: true),
               const SizedBox(height: 10),
-              _field(_state, 'State'),
+              _field(_state, 'State', required: true),
               const SizedBox(height: 10),
-              _field(_zipCode, 'Zip Code'),
+              _field(_zipCode, 'Zip Code', required: true),
             ],
           ),
         ),
@@ -3135,11 +4888,15 @@ class _LocationEditorDialogState extends State<_LocationEditorDialog> {
     );
   }
 
-  Widget _field(TextEditingController controller, String label) {
+  Widget _field(
+    TextEditingController controller,
+    String label, {
+    bool required = false,
+  }) {
     return TextField(
       controller: controller,
       decoration: InputDecoration(
-        labelText: label,
+        labelText: required ? '$label *' : label,
         border: const OutlineInputBorder(),
       ),
     );

@@ -17,6 +17,8 @@ class ProfilePage extends StatefulWidget {
 }
 
 class _ProfilePageState extends State<ProfilePage> {
+  static const String _defaultEmployeePhotoAsset =
+      '/assets/images/profiles/employee_default.png';
   final _name = TextEditingController();
   final _email = TextEditingController();
   final _phone = TextEditingController();
@@ -24,6 +26,7 @@ class _ProfilePageState extends State<ProfilePage> {
   final _city = TextEditingController();
   final _state = TextEditingController();
   final _zip = TextEditingController();
+  final _photoUrl = TextEditingController();
 
   bool _loading = true;
   bool _saving = false;
@@ -32,6 +35,13 @@ class _ProfilePageState extends State<ProfilePage> {
   String _profileType = 'Account';
 
   String? get _token => AuthSession.current?.token.trim();
+
+  String _assetPath(String? value, {required String fallback}) {
+    final candidate = (value == null || value.trim().isEmpty)
+        ? fallback
+        : value.trim();
+    return candidate.startsWith('/') ? candidate.substring(1) : candidate;
+  }
 
   @override
   void initState() {
@@ -57,6 +67,7 @@ class _ProfilePageState extends State<ProfilePage> {
     _city.dispose();
     _state.dispose();
     _zip.dispose();
+    _photoUrl.dispose();
     super.dispose();
   }
 
@@ -111,6 +122,7 @@ class _ProfilePageState extends State<ProfilePage> {
     _city.text = employee.city ?? '';
     _state.text = employee.state ?? '';
     _zip.text = employee.zipCode ?? '';
+    _photoUrl.text = employee.photoUrl ?? '';
   }
 
   void _fillFromClient(Client client) {
@@ -147,6 +159,7 @@ class _ProfilePageState extends State<ProfilePage> {
             city: _nullable(_city.text),
             state: _nullable(_state.text),
             zipCode: _nullable(_zip.text),
+            photoUrl: _nullable(_photoUrl.text),
           ),
           bearerToken: token,
         );
@@ -177,6 +190,210 @@ class _ProfilePageState extends State<ProfilePage> {
       if (mounted) {
         setState(() => _saving = false);
       }
+    }
+  }
+
+  Future<void> _showEmployeeEditModal() async {
+    final session = AuthSession.current;
+    if (session == null || !session.user.isEmployee) return;
+    final token = _token;
+    if (token == null || token.isEmpty) return;
+    final dark = Theme.of(context).brightness == Brightness.dark;
+
+    final name = TextEditingController(text: _name.text);
+    final email = TextEditingController(text: _email.text);
+    final phone = TextEditingController(text: _phone.text);
+    final address = TextEditingController(text: _address.text);
+    final city = TextEditingController(text: _city.text);
+    final state = TextEditingController(text: _state.text);
+    final zip = TextEditingController(text: _zip.text);
+    final photo = TextEditingController(text: _photoUrl.text);
+    Future<void> editPhotoPath() async {
+      final picker = TextEditingController(text: photo.text);
+      final value = await showDialog<String>(
+        context: context,
+        builder: (context) => AlertDialog(
+          title: const Text('Employee photo path'),
+          content: TextField(
+            controller: picker,
+            decoration: const InputDecoration(
+              labelText: 'Asset path',
+              hintText: '/assets/images/profiles/employee_default.png',
+              border: OutlineInputBorder(),
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text('Cancel'),
+            ),
+            FilledButton(
+              onPressed: () => Navigator.pop(context, picker.text.trim()),
+              child: const Text('Apply'),
+            ),
+          ],
+        ),
+      );
+      if (value == null) return;
+      photo.text = value;
+    }
+
+    try {
+      final submit = await showDialog<bool>(
+        context: context,
+        builder: (context) => AlertDialog(
+          title: Row(
+            children: [
+              const Expanded(child: Text('Edit Employee Details')),
+              ClipRRect(
+                borderRadius: BorderRadius.circular(4),
+                child: Image.asset(
+                  'assets/images/logo.png',
+                  width: 48,
+                  height: 48,
+                  fit: BoxFit.cover,
+                ),
+              ),
+            ],
+          ),
+          content: SizedBox(
+            width: 520,
+            child: SingleChildScrollView(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  ValueListenableBuilder<TextEditingValue>(
+                    valueListenable: photo,
+                    builder: (context, value, _) {
+                      final path = value.text.trim().isNotEmpty
+                          ? value.text.trim()
+                          : _defaultEmployeePhotoAsset;
+                      return Stack(
+                        children: [
+                          CircleAvatar(
+                            radius: 36,
+                            backgroundColor: dark
+                                ? const Color(0xFF3B4250)
+                                : const Color(0xFFA8D6F7),
+                            backgroundImage: AssetImage(
+                              _assetPath(
+                                path,
+                                fallback: _defaultEmployeePhotoAsset,
+                              ),
+                            ),
+                          ),
+                          Positioned(
+                            right: -2,
+                            bottom: -2,
+                            child: IconButton(
+                              visualDensity: VisualDensity.compact,
+                              tooltip: 'Edit photo path',
+                              onPressed: editPhotoPath,
+                              icon: const Icon(Icons.edit, size: 18),
+                            ),
+                          ),
+                        ],
+                      );
+                    },
+                  ),
+                  const SizedBox(height: 10),
+                  Align(
+                    alignment: Alignment.centerLeft,
+                    child: Text(
+                      '* Required fields',
+                      style: TextStyle(
+                        color: dark
+                            ? const Color(0xFFFFC1CC)
+                            : const Color(0xFF442E6F),
+                        fontWeight: FontWeight.w700,
+                        fontSize: 12,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 10),
+                  _field(name, 'Name *', enabled: true),
+                  const SizedBox(height: 10),
+                  _field(email, 'Email *', enabled: true),
+                  const SizedBox(height: 10),
+                  _field(phone, 'Phone', enabled: true),
+                  const SizedBox(height: 10),
+                  _field(address, 'Address', enabled: true),
+                  const SizedBox(height: 10),
+                  _field(city, 'City', enabled: true),
+                  const SizedBox(height: 10),
+                  _field(state, 'State', enabled: true),
+                  const SizedBox(height: 10),
+                  _field(zip, 'Zip Code', enabled: true),
+                  const SizedBox(height: 10),
+                  _field(photo, 'Photo URL', enabled: true),
+                ],
+              ),
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context, false),
+              child: const Text('Cancel'),
+            ),
+            FilledButton(
+              onPressed: () => Navigator.pop(context, true),
+              child: const Text('Save'),
+            ),
+          ],
+        ),
+      );
+
+      if (submit != true) return;
+
+      await ApiService().updateEmployee(
+        session.user.subjectId,
+        EmployeeUpdateInput(
+          name: _nullable(name.text),
+          email: _nullable(email.text),
+          phoneNumber: _nullable(phone.text),
+          address: _nullable(address.text),
+          city: _nullable(city.text),
+          state: _nullable(state.text),
+          zipCode: _nullable(zip.text),
+          photoUrl: _nullable(photo.text),
+        ),
+        bearerToken: token,
+      );
+      if (!mounted) return;
+      await showDialog<void>(
+        context: context,
+        builder: (context) => AlertDialog(
+          title: const Text('Profile Updated'),
+          content: const Text('Your employee profile details were saved.'),
+          actions: [
+            FilledButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text('OK'),
+            ),
+          ],
+        ),
+      );
+      _name.text = name.text;
+      _email.text = email.text;
+      _phone.text = phone.text;
+      _address.text = address.text;
+      _city.text = city.text;
+      _state.text = state.text;
+      _zip.text = zip.text;
+      _photoUrl.text = photo.text;
+      await _loadProfile();
+    } catch (error) {
+      if (!mounted) return;
+      setState(() => _error = userFacingError(error));
+    } finally {
+      name.dispose();
+      email.dispose();
+      phone.dispose();
+      address.dispose();
+      city.dispose();
+      state.dispose();
+      zip.dispose();
+      photo.dispose();
     }
   }
 
@@ -236,25 +453,39 @@ class _ProfilePageState extends State<ProfilePage> {
                       _field(_state, 'State'),
                       const SizedBox(height: 10),
                       _field(_zip, 'Zip Code'),
+                      if (AuthSession.current?.user.isEmployee == true) ...[
+                        const SizedBox(height: 10),
+                        _field(_photoUrl, 'Photo URL'),
+                      ],
                       const SizedBox(height: 14),
-                      Align(
-                        alignment: Alignment.centerRight,
-                        child: FilledButton.icon(
-                          onPressed: _isEditable && !_saving
-                              ? _saveProfile
-                              : null,
-                          icon: _saving
-                              ? const SizedBox(
-                                  width: 16,
-                                  height: 16,
-                                  child: CircularProgressIndicator(
-                                    strokeWidth: 2,
-                                    color: Colors.white,
-                                  ),
-                                )
-                              : const Icon(Icons.save_outlined),
-                          label: const Text('Save Profile'),
-                        ),
+                      Row(
+                        children: [
+                          if (AuthSession.current?.user.isEmployee == true)
+                            OutlinedButton.icon(
+                              onPressed: _saving
+                                  ? null
+                                  : _showEmployeeEditModal,
+                              icon: const Icon(Icons.edit_outlined),
+                              label: const Text('Edit Details'),
+                            ),
+                          const Spacer(),
+                          FilledButton.icon(
+                            onPressed: _isEditable && !_saving
+                                ? _saveProfile
+                                : null,
+                            icon: _saving
+                                ? const SizedBox(
+                                    width: 16,
+                                    height: 16,
+                                    child: CircularProgressIndicator(
+                                      strokeWidth: 2,
+                                      color: Colors.white,
+                                    ),
+                                  )
+                                : const Icon(Icons.save_outlined),
+                            label: const Text('Save Profile'),
+                          ),
+                        ],
                       ),
                     ],
                   ),
@@ -264,10 +495,14 @@ class _ProfilePageState extends State<ProfilePage> {
     );
   }
 
-  Widget _field(TextEditingController controller, String label) {
+  Widget _field(
+    TextEditingController controller,
+    String label, {
+    bool? enabled,
+  }) {
     return TextField(
       controller: controller,
-      enabled: _isEditable,
+      enabled: enabled ?? _isEditable,
       decoration: InputDecoration(
         labelText: label,
         border: const OutlineInputBorder(),

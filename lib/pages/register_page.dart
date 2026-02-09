@@ -248,10 +248,11 @@ class _RegisterPageState extends State<RegisterPage> {
                               const SizedBox(height: 18),
                               TextField(
                                 controller: _emailController,
-                                readOnly: true,
                                 onChanged: (_) => setState(() {}),
                                 decoration: InputDecoration(
-                                  labelText: 'Invited Email',
+                                  labelText: 'Email',
+                                  helperText:
+                                      'Use the same email address that received your invitation.',
 
                                   helperStyle: TextStyle(
                                     color: dark ? _darkAccent2 : _lightPrimary,
@@ -288,7 +289,7 @@ class _RegisterPageState extends State<RegisterPage> {
                                 Padding(
                                   padding: const EdgeInsets.only(top: 8),
                                   child: Text(
-                                    'Open this page from your invitation email link to prefill your invited address.',
+                                    'Use the same email address that received your invitation.',
                                     style: TextStyle(
                                       fontSize: 12,
                                       color: dark

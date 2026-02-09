@@ -12,6 +12,7 @@ class Employee {
     this.zipCode,
     this.latitude,
     this.longitude,
+    this.photoUrl,
   });
 
   final String id;
@@ -26,6 +27,7 @@ class Employee {
   final String? zipCode;
   final double? latitude;
   final double? longitude;
+  final String? photoUrl;
 
   factory Employee.fromJson(Map<String, dynamic> json) {
     return Employee(
@@ -45,6 +47,7 @@ class Employee {
       longitude: json['longitude'] == null
           ? null
           : double.tryParse(json['longitude'].toString()),
+      photoUrl: json['photo_url']?.toString(),
     );
   }
 }
@@ -61,6 +64,8 @@ class EmployeeCreateInput {
     this.zipCode,
     this.latitude,
     this.longitude,
+    this.photoUrl,
+    this.status,
   });
 
   final String name;
@@ -73,6 +78,8 @@ class EmployeeCreateInput {
   final String? zipCode;
   final double? latitude;
   final double? longitude;
+  final String? photoUrl;
+  final String? status;
 
   Map<String, dynamic> toJson() => {
     'name': name,
@@ -85,6 +92,8 @@ class EmployeeCreateInput {
     'zip_code': zipCode,
     'latitude': latitude,
     'longitude': longitude,
+    'photo_url': photoUrl,
+    'status': status,
   };
 }
 
@@ -99,6 +108,8 @@ class EmployeeUpdateInput {
     this.zipCode,
     this.latitude,
     this.longitude,
+    this.photoUrl,
+    this.status,
   });
 
   final String? name;
@@ -110,6 +121,8 @@ class EmployeeUpdateInput {
   final String? zipCode;
   final double? latitude;
   final double? longitude;
+  final String? photoUrl;
+  final String? status;
 
   Map<String, dynamic> toJson() {
     final data = <String, dynamic>{};
@@ -122,6 +135,8 @@ class EmployeeUpdateInput {
     if (zipCode != null) data['zip_code'] = zipCode;
     if (latitude != null) data['latitude'] = latitude;
     if (longitude != null) data['longitude'] = longitude;
+    if (photoUrl != null) data['photo_url'] = photoUrl;
+    if (status != null) data['status'] = status;
     return data;
   }
 }

@@ -171,7 +171,7 @@ class ApiService {
           headers: _headers(bearerToken),
           body: jsonEncode(payload),
         )
-        .timeout(const Duration(seconds: 8));
+        .timeout(const Duration(seconds: 20));
 
     _throwIfError(response, fallbackMessage: 'Failed to update employee');
     final data = jsonDecode(response.body) as Map<String, dynamic>;
@@ -261,7 +261,7 @@ class ApiService {
           headers: _headers(bearerToken),
           body: jsonEncode(payload),
         )
-        .timeout(const Duration(seconds: 8));
+        .timeout(const Duration(seconds: 20));
 
     _throwIfError(response, fallbackMessage: 'Failed to update client');
     final data = jsonDecode(response.body) as Map<String, dynamic>;
@@ -519,6 +519,31 @@ class ApiService {
     _throwIfError(response, fallbackMessage: 'Failed to create job assignment');
     final data = jsonDecode(response.body) as Map<String, dynamic>;
     return JobAssignment.fromJson(data);
+  }
+
+  Future<String> deleteJobAssignment(
+    String jobId,
+    String assignmentId, {
+    String? bearerToken,
+  }) async {
+    final response = await http
+        .delete(
+          Uri.parse(
+            '${_backend.baseUrl}/api/v1/jobs/$jobId/assignments/$assignmentId',
+          ),
+          headers: _headers(bearerToken),
+        )
+        .timeout(const Duration(seconds: 8));
+
+    _throwIfError(response, fallbackMessage: 'Failed to delete job assignment');
+    if (response.body.isEmpty) {
+      return 'Assignment deleted';
+    }
+    final data = jsonDecode(response.body);
+    if (data is Map<String, dynamic> && data['message'] != null) {
+      return data['message'].toString();
+    }
+    return 'Assignment deleted';
   }
 
   Future<List<TaskDefinition>> listTaskDefinitions({

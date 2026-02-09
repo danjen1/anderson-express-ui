@@ -10,4 +10,7 @@ class AppEnv {
   );
 
   static bool get isPreview => environment.trim().toLowerCase() == 'preview';
+
+  static bool get isDevelopment =>
+      environment.trim().toLowerCase() == 'development';
 }

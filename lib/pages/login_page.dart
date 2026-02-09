@@ -409,7 +409,8 @@ class _LoginPageState extends State<LoginPage> {
                                   child: const Text('Open Registration Invite'),
                                 ),
                               ),
-                              if (AppEnv.isDemoMode) ...[
+                              if (AppEnv.isDemoMode ||
+                                  AppEnv.isDevelopment) ...[
                                 const SizedBox(height: 12),
                                 Container(
                                   width: double.infinity,
@@ -428,7 +429,9 @@ class _LoginPageState extends State<LoginPage> {
                                         CrossAxisAlignment.center,
                                     children: [
                                       Text(
-                                        'Quick Demo Role Access (No Password Entry)',
+                                        AppEnv.isDemoMode
+                                            ? 'Quick Demo Role Access (No Password Entry)'
+                                            : 'Quick Local Role Access',
                                         textAlign: TextAlign.center,
                                         style: TextStyle(
                                           fontWeight: FontWeight.w700,

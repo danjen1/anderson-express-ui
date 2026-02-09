@@ -1,23 +1,32 @@
 import 'package:flutter/material.dart';
 
 import '../services/auth_session.dart';
+import 'personal_profile_modal.dart';
 
 class ProfileMenuButton extends StatelessWidget {
-  const ProfileMenuButton({super.key});
+  const ProfileMenuButton({super.key, this.onProfileUpdated});
+
+  final VoidCallback? onProfileUpdated;
 
   @override
   Widget build(BuildContext context) {
     final session = AuthSession.current;
     final email = session?.loginEmail ?? '';
     final initials = _initialsFromEmail(email);
+    final dark = Theme.of(context).brightness == Brightness.dark;
+    final avatarBg = dark ? const Color(0xFFB39CD0) : const Color(0xFF442E6F);
+    final avatarFg = dark ? const Color(0xFF1F1F1F) : Colors.white;
     final showKnowledgeBase = session?.user.isClient != true;
 
     return PopupMenuButton<String>(
       tooltip: 'Account menu',
-      onSelected: (value) {
+      onSelected: (value) async {
         switch (value) {
           case 'profile':
-            Navigator.pushNamed(context, '/profile');
+            final updated = await showPersonalProfileModal(context);
+            if (updated) {
+              onProfileUpdated?.call();
+            }
             break;
           case 'knowledge_base':
             Navigator.pushNamed(context, '/knowledge-base');
@@ -62,9 +71,14 @@ class ProfileMenuButton extends StatelessWidget {
         padding: const EdgeInsets.symmetric(horizontal: 8),
         child: CircleAvatar(
           radius: 14,
+          backgroundColor: avatarBg,
           child: Text(
             initials,
-            style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w700),
+            style: TextStyle(
+              fontSize: 12,
+              fontWeight: FontWeight.w700,
+              color: avatarFg,
+            ),
           ),
         ),
       ),
