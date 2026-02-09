@@ -4,6 +4,7 @@ import '../models/client.dart';
 import '../models/employee.dart';
 import '../services/api_service.dart';
 import '../services/auth_session.dart';
+import '../theme/crud_modal_theme.dart';
 import '../utils/error_text.dart';
 
 Future<bool> showPersonalProfileModal(BuildContext context) async {
@@ -247,18 +248,42 @@ class _PersonalProfileDialogState extends State<_PersonalProfileDialog> {
     );
   }
 
+  Color _titleColor(BuildContext context) {
+    return Theme.of(context).brightness == Brightness.dark
+        ? const Color(0xFFB39CD0)
+        : const Color(0xFF442E6F);
+  }
+
+  Color _avatarBgColor(BuildContext context) {
+    return Theme.of(context).brightness == Brightness.dark
+        ? const Color(0xFF3B4250)
+        : const Color(0xFFA8D6F7);
+  }
+
+  Color _errorColor(BuildContext context) {
+    return Theme.of(context).brightness == Brightness.dark
+        ? const Color(0xFFFFC1CC)
+        : const Color(0xFFE63721);
+  }
+
+  Color _infoColor(BuildContext context) {
+    return Theme.of(context).brightness == Brightness.dark
+        ? const Color(0xFFB8BCC4)
+        : const Color(0xFF41588E);
+  }
+
   @override
   Widget build(BuildContext context) {
-    final dark = Theme.of(context).brightness == Brightness.dark;
-    final panelTitle = dark ? const Color(0xFFB39CD0) : const Color(0xFF442E6F);
 
-    return AlertDialog(
-      title: Row(
+    return Theme(
+      data: buildCrudModalTheme(context),
+      child: AlertDialog(
+        title: Row(
         children: [
           Expanded(
             child: Text(
               _title,
-              style: TextStyle(color: panelTitle, fontWeight: FontWeight.w800),
+              style: TextStyle(color: _titleColor(context), fontWeight: FontWeight.w800),
             ),
           ),
           ClipRRect(
@@ -290,9 +315,7 @@ class _PersonalProfileDialogState extends State<_PersonalProfileDialog> {
                           children: [
                             CircleAvatar(
                               radius: 56,
-                              backgroundColor: dark
-                                  ? const Color(0xFF3B4250)
-                                  : const Color(0xFFA8D6F7),
+                              backgroundColor: _avatarBgColor(context),
                               backgroundImage: AssetImage(
                                 _assetPath(
                                   value.text,
@@ -367,9 +390,7 @@ class _PersonalProfileDialogState extends State<_PersonalProfileDialog> {
                         child: Text(
                           _error!,
                           style: TextStyle(
-                            color: dark
-                                ? const Color(0xFFFFC1CC)
-                                : const Color(0xFFE63721),
+                            color: _errorColor(context),
                             fontWeight: FontWeight.w700,
                             fontSize: 12,
                           ),
@@ -383,9 +404,7 @@ class _PersonalProfileDialogState extends State<_PersonalProfileDialog> {
                         child: Text(
                           'Admin profile updates are not enabled here yet.',
                           style: TextStyle(
-                            color: dark
-                                ? const Color(0xFFB8BCC4)
-                                : const Color(0xFF41588E),
+                            color: _infoColor(context),
                             fontSize: 12,
                           ),
                         ),
@@ -406,6 +425,7 @@ class _PersonalProfileDialogState extends State<_PersonalProfileDialog> {
             child: Text(_saving ? 'Saving...' : 'Save'),
           ),
       ],
+      ),
     );
   }
 }

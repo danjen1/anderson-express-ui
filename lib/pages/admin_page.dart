@@ -18,7 +18,9 @@ import '../services/api_service.dart';
 import '../services/app_env.dart';
 import '../services/auth_session.dart';
 import '../services/backend_runtime.dart';
+import '../theme/crud_modal_theme.dart';
 import '../utils/date_format.dart';
+import '../utils/dialog_utils.dart';
 import '../utils/error_text.dart';
 import '../widgets/backend_banner.dart';
 import '../widgets/brand_app_bar_title.dart';
@@ -47,88 +49,6 @@ enum _LocationFilter { all, active, inactive }
 enum _JobFilter { all, pending, assigned, inProgress, completed, overdue }
 
 enum _CleaningRequestFilter { open, reviewed, scheduled, closed, all }
-
-ThemeData _buildCrudModalTheme(BuildContext context) {
-  final dark = Theme.of(context).brightness == Brightness.dark;
-  return Theme.of(context).copyWith(
-    dialogTheme: DialogThemeData(
-      backgroundColor: dark ? const Color(0xFF2C2C2C) : Colors.white,
-      surfaceTintColor: Colors.transparent,
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(14),
-        side: BorderSide(
-          color: dark ? const Color(0xFF4A525F) : const Color(0xFFA8D6F7),
-        ),
-      ),
-    ),
-    inputDecorationTheme: InputDecorationTheme(
-      filled: true,
-      fillColor: dark ? const Color(0xFF1F1F1F) : const Color(0xFFF7FCFE),
-      border: OutlineInputBorder(
-        borderRadius: BorderRadius.circular(10),
-        borderSide: BorderSide(
-          color: dark ? const Color(0xFF657184) : const Color(0xFFBEDCE4),
-        ),
-      ),
-      enabledBorder: OutlineInputBorder(
-        borderRadius: BorderRadius.circular(10),
-        borderSide: BorderSide(
-          color: dark ? const Color(0xFF657184) : const Color(0xFFBEDCE4),
-        ),
-      ),
-      focusedBorder: OutlineInputBorder(
-        borderRadius: BorderRadius.circular(10),
-        borderSide: BorderSide(
-          color: dark ? const Color(0xFFB39CD0) : const Color(0xFF296273),
-          width: 1.4,
-        ),
-      ),
-      labelStyle: TextStyle(
-        color: dark ? const Color(0xFFE4E4E4) : const Color(0xFF442E6F),
-      ),
-      hintStyle: TextStyle(
-        color: dark ? const Color(0xFFB8BCC4) : const Color(0xFF6A6A6A),
-      ),
-    ),
-    textButtonTheme: TextButtonThemeData(
-      style: TextButton.styleFrom(
-        foregroundColor: dark
-            ? const Color(0xFFA8DADC)
-            : const Color(0xFF296273),
-      ),
-    ),
-    outlinedButtonTheme: OutlinedButtonThemeData(
-      style: OutlinedButton.styleFrom(
-        foregroundColor: dark
-            ? const Color(0xFFA8DADC)
-            : const Color(0xFF296273),
-        side: BorderSide(
-          color: dark ? const Color(0xFF657184) : const Color(0xFFBEDCE4),
-        ),
-      ),
-    ),
-    filledButtonTheme: FilledButtonThemeData(
-      style: FilledButton.styleFrom(
-        backgroundColor: dark
-            ? const Color(0xFFB39CD0)
-            : const Color(0xFF442E6F),
-        foregroundColor: dark ? const Color(0xFF1F1F1F) : Colors.white,
-      ),
-    ),
-  );
-}
-
-Color _crudModalTitleColor(BuildContext context) {
-  return Theme.of(context).brightness == Brightness.dark
-      ? const Color(0xFFB39CD0)
-      : const Color(0xFF442E6F);
-}
-
-Color _crudModalRequiredColor(BuildContext context) {
-  return Theme.of(context).brightness == Brightness.dark
-      ? const Color(0xFFFFC1CC)
-      : const Color(0xFF442E6F);
-}
 
 class AdminPage extends StatefulWidget {
   const AdminPage({super.key});
@@ -198,7 +118,7 @@ class _AdminPageState extends State<AdminPage> {
           title: Text(
             title,
             style: TextStyle(
-              color: _crudModalTitleColor(context),
+              color: crudModalTitleColor(context),
               fontWeight: FontWeight.w800,
             ),
           ),
@@ -226,7 +146,7 @@ class _AdminPageState extends State<AdminPage> {
           title: Text(
             title,
             style: TextStyle(
-              color: _crudModalTitleColor(context),
+              color: crudModalTitleColor(context),
               fontWeight: FontWeight.w800,
             ),
           ),
@@ -3938,7 +3858,7 @@ class _JobEditorDialogState extends State<_JobEditorDialog> {
             title: Text(
               'Confirm late/early job time',
               style: TextStyle(
-                color: _crudModalTitleColor(context),
+                color: crudModalTitleColor(context),
                 fontWeight: FontWeight.w800,
               ),
             ),
@@ -3997,7 +3917,7 @@ class _JobEditorDialogState extends State<_JobEditorDialog> {
               child: Text(
                 widget.isCreate ? 'Create Job' : 'Edit Job',
                 style: TextStyle(
-                  color: _crudModalTitleColor(context),
+                  color: crudModalTitleColor(context),
                   fontWeight: FontWeight.w800,
                 ),
               ),
@@ -4330,7 +4250,7 @@ class _EmployeeEditorDialogState extends State<_EmployeeEditorDialog> {
               child: Text(
                 widget.isCreate ? 'Create Employee' : 'Edit Employee',
                 style: TextStyle(
-                  color: _crudModalTitleColor(context),
+                  color: crudModalTitleColor(context),
                   fontWeight: FontWeight.w800,
                 ),
               ),
@@ -4399,9 +4319,7 @@ class _EmployeeEditorDialogState extends State<_EmployeeEditorDialog> {
                     Text(
                       'Employee #: ${widget.employeeNumber.isEmpty ? '—' : widget.employeeNumber}',
                       style: TextStyle(
-                        color: dark
-                            ? const Color(0xFFE4E4E4)
-                            : const Color(0xFF296273),
+                        color: crudModalTitleColor(context),
                         fontWeight: FontWeight.w700,
                         fontSize: 12,
                       ),
@@ -4447,22 +4365,22 @@ class _EmployeeEditorDialogState extends State<_EmployeeEditorDialog> {
                     setState(() => _status = value);
                   },
                 ),
-                if (widget.isCreate)
-                  Padding(
-                    padding: const EdgeInsets.only(top: 8),
-                    child: Align(
-                      alignment: Alignment.centerLeft,
-                      child: Text(
-                        'New employees default to the shared profile image unless changed above.',
-                        style: TextStyle(
-                          fontSize: 12,
-                          color: dark
-                              ? const Color(0xFFE4E4E4)
-                              : const Color(0xFF296273),
-                        ),
-                      ),
-                    ),
-                  ),
+                // if (widget.isCreate)
+                //   Padding(
+                //     padding: const EdgeInsets.only(top: 8),
+                //     child: Align(
+                //       alignment: Alignment.centerLeft,
+                //       child: Text(
+                //         'New employees default to the shared profile image unless changed above.',
+                //         style: TextStyle(
+                //           fontSize: 12,
+                //           color: dark
+                //               ? const Color(0xFFE4E4E4)
+                //               : const Color(0xFF296273),
+                //         ),
+                //       ),
+                //     ),
+                //   ),
               ],
             ),
           ),
@@ -4615,175 +4533,174 @@ class _ClientEditorDialogState extends State<_ClientEditorDialog> {
 
   @override
   Widget build(BuildContext context) {
-    final dark = Theme.of(context).brightness == Brightness.dark;
-    return AlertDialog(
-      title: Row(
-        children: [
-          Expanded(
-            child: Text(
-              widget.isCreate ? 'Create Client' : 'Edit Client',
-              style: TextStyle(
-                color: dark ? const Color(0xFFB39CD0) : const Color(0xFF442E6F),
-                fontWeight: FontWeight.w800,
+    return Theme(
+      data: _buildCrudModalTheme(context),
+      child: AlertDialog(
+        title: Row(
+          children: [
+            Expanded(
+              child: Text(
+                widget.isCreate ? 'Create Client' : 'Edit Client',
+                style: TextStyle(
+                  color: crudModalTitleColor(context),
+                  fontWeight: FontWeight.w800,
+                ),
               ),
             ),
-          ),
-          ClipRRect(
-            borderRadius: BorderRadius.circular(4),
-            child: Image.asset(
-              'assets/images/logo.png',
-              width: 48,
-              height: 48,
-              fit: BoxFit.cover,
+            ClipRRect(
+              borderRadius: BorderRadius.circular(4),
+              child: Image.asset(
+                'assets/images/logo.png',
+                width: 48,
+                height: 48,
+                fit: BoxFit.cover,
+              ),
             ),
+          ],
+        ),
+        content: SizedBox(
+          width: 480,
+          child: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Align(
+                  alignment: Alignment.centerLeft,
+                  child: Text(
+                    '* Required fields',
+                    style: TextStyle(
+                      color: _crudModalRequiredColor(context),
+                      fontWeight: FontWeight.w700,
+                      fontSize: 12,
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 10),
+                _field(_name, 'Name', required: true),
+                const SizedBox(height: 10),
+                _field(_email, 'Email', required: true),
+                const SizedBox(height: 10),
+                _field(_phone, 'Phone'),
+                const SizedBox(height: 10),
+                _field(_address, 'Address'),
+                const SizedBox(height: 10),
+                _field(_city, 'City'),
+                const SizedBox(height: 10),
+                _field(_state, 'State'),
+                const SizedBox(height: 10),
+                _field(_zipCode, 'Zip Code'),
+                const SizedBox(height: 10),
+                DropdownButtonFormField<String>(
+                  initialValue: _status,
+                  decoration: const InputDecoration(
+                    labelText: 'Status',
+                    border: OutlineInputBorder(),
+                  ),
+                  items: const [
+                    DropdownMenuItem(value: 'active', child: Text('Active')),
+                    DropdownMenuItem(value: 'invited', child: Text('Invited')),
+                    DropdownMenuItem(
+                      value: 'inactive',
+                      child: Text('Inactive'),
+                    ),
+                    DropdownMenuItem(value: 'deleted', child: Text('Deleted')),
+                  ],
+                  onChanged: (value) {
+                    if (value == null) return;
+                    setState(() => _status = value);
+                  },
+                ),
+                const SizedBox(height: 10),
+                DropdownButtonFormField<String>(
+                  initialValue: _preferredContactMethod,
+                  decoration: const InputDecoration(
+                    labelText: 'Preferred Contact Method',
+                    border: OutlineInputBorder(),
+                  ),
+                  items: const [
+                    DropdownMenuItem(value: 'phone', child: Text('Phone')),
+                    DropdownMenuItem(value: 'email', child: Text('Email')),
+                    DropdownMenuItem(value: 'sms', child: Text('SMS')),
+                  ],
+                  onChanged: (value) {
+                    if (value == null) return;
+                    setState(() => _preferredContactMethod = value);
+                  },
+                ),
+                const SizedBox(height: 10),
+                _field(_preferredContactWindow, 'Preferred Contact Window'),
+                const SizedBox(height: 10),
+                Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.all(10),
+                  decoration: BoxDecoration(
+                    color: Theme.of(context).brightness == Brightness.dark
+                        ? const Color(0xFF2F313A)
+                        : const Color(0xFFEAF4FA),
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(
+                      color: Theme.of(context).brightness == Brightness.dark
+                          ? const Color(0xFF4A4D5A)
+                          : const Color(0xFFA8D6F7),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () {
+              if (widget.isCreate) {
+                if (_name.text.trim().isEmpty || _email.text.trim().isEmpty) {
+                  return;
+                }
+                Navigator.pop(
+                  context,
+                  ClientCreateInput(
+                    name: _name.text.trim(),
+                    email: _email.text.trim(),
+                    status: _status,
+                    phoneNumber: _nullable(_phone.text),
+                    address: _nullable(_address.text),
+                    city: _nullable(_city.text),
+                    state: _nullable(_state.text),
+                    zipCode: _nullable(_zipCode.text),
+                    preferredContactMethod: _nullable(_preferredContactMethod),
+                    preferredContactWindow: _nullable(
+                      _preferredContactWindow.text,
+                    ),
+                  ),
+                );
+              } else {
+                Navigator.pop(
+                  context,
+                  ClientUpdateInput(
+                    name: _nullable(_name.text),
+                    email: _nullable(_email.text),
+                    status: _status,
+                    phoneNumber: _nullable(_phone.text),
+                    address: _nullable(_address.text),
+                    city: _nullable(_city.text),
+                    state: _nullable(_state.text),
+                    zipCode: _nullable(_zipCode.text),
+                    preferredContactMethod: _nullable(_preferredContactMethod),
+                    preferredContactWindow: _nullable(
+                      _preferredContactWindow.text,
+                    ),
+                  ),
+                );
+              }
+            },
+            child: Text(widget.isCreate ? 'Create' : 'Save'),
           ),
         ],
       ),
-      content: SizedBox(
-        width: 480,
-        child: SingleChildScrollView(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Align(
-                alignment: Alignment.centerLeft,
-                child: Text(
-                  '* Required fields',
-                  style: TextStyle(
-                    color: dark
-                        ? const Color(0xFFFFC1CC)
-                        : const Color(0xFF442E6F),
-                    fontWeight: FontWeight.w700,
-                    fontSize: 12,
-                  ),
-                ),
-              ),
-              const SizedBox(height: 10),
-              _field(_name, 'Name', required: true),
-              const SizedBox(height: 10),
-              _field(_email, 'Email', required: true),
-              const SizedBox(height: 10),
-              _field(_phone, 'Phone'),
-              const SizedBox(height: 10),
-              _field(_address, 'Address'),
-              const SizedBox(height: 10),
-              _field(_city, 'City'),
-              const SizedBox(height: 10),
-              _field(_state, 'State'),
-              const SizedBox(height: 10),
-              _field(_zipCode, 'Zip Code'),
-              const SizedBox(height: 10),
-              DropdownButtonFormField<String>(
-                initialValue: _status,
-                decoration: const InputDecoration(
-                  labelText: 'Status',
-                  border: OutlineInputBorder(),
-                ),
-                items: const [
-                  DropdownMenuItem(value: 'active', child: Text('Active')),
-                  DropdownMenuItem(value: 'invited', child: Text('Invited')),
-                  DropdownMenuItem(value: 'inactive', child: Text('Inactive')),
-                  DropdownMenuItem(value: 'deleted', child: Text('Deleted')),
-                ],
-                onChanged: (value) {
-                  if (value == null) return;
-                  setState(() => _status = value);
-                },
-              ),
-              const SizedBox(height: 10),
-              DropdownButtonFormField<String>(
-                initialValue: _preferredContactMethod,
-                decoration: const InputDecoration(
-                  labelText: 'Preferred Contact Method',
-                  border: OutlineInputBorder(),
-                ),
-                items: const [
-                  DropdownMenuItem(value: 'phone', child: Text('Phone')),
-                  DropdownMenuItem(value: 'email', child: Text('Email')),
-                  DropdownMenuItem(value: 'sms', child: Text('SMS')),
-                ],
-                onChanged: (value) {
-                  if (value == null) return;
-                  setState(() => _preferredContactMethod = value);
-                },
-              ),
-              const SizedBox(height: 10),
-              _field(_preferredContactWindow, 'Preferred Contact Window'),
-              const SizedBox(height: 10),
-              Container(
-                width: double.infinity,
-                padding: const EdgeInsets.all(10),
-                decoration: BoxDecoration(
-                  color: Theme.of(context).brightness == Brightness.dark
-                      ? const Color(0xFF2F313A)
-                      : const Color(0xFFEAF4FA),
-                  borderRadius: BorderRadius.circular(8),
-                  border: Border.all(
-                    color: Theme.of(context).brightness == Brightness.dark
-                        ? const Color(0xFF4A4D5A)
-                        : const Color(0xFFA8D6F7),
-                  ),
-                ),
-                child: const Text(
-                  'Coordinates are auto-filled from address on save when not provided.',
-                  style: TextStyle(fontSize: 12),
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
-      actions: [
-        TextButton(
-          onPressed: () => Navigator.pop(context),
-          child: const Text('Cancel'),
-        ),
-        FilledButton(
-          onPressed: () {
-            if (widget.isCreate) {
-              if (_name.text.trim().isEmpty || _email.text.trim().isEmpty) {
-                return;
-              }
-              Navigator.pop(
-                context,
-                ClientCreateInput(
-                  name: _name.text.trim(),
-                  email: _email.text.trim(),
-                  status: _status,
-                  phoneNumber: _nullable(_phone.text),
-                  address: _nullable(_address.text),
-                  city: _nullable(_city.text),
-                  state: _nullable(_state.text),
-                  zipCode: _nullable(_zipCode.text),
-                  preferredContactMethod: _nullable(_preferredContactMethod),
-                  preferredContactWindow: _nullable(
-                    _preferredContactWindow.text,
-                  ),
-                ),
-              );
-            } else {
-              Navigator.pop(
-                context,
-                ClientUpdateInput(
-                  name: _nullable(_name.text),
-                  email: _nullable(_email.text),
-                  status: _status,
-                  phoneNumber: _nullable(_phone.text),
-                  address: _nullable(_address.text),
-                  city: _nullable(_city.text),
-                  state: _nullable(_state.text),
-                  zipCode: _nullable(_zipCode.text),
-                  preferredContactMethod: _nullable(_preferredContactMethod),
-                  preferredContactWindow: _nullable(
-                    _preferredContactWindow.text,
-                  ),
-                ),
-              );
-            }
-          },
-          child: Text(widget.isCreate ? 'Create' : 'Save'),
-        ),
-      ],
     );
   }
 
@@ -4939,193 +4856,197 @@ class _LocationEditorDialogState extends State<_LocationEditorDialog> {
   @override
   Widget build(BuildContext context) {
     final dark = Theme.of(context).brightness == Brightness.dark;
-    return AlertDialog(
-      title: Row(
-        children: [
-          Expanded(
-            child: Text(
-              widget.isCreate ? 'Create Location' : 'Edit Location',
-              style: TextStyle(
-                color: dark ? const Color(0xFFB39CD0) : const Color(0xFF442E6F),
-                fontWeight: FontWeight.w800,
+    return Theme(
+      data: _buildCrudModalTheme(context),
+      child: AlertDialog(
+        title: Row(
+          children: [
+            Expanded(
+              child: Text(
+                widget.isCreate ? 'Create Location' : 'Edit Location',
+                style: TextStyle(
+                  color: crudModalTitleColor(context),
+                  fontWeight: FontWeight.w800,
+                ),
               ),
             ),
-          ),
-          ClipRRect(
-            borderRadius: BorderRadius.circular(4),
-            child: Image.asset(
-              'assets/images/logo.png',
-              width: 48,
-              height: 48,
-              fit: BoxFit.cover,
+            ClipRRect(
+              borderRadius: BorderRadius.circular(4),
+              child: Image.asset(
+                'assets/images/logo.png',
+                width: 48,
+                height: 48,
+                fit: BoxFit.cover,
+              ),
             ),
+          ],
+        ),
+        content: SizedBox(
+          width: 520,
+          child: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                ValueListenableBuilder<TextEditingValue>(
+                  valueListenable: _photoUrl,
+                  builder: (context, value, _) {
+                    final path = value.text.trim().isNotEmpty
+                        ? value.text.trim()
+                        : _defaultLocationPhotoAsset;
+                    return Stack(
+                      children: [
+                        CircleAvatar(
+                          radius: 56,
+                          backgroundColor: dark
+                              ? const Color(0xFF3B4250)
+                              : const Color(0xFFA8D6F7),
+                          backgroundImage: _photoProvider(
+                            path,
+                            fallback: _defaultLocationPhotoAsset,
+                          ),
+                        ),
+                        Positioned(
+                          right: -2,
+                          bottom: -2,
+                          child: IconButton(
+                            visualDensity: VisualDensity.compact,
+                            tooltip: 'Upload location photo',
+                            onPressed: _pickPhotoFile,
+                            icon: const Icon(Icons.edit, size: 18),
+                          ),
+                        ),
+                      ],
+                    );
+                  },
+                ),
+                const SizedBox(height: 10),
+                Align(
+                  alignment: Alignment.centerLeft,
+                  child: Text(
+                    '* Required fields',
+                    style: TextStyle(
+                      color: _crudModalRequiredColor(context),
+                      fontWeight: FontWeight.w700,
+                      fontSize: 12,
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 10),
+                if (widget.isCreate)
+                  DropdownButtonFormField<int>(
+                    initialValue: _selectedClientId,
+                    decoration: const InputDecoration(
+                      labelText: 'Client *',
+                      border: OutlineInputBorder(),
+                    ),
+                    items: widget.clients
+                        .map(
+                          (client) => DropdownMenuItem<int>(
+                            value: int.tryParse(client.id),
+                            child: Text(
+                              '${client.clientNumber} • ${client.name}',
+                            ),
+                          ),
+                        )
+                        .toList(),
+                    onChanged: (value) =>
+                        setState(() => _selectedClientId = value),
+                  ),
+                if (widget.isCreate) const SizedBox(height: 10),
+                DropdownButtonFormField<String>(
+                  initialValue: _type,
+                  decoration: const InputDecoration(
+                    labelText: 'Type *',
+                    border: OutlineInputBorder(),
+                  ),
+                  items: const [
+                    DropdownMenuItem(
+                      value: 'residential',
+                      child: Text('Residential'),
+                    ),
+                    DropdownMenuItem(
+                      value: 'commercial',
+                      child: Text('Commercial'),
+                    ),
+                  ],
+                  onChanged: (value) {
+                    if (value == null) return;
+                    setState(() => _type = value);
+                  },
+                ),
+                const SizedBox(height: 10),
+                DropdownButtonFormField<String>(
+                  initialValue: _status,
+                  decoration: const InputDecoration(
+                    labelText: 'Status',
+                    border: OutlineInputBorder(),
+                  ),
+                  items: const [
+                    DropdownMenuItem(value: 'active', child: Text('Active')),
+                    DropdownMenuItem(
+                      value: 'inactive',
+                      child: Text('Inactive'),
+                    ),
+                    DropdownMenuItem(value: 'deleted', child: Text('Deleted')),
+                  ],
+                  onChanged: (value) {
+                    if (value == null) return;
+                    setState(() => _status = value);
+                  },
+                ),
+                const SizedBox(height: 10),
+                _field(_address, 'Address', required: true),
+                const SizedBox(height: 10),
+                _field(_city, 'City', required: true),
+                const SizedBox(height: 10),
+                _field(_state, 'State', required: true),
+                const SizedBox(height: 10),
+                _field(_zipCode, 'Zip Code', required: true),
+              ],
+            ),
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () {
+              if (widget.isCreate) {
+                if (_selectedClientId == null) return;
+                Navigator.pop(
+                  context,
+                  LocationCreateInput(
+                    type: _type,
+                    status: _status,
+                    clientId: _selectedClientId!,
+                    photoUrl: _nullable(_photoUrl.text),
+                    address: _nullable(_address.text),
+                    city: _nullable(_city.text),
+                    state: _nullable(_state.text),
+                    zipCode: _nullable(_zipCode.text),
+                  ),
+                );
+              } else {
+                Navigator.pop(
+                  context,
+                  LocationUpdateInput(
+                    type: _type,
+                    status: _status,
+                    photoUrl: _nullable(_photoUrl.text),
+                    address: _nullable(_address.text),
+                    city: _nullable(_city.text),
+                    state: _nullable(_state.text),
+                    zipCode: _nullable(_zipCode.text),
+                  ),
+                );
+              }
+            },
+            child: Text(widget.isCreate ? 'Create' : 'Save'),
           ),
         ],
       ),
-      content: SizedBox(
-        width: 520,
-        child: SingleChildScrollView(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              ValueListenableBuilder<TextEditingValue>(
-                valueListenable: _photoUrl,
-                builder: (context, value, _) {
-                  final path = value.text.trim().isNotEmpty
-                      ? value.text.trim()
-                      : _defaultLocationPhotoAsset;
-                  return Stack(
-                    children: [
-                      CircleAvatar(
-                        radius: 56,
-                        backgroundColor: dark
-                            ? const Color(0xFF3B4250)
-                            : const Color(0xFFA8D6F7),
-                        backgroundImage: _photoProvider(
-                          path,
-                          fallback: _defaultLocationPhotoAsset,
-                        ),
-                      ),
-                      Positioned(
-                        right: -2,
-                        bottom: -2,
-                        child: IconButton(
-                          visualDensity: VisualDensity.compact,
-                          tooltip: 'Upload location photo',
-                          onPressed: _pickPhotoFile,
-                          icon: const Icon(Icons.edit, size: 18),
-                        ),
-                      ),
-                    ],
-                  );
-                },
-              ),
-              const SizedBox(height: 10),
-              Align(
-                alignment: Alignment.centerLeft,
-                child: Text(
-                  '* Required fields',
-                  style: TextStyle(
-                    color: dark
-                        ? const Color(0xFFFFC1CC)
-                        : const Color(0xFF442E6F),
-                    fontWeight: FontWeight.w700,
-                    fontSize: 12,
-                  ),
-                ),
-              ),
-              const SizedBox(height: 10),
-              if (widget.isCreate)
-                DropdownButtonFormField<int>(
-                  initialValue: _selectedClientId,
-                  decoration: const InputDecoration(
-                    labelText: 'Client *',
-                    border: OutlineInputBorder(),
-                  ),
-                  items: widget.clients
-                      .map(
-                        (client) => DropdownMenuItem<int>(
-                          value: int.tryParse(client.id),
-                          child: Text(
-                            '${client.clientNumber} • ${client.name}',
-                          ),
-                        ),
-                      )
-                      .toList(),
-                  onChanged: (value) =>
-                      setState(() => _selectedClientId = value),
-                ),
-              if (widget.isCreate) const SizedBox(height: 10),
-              DropdownButtonFormField<String>(
-                initialValue: _type,
-                decoration: const InputDecoration(
-                  labelText: 'Type *',
-                  border: OutlineInputBorder(),
-                ),
-                items: const [
-                  DropdownMenuItem(
-                    value: 'residential',
-                    child: Text('Residential'),
-                  ),
-                  DropdownMenuItem(
-                    value: 'commercial',
-                    child: Text('Commercial'),
-                  ),
-                ],
-                onChanged: (value) {
-                  if (value == null) return;
-                  setState(() => _type = value);
-                },
-              ),
-              const SizedBox(height: 10),
-              DropdownButtonFormField<String>(
-                initialValue: _status,
-                decoration: const InputDecoration(
-                  labelText: 'Status',
-                  border: OutlineInputBorder(),
-                ),
-                items: const [
-                  DropdownMenuItem(value: 'active', child: Text('Active')),
-                  DropdownMenuItem(value: 'inactive', child: Text('Inactive')),
-                  DropdownMenuItem(value: 'deleted', child: Text('Deleted')),
-                ],
-                onChanged: (value) {
-                  if (value == null) return;
-                  setState(() => _status = value);
-                },
-              ),
-              const SizedBox(height: 10),
-              _field(_address, 'Address', required: true),
-              const SizedBox(height: 10),
-              _field(_city, 'City', required: true),
-              const SizedBox(height: 10),
-              _field(_state, 'State', required: true),
-              const SizedBox(height: 10),
-              _field(_zipCode, 'Zip Code', required: true),
-            ],
-          ),
-        ),
-      ),
-      actions: [
-        TextButton(
-          onPressed: () => Navigator.pop(context),
-          child: const Text('Cancel'),
-        ),
-        FilledButton(
-          onPressed: () {
-            if (widget.isCreate) {
-              if (_selectedClientId == null) return;
-              Navigator.pop(
-                context,
-                LocationCreateInput(
-                  type: _type,
-                  status: _status,
-                  clientId: _selectedClientId!,
-                  photoUrl: _nullable(_photoUrl.text),
-                  address: _nullable(_address.text),
-                  city: _nullable(_city.text),
-                  state: _nullable(_state.text),
-                  zipCode: _nullable(_zipCode.text),
-                ),
-              );
-            } else {
-              Navigator.pop(
-                context,
-                LocationUpdateInput(
-                  type: _type,
-                  status: _status,
-                  photoUrl: _nullable(_photoUrl.text),
-                  address: _nullable(_address.text),
-                  city: _nullable(_city.text),
-                  state: _nullable(_state.text),
-                  zipCode: _nullable(_zipCode.text),
-                ),
-              );
-            }
-          },
-          child: Text(widget.isCreate ? 'Create' : 'Save'),
-        ),
-      ],
     );
   }
 
@@ -5193,87 +5114,115 @@ class _CleaningProfileEditorDialogState
 
   @override
   Widget build(BuildContext context) {
-    return AlertDialog(
-      title: Text(
-        widget.isCreate ? 'Create Cleaning Profile' : 'Edit Cleaning Profile',
-      ),
-      content: SizedBox(
-        width: 520,
-        child: SingleChildScrollView(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              DropdownButtonFormField<int>(
-                initialValue: _selectedLocationId,
-                decoration: const InputDecoration(
-                  labelText: 'Location',
-                  border: OutlineInputBorder(),
-                ),
-                items: widget.locations
-                    .map(
-                      (location) => DropdownMenuItem<int>(
-                        value: int.tryParse(location.id),
-                        child: Text(location.locationNumber),
-                      ),
-                    )
-                    .toList(),
-                onChanged: (value) =>
-                    setState(() => _selectedLocationId = value),
-              ),
-              const SizedBox(height: 10),
-              TextField(
-                controller: _name,
-                decoration: const InputDecoration(
-                  labelText: 'Profile Name',
-                  border: OutlineInputBorder(),
+    return Theme(
+      data: _buildCrudModalTheme(context),
+      child: AlertDialog(
+        title: Row(
+          children: [
+            Expanded(
+              child: Text(
+                widget.isCreate
+                    ? 'Create Cleaning Profile'
+                    : 'Edit Cleaning Profile',
+                style: TextStyle(
+                  color: crudModalTitleColor(context),
+                  fontWeight: FontWeight.w800,
                 ),
               ),
-              const SizedBox(height: 10),
-              TextField(
-                controller: _notes,
-                maxLines: 3,
-                decoration: const InputDecoration(
-                  labelText: 'Notes (optional)',
-                  border: OutlineInputBorder(),
-                ),
+            ),
+            ClipRRect(
+              borderRadius: BorderRadius.circular(4),
+              child: Image.asset(
+                'assets/images/logo.png',
+                width: 48,
+                height: 48,
+                fit: BoxFit.cover,
               ),
-            ],
+            ),
+          ],
+        ),
+        content: SizedBox(
+          width: 520,
+          child: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                DropdownButtonFormField<int>(
+                  initialValue: _selectedLocationId,
+                  decoration: const InputDecoration(
+                    labelText: 'Location',
+                    border: OutlineInputBorder(),
+                  ),
+                  items: widget.locations
+                      .map(
+                        (location) => DropdownMenuItem<int>(
+                          value: int.tryParse(location.id),
+                          child: Text(location.locationNumber),
+                        ),
+                      )
+                      .toList(),
+                  onChanged: (value) =>
+                      setState(() => _selectedLocationId = value),
+                ),
+                const SizedBox(height: 10),
+                TextField(
+                  controller: _name,
+                  decoration: const InputDecoration(
+                    labelText: 'Profile Name',
+                    border: OutlineInputBorder(),
+                  ),
+                ),
+                const SizedBox(height: 10),
+                TextField(
+                  controller: _notes,
+                  maxLines: 3,
+                  decoration: const InputDecoration(
+                    labelText: 'Notes (optional)',
+                    border: OutlineInputBorder(),
+                  ),
+                ),
+              ],
+            ),
           ),
         ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () {
+              if (_selectedLocationId == null || _name.text.trim().isEmpty) {
+                return;
+              }
+              if (widget.isCreate) {
+                Navigator.pop(
+                  context,
+                  CleaningProfileCreateInput(
+                    locationId: _selectedLocationId!,
+                    name: _name.text.trim(),
+                    notes: _notes.text.trim().isEmpty
+                        ? null
+                        : _notes.text.trim(),
+                  ),
+                );
+              } else {
+                Navigator.pop(
+                  context,
+                  CleaningProfileUpdateInput(
+                    locationId: _selectedLocationId!,
+                    name: _name.text.trim(),
+                    notes: _notes.text.trim().isEmpty
+                        ? null
+                        : _notes.text.trim(),
+                  ),
+                );
+              }
+            },
+            child: Text(widget.isCreate ? 'Create' : 'Save'),
+          ),
+        ],
       ),
-      actions: [
-        TextButton(
-          onPressed: () => Navigator.pop(context),
-          child: const Text('Cancel'),
-        ),
-        FilledButton(
-          onPressed: () {
-            if (_selectedLocationId == null || _name.text.trim().isEmpty) {
-              return;
-            }
-            if (widget.isCreate) {
-              Navigator.pop(
-                context,
-                CleaningProfileCreateInput(
-                  locationId: _selectedLocationId!,
-                  name: _name.text.trim(),
-                  notes: _notes.text.trim().isEmpty ? null : _notes.text.trim(),
-                ),
-              );
-            } else {
-              Navigator.pop(
-                context,
-                CleaningProfileUpdateInput(
-                  locationId: _selectedLocationId!,
-                  name: _name.text.trim(),
-                  notes: _notes.text.trim().isEmpty ? null : _notes.text.trim(),
-                ),
-              );
-            }
-          },
-          child: Text(widget.isCreate ? 'Create' : 'Save'),
-        ),
-      ],
     );
   }
 }

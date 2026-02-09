@@ -14,6 +14,7 @@ import '../models/job_assignment.dart';
 import '../models/location.dart';
 import '../services/api_service.dart';
 import '../services/auth_session.dart';
+import '../theme/crud_modal_theme.dart';
 import '../utils/date_format.dart';
 import '../widgets/backend_banner.dart';
 import '../widgets/brand_app_bar_title.dart';
@@ -1864,51 +1865,19 @@ class _ScheduleRequestDialogState extends State<_ScheduleRequestDialog> {
   @override
   Widget build(BuildContext context) {
     final dark = Theme.of(context).brightness == Brightness.dark;
-    final dialogTheme = Theme.of(context).copyWith(
-      dialogTheme: DialogThemeData(
-        backgroundColor: dark ? const Color(0xFF333740) : null,
-        surfaceTintColor: Colors.transparent,
-      ),
-      inputDecorationTheme: InputDecorationTheme(
-        filled: true,
-        fillColor: dark ? const Color(0xFF2C2F36) : Colors.white,
-        border: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(10),
-          borderSide: BorderSide(
-            color: dark ? const Color(0xFF657184) : const Color(0xFFBEDCE4),
-          ),
-        ),
-        enabledBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(10),
-          borderSide: BorderSide(
-            color: dark ? const Color(0xFF657184) : const Color(0xFFBEDCE4),
-          ),
-        ),
-        focusedBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(10),
-          borderSide: BorderSide(
-            color: dark ? const Color(0xFFA8DADC) : const Color(0xFF296273),
-            width: 1.4,
-          ),
-        ),
-        labelStyle: TextStyle(
-          color: dark ? const Color(0xFFE4E4E4) : const Color(0xFF442E6F),
-        ),
-        hintStyle: TextStyle(
-          color: dark ? const Color(0xFFB8BCC4) : const Color(0xFF6A6A6A),
-        ),
-      ),
-    );
 
     return Theme(
-      data: dialogTheme,
+      data: buildCrudModalTheme(context),
       child: AlertDialog(
         title: Row(
           children: [
             Expanded(
               child: Text(
                 'Request Cleaning',
-                style: TextStyle(color: dark ? const Color(0xFFE4E4E4) : null),
+                style: TextStyle(
+                  color: dark ? const Color(0xFFB39CD0) : const Color(0xFF442E6F),
+                  fontWeight: FontWeight.w800,
+                ),
               ),
             ),
             ClipRRect(

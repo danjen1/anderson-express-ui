@@ -18,7 +18,33 @@ class ProfileMenuButton extends StatelessWidget {
     final avatarFg = dark ? const Color(0xFF1F1F1F) : Colors.white;
     final showKnowledgeBase = session?.user.isClient != true;
 
-    return PopupMenuButton<String>(
+    return Theme(
+      data: Theme.of(context).copyWith(
+        popupMenuTheme: PopupMenuThemeData(
+          color: dark ? const Color(0xFF2C2C2C) : Colors.white,
+          surfaceTintColor: Colors.transparent,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(12),
+            side: BorderSide(
+              color: dark ? const Color(0xFF4A525F) : const Color(0xFFA8D6F7),
+            ),
+          ),
+          textStyle: TextStyle(
+            color: dark ? const Color(0xFFE4E4E4) : const Color(0xFF442E6F),
+          ),
+        ),
+        iconTheme: IconThemeData(
+          color: dark ? const Color(0xFFA8DADC) : const Color(0xFF296273),
+        ),
+        listTileTheme: ListTileThemeData(
+          textColor: dark ? const Color(0xFFE4E4E4) : const Color(0xFF442E6F),
+          iconColor: dark ? const Color(0xFFA8DADC) : const Color(0xFF296273),
+        ),
+        dividerTheme: DividerThemeData(
+          color: dark ? const Color(0xFF4A525F) : const Color(0xFFBEDCE4),
+        ),
+      ),
+      child: PopupMenuButton<String>(
       tooltip: 'Account menu',
       onSelected: (value) async {
         switch (value) {
@@ -81,6 +107,7 @@ class ProfileMenuButton extends StatelessWidget {
             ),
           ),
         ),
+      ),
       ),
     );
   }
