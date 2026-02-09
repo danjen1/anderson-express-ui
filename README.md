@@ -1,56 +1,54 @@
-# cleaning_demo
+# Anderson Express UI
 
-Flutter UI for the Rust backend.
+Flutter web interface for the Anderson Express cleaning management system.
 
-## Run
+> 📖 **See the [main README](../../README.md) for complete setup instructions, authentication, and backend configuration.**
 
-Use `API_BASE_URL` to override host/port (defaults to `http://localhost:9000`).
+## Quick Start
 
 ```bash
-flutter run -d chrome \
-  --web-port=3000 \
+# Default (connects to http://localhost:9000)
+flutter run -d chrome --web-port=3000
+
+# Override API endpoint
+flutter run -d chrome --web-port=3000 \
   --dart-define=API_BASE_URL=http://localhost:9000
-```
 
-Default endpoint if `API_BASE_URL` is omitted:
-- Rust: `http://localhost:9000` (`/healthz`, `/api/v1/employees`)
-
-Token endpoint:
-
-```bash
-curl -X POST http://localhost:9000/api/v1/auth/token -H 'Content-Type: application/x-www-form-urlencoded' --data 'username=admin@andersonexpress.com&password=dev-password'
-```
-
-In-app QA flow:
-- Open `QA Smoke` from System Status.
-- Run `Fetch Token`, `Run Employee Smoke`, `Run Client Smoke`, `Run Location Smoke`, or `Run Cleaner Smoke`.
-
-In-app dashboards:
-- `Locations`: list/create/update/delete locations.
-- `Clients`: list/create/update/delete clients.
-- `Cleaner`: assigned jobs + job tasks.
-- `Jobs`: create jobs, assign employees, inspect tasks/assignments.
-
-Runtime host switch (no relaunch required):
-- Open `System Status`.
-- Set host (for example `archlinux`) and click `Apply`.
-- Hidden by default. Enable host override controls with:
-  - `--dart-define=DEBUG_BACKEND_OVERRIDE=true`
-
-If Flutter runs on a different machine than the backend:
-
-```bash
-flutter run -d chrome \
-  --web-port=3000 \
-  --dart-define=API_BASE_URL=http://<linux-host-ip>:9000
-```
-
-Or set host once:
-
-```bash
-flutter run -d chrome \
-  --web-port=3000 \
+# Connect to remote backend
+flutter run -d chrome --web-port=3000 \
   --dart-define=BACKEND_HOST=archlinux
 ```
 
-Invite links use `FRONTEND_REGISTER_URL` from backend env (default `http://localhost:3000/#/register`), so `--web-port=3000` is required for invite links to open correctly.
+## Features
+
+**In-app QA Testing:**
+- Open `QA Smoke` from System Status
+- Run automated smoke tests for employees, clients, locations, cleaners
+
+**Admin Dashboards:**
+- **Jobs**: Create jobs, assign employees, manage tasks
+- **Locations**: CRUD operations for client locations
+- **Clients**: Client management
+- **Employees**: Employee management
+
+**Cleaner Dashboard:**
+- View assigned jobs
+- Update job task statuses
+
+## Configuration
+
+**Debug Backend Override** (hidden by default):
+```bash
+flutter run -d chrome --web-port=3000 \
+  --dart-define=DEBUG_BACKEND_OVERRIDE=true
+```
+Enables runtime host switching via System Status UI.
+
+**Port 3000 Required**: Invite email links use `FRONTEND_REGISTER_URL` (default `http://localhost:3000/#/register`). Always use `--web-port=3000` for proper invite flow.
+
+## Authentication
+
+Default dev credentials (seeded by backend):
+- Admin: `admin@andersonexpress.com` / `dev-password`
+- Employee: `john@andersonexpress.com` / `worker123`
+- Client: `contact@techstartup.com` / `client123`
