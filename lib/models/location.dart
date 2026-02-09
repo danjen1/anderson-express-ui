@@ -59,6 +59,7 @@ class LocationCreateInput {
   const LocationCreateInput({
     required this.type,
     required this.clientId,
+    this.status,
     this.address,
     this.city,
     this.state,
@@ -72,6 +73,7 @@ class LocationCreateInput {
 
   final String type;
   final int clientId;
+  final String? status;
   final String? address;
   final String? city;
   final String? state;
@@ -85,6 +87,7 @@ class LocationCreateInput {
   Map<String, dynamic> toJson() => {
     'type': type,
     'client_id': clientId,
+    'status': status,
     'address': address,
     'city': city,
     'state': state,
@@ -100,6 +103,7 @@ class LocationCreateInput {
 class LocationUpdateInput {
   const LocationUpdateInput({
     this.type,
+    this.status,
     this.address,
     this.city,
     this.state,
@@ -112,6 +116,7 @@ class LocationUpdateInput {
   });
 
   final String? type;
+  final String? status;
   final String? address;
   final String? city;
   final String? state;
@@ -125,6 +130,7 @@ class LocationUpdateInput {
   Map<String, dynamic> toJson() {
     final data = <String, dynamic>{};
     if (type != null) data['type'] = type;
+    if (status != null) data['status'] = status;
     if (address != null) data['address'] = address;
     if (city != null) data['city'] = city;
     if (state != null) data['state'] = state;

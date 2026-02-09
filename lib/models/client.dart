@@ -52,6 +52,7 @@ class ClientCreateInput {
   const ClientCreateInput({
     required this.name,
     required this.email,
+    this.status,
     this.phoneNumber,
     this.address,
     this.city,
@@ -64,6 +65,7 @@ class ClientCreateInput {
 
   final String name;
   final String email;
+  final String? status;
   final String? phoneNumber;
   final String? address;
   final String? city;
@@ -76,6 +78,7 @@ class ClientCreateInput {
   Map<String, dynamic> toJson() => {
     'name': name,
     'email': email,
+    'status': status,
     'phone_number': phoneNumber,
     'address': address,
     'city': city,
@@ -91,6 +94,7 @@ class ClientUpdateInput {
   const ClientUpdateInput({
     this.name,
     this.email,
+    this.status,
     this.phoneNumber,
     this.address,
     this.city,
@@ -103,6 +107,7 @@ class ClientUpdateInput {
 
   final String? name;
   final String? email;
+  final String? status;
   final String? phoneNumber;
   final String? address;
   final String? city;
@@ -116,6 +121,7 @@ class ClientUpdateInput {
     final data = <String, dynamic>{};
     if (name != null) data['name'] = name;
     if (email != null) data['email'] = email;
+    if (status != null) data['status'] = status;
     if (phoneNumber != null) data['phone_number'] = phoneNumber;
     if (address != null) data['address'] = address;
     if (city != null) data['city'] = city;

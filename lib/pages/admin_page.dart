@@ -524,6 +524,7 @@ class _AdminPageState extends State<AdminPage> {
       builder: (context) => _ClientEditorDialog(
         isCreate: false,
         name: client.name,
+        status: client.status,
         email: client.email ?? '',
         phoneNumber: client.phoneNumber ?? '',
         address: client.address ?? '',
@@ -638,6 +639,7 @@ class _AdminPageState extends State<AdminPage> {
         clients: _clients,
         isCreate: false,
         clientId: location.clientId,
+        status: location.status,
         type: location.type,
         address: location.address ?? '',
         city: location.city ?? '',
@@ -2563,7 +2565,8 @@ class _AdminPageState extends State<AdminPage> {
                                               _rowActionButton(
                                                 icon: Icons.delete,
                                                 tooltip: 'Delete',
-                                                onPressed: () => _deleteJob(job),
+                                                onPressed: () =>
+                                                    _deleteJob(job),
                                               ),
                                             ],
                                           ),
@@ -2798,18 +2801,17 @@ class _AdminPageState extends State<AdminPage> {
                                   _tableColumn('Actions'),
                                 ],
                                 _ManagementModel.clients => [
+                                  _tableColumn(''),
                                   _tableColumn('Client #'),
                                   _tableColumn('Name'),
-                                  _tableColumn('Status'),
                                   _tableColumn('Email'),
                                   _tableColumn('Phone'),
                                   _tableColumn('Actions'),
                                 ],
                                 _ManagementModel.locations => [
-                                  _tableColumn('Photo'),
+                                  _tableColumn(''),
                                   _tableColumn('Client'),
                                   _tableColumn('Type'),
-                                  _tableColumn('Status'),
                                   _tableColumn('Address'),
                                   _tableColumn('Actions'),
                                 ],
@@ -2880,14 +2882,12 @@ class _AdminPageState extends State<AdminPage> {
                                                     tooltip: 'Delete',
                                                     onPressed:
                                                         employee.status
-                                                                    .trim()
-                                                                    .toLowerCase() ==
-                                                                'deleted'
-                                                            ? null
-                                                            : () =>
-                                                                  _delete(
-                                                                    employee,
-                                                                  ),
+                                                                .trim()
+                                                                .toLowerCase() ==
+                                                            'deleted'
+                                                        ? null
+                                                        : () =>
+                                                              _delete(employee),
                                                   ),
                                                 ],
                                               ),
@@ -2901,9 +2901,42 @@ class _AdminPageState extends State<AdminPage> {
                                       .map(
                                         (client) => DataRow(
                                           cells: [
+                                            DataCell(
+                                              Builder(
+                                                builder: (context) {
+                                                  final badge =
+                                                      _statusBadgeForValue(
+                                                        client.status
+                                                            .trim()
+                                                            .toLowerCase(),
+                                                      );
+                                                  return Container(
+                                                    width: 28,
+                                                    height: 28,
+                                                    alignment: Alignment.center,
+                                                    decoration: BoxDecoration(
+                                                      shape: BoxShape.circle,
+                                                      color: badge.bg,
+                                                      border: Border.all(
+                                                        color: badge.border,
+                                                        width: 1.1,
+                                                      ),
+                                                    ),
+                                                    child: Text(
+                                                      badge.label,
+                                                      style: TextStyle(
+                                                        color: badge.fg,
+                                                        fontWeight:
+                                                            FontWeight.w800,
+                                                        fontSize: 12,
+                                                      ),
+                                                    ),
+                                                  );
+                                                },
+                                              ),
+                                            ),
                                             DataCell(Text(client.clientNumber)),
                                             DataCell(Text(client.name)),
-                                            DataCell(Text(client.status)),
                                             DataCell(Text(client.email ?? '—')),
                                             DataCell(
                                               Text(client.phoneNumber ?? '—'),
@@ -2924,8 +2957,15 @@ class _AdminPageState extends State<AdminPage> {
                                                   _rowActionButton(
                                                     icon: Icons.delete,
                                                     tooltip: 'Delete',
-                                                    onPressed: () =>
-                                                        _deleteClient(client),
+                                                    onPressed:
+                                                        client.status
+                                                                .trim()
+                                                                .toLowerCase() ==
+                                                            'deleted'
+                                                        ? null
+                                                        : () => _deleteClient(
+                                                            client,
+                                                          ),
                                                   ),
                                                 ],
                                               ),
@@ -2939,13 +2979,38 @@ class _AdminPageState extends State<AdminPage> {
                                       .map(
                                         (location) => DataRow(
                                           cells: [
-                                            const DataCell(
-                                              CircleAvatar(
-                                                radius: 14,
-                                                child: Icon(
-                                                  Icons.photo,
-                                                  size: 16,
-                                                ),
+                                            DataCell(
+                                              Builder(
+                                                builder: (context) {
+                                                  final badge =
+                                                      _statusBadgeForValue(
+                                                        location.status
+                                                            .trim()
+                                                            .toLowerCase(),
+                                                      );
+                                                  return Container(
+                                                    width: 28,
+                                                    height: 28,
+                                                    alignment: Alignment.center,
+                                                    decoration: BoxDecoration(
+                                                      shape: BoxShape.circle,
+                                                      color: badge.bg,
+                                                      border: Border.all(
+                                                        color: badge.border,
+                                                        width: 1.1,
+                                                      ),
+                                                    ),
+                                                    child: Text(
+                                                      badge.label,
+                                                      style: TextStyle(
+                                                        color: badge.fg,
+                                                        fontWeight:
+                                                            FontWeight.w800,
+                                                        fontSize: 12,
+                                                      ),
+                                                    ),
+                                                  );
+                                                },
                                               ),
                                             ),
                                             DataCell(
@@ -2956,7 +3021,6 @@ class _AdminPageState extends State<AdminPage> {
                                               ),
                                             ),
                                             DataCell(Text(location.type)),
-                                            DataCell(Text(location.status)),
                                             DataCell(
                                               Text(
                                                 [
@@ -2988,10 +3052,15 @@ class _AdminPageState extends State<AdminPage> {
                                                   _rowActionButton(
                                                     icon: Icons.delete,
                                                     tooltip: 'Delete',
-                                                    onPressed: () =>
-                                                        _deleteLocation(
-                                                          location,
-                                                        ),
+                                                    onPressed:
+                                                        location.status
+                                                                .trim()
+                                                                .toLowerCase() ==
+                                                            'deleted'
+                                                        ? null
+                                                        : () => _deleteLocation(
+                                                            location,
+                                                          ),
                                                   ),
                                                 ],
                                               ),
@@ -4420,6 +4489,7 @@ class _EmployeeEditorDialogState extends State<_EmployeeEditorDialog> {
 class _ClientEditorDialog extends StatefulWidget {
   const _ClientEditorDialog({
     this.name = '',
+    this.status = 'active',
     this.email = '',
     this.phoneNumber = '',
     this.address = '',
@@ -4432,6 +4502,7 @@ class _ClientEditorDialog extends StatefulWidget {
   });
 
   final String name;
+  final String status;
   final String email;
   final String phoneNumber;
   final String address;
@@ -4456,6 +4527,7 @@ class _ClientEditorDialogState extends State<_ClientEditorDialog> {
   late final TextEditingController _zipCode;
   late final TextEditingController _preferredContactWindow;
   late String _preferredContactMethod;
+  late String _status;
 
   @override
   void initState() {
@@ -4473,6 +4545,9 @@ class _ClientEditorDialogState extends State<_ClientEditorDialog> {
     _preferredContactMethod = widget.preferredContactMethod.trim().isEmpty
         ? 'phone'
         : widget.preferredContactMethod.trim().toLowerCase();
+    _status = widget.status.trim().isEmpty
+        ? 'active'
+        : widget.status.trim().toLowerCase();
   }
 
   @override
@@ -4549,6 +4624,24 @@ class _ClientEditorDialogState extends State<_ClientEditorDialog> {
               _field(_zipCode, 'Zip Code'),
               const SizedBox(height: 10),
               DropdownButtonFormField<String>(
+                initialValue: _status,
+                decoration: const InputDecoration(
+                  labelText: 'Status',
+                  border: OutlineInputBorder(),
+                ),
+                items: const [
+                  DropdownMenuItem(value: 'active', child: Text('Active')),
+                  DropdownMenuItem(value: 'invited', child: Text('Invited')),
+                  DropdownMenuItem(value: 'inactive', child: Text('Inactive')),
+                  DropdownMenuItem(value: 'deleted', child: Text('Deleted')),
+                ],
+                onChanged: (value) {
+                  if (value == null) return;
+                  setState(() => _status = value);
+                },
+              ),
+              const SizedBox(height: 10),
+              DropdownButtonFormField<String>(
                 initialValue: _preferredContactMethod,
                 decoration: const InputDecoration(
                   labelText: 'Preferred Contact Method',
@@ -4606,6 +4699,7 @@ class _ClientEditorDialogState extends State<_ClientEditorDialog> {
                 ClientCreateInput(
                   name: _name.text.trim(),
                   email: _email.text.trim(),
+                  status: _status,
                   phoneNumber: _nullable(_phone.text),
                   address: _nullable(_address.text),
                   city: _nullable(_city.text),
@@ -4623,6 +4717,7 @@ class _ClientEditorDialogState extends State<_ClientEditorDialog> {
                 ClientUpdateInput(
                   name: _nullable(_name.text),
                   email: _nullable(_email.text),
+                  status: _status,
                   phoneNumber: _nullable(_phone.text),
                   address: _nullable(_address.text),
                   city: _nullable(_city.text),
@@ -4666,6 +4761,7 @@ class _LocationEditorDialog extends StatefulWidget {
   const _LocationEditorDialog({
     required this.clients,
     this.clientId,
+    this.status = 'active',
     this.type = 'residential',
     this.address = '',
     this.city = '',
@@ -4676,6 +4772,7 @@ class _LocationEditorDialog extends StatefulWidget {
 
   final List<Client> clients;
   final int? clientId;
+  final String status;
   final String type;
   final String address;
   final String city;
@@ -4693,6 +4790,7 @@ class _LocationEditorDialogState extends State<_LocationEditorDialog> {
   late final TextEditingController _state;
   late final TextEditingController _zipCode;
   late String _type;
+  late String _status;
   int? _selectedClientId;
 
   @override
@@ -4703,6 +4801,9 @@ class _LocationEditorDialogState extends State<_LocationEditorDialog> {
     _state = TextEditingController(text: widget.state);
     _zipCode = TextEditingController(text: widget.zipCode);
     _type = widget.type.toLowerCase();
+    _status = widget.status.trim().isEmpty
+        ? 'active'
+        : widget.status.trim().toLowerCase();
     _selectedClientId =
         widget.clientId ??
         (widget.clients.isNotEmpty
@@ -4808,6 +4909,23 @@ class _LocationEditorDialogState extends State<_LocationEditorDialog> {
                 },
               ),
               const SizedBox(height: 10),
+              DropdownButtonFormField<String>(
+                initialValue: _status,
+                decoration: const InputDecoration(
+                  labelText: 'Status',
+                  border: OutlineInputBorder(),
+                ),
+                items: const [
+                  DropdownMenuItem(value: 'active', child: Text('Active')),
+                  DropdownMenuItem(value: 'inactive', child: Text('Inactive')),
+                  DropdownMenuItem(value: 'deleted', child: Text('Deleted')),
+                ],
+                onChanged: (value) {
+                  if (value == null) return;
+                  setState(() => _status = value);
+                },
+              ),
+              const SizedBox(height: 10),
               _field(_address, 'Address', required: true),
               const SizedBox(height: 10),
               _field(_city, 'City', required: true),
@@ -4832,6 +4950,7 @@ class _LocationEditorDialogState extends State<_LocationEditorDialog> {
                 context,
                 LocationCreateInput(
                   type: _type,
+                  status: _status,
                   clientId: _selectedClientId!,
                   address: _nullable(_address.text),
                   city: _nullable(_city.text),
@@ -4844,6 +4963,7 @@ class _LocationEditorDialogState extends State<_LocationEditorDialog> {
                 context,
                 LocationUpdateInput(
                   type: _type,
+                  status: _status,
                   address: _nullable(_address.text),
                   city: _nullable(_city.text),
                   state: _nullable(_state.text),
