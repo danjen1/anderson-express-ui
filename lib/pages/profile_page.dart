@@ -9,6 +9,7 @@ import '../widgets/backend_banner.dart';
 import '../widgets/profile_menu_button.dart';
 import '../widgets/theme_toggle_button.dart';
 import '../utils/navigation_extensions.dart';
+import '../theme/crud_modal_theme.dart';
 
 class ProfilePage extends StatefulWidget {
   const ProfilePage({super.key});
@@ -200,26 +201,29 @@ class _ProfilePageState extends State<ProfilePage> with BaseApiPageMixin<Profile
       final picker = TextEditingController(text: photo.text);
       final value = await showDialog<String>(
         context: context,
-        builder: (context) => AlertDialog(
-          title: const Text('Employee photo path'),
-          content: TextField(
-            controller: picker,
-            decoration: const InputDecoration(
-              labelText: 'Asset path',
-              hintText: '/assets/images/profiles/employee_default.png',
-              border: OutlineInputBorder(),
+        builder: (dialogContext) => Theme(
+          data: buildCrudModalTheme(context),
+          child: AlertDialog(
+            title: const Text('Employee photo path'),
+            content: TextField(
+              controller: picker,
+              decoration: const InputDecoration(
+                labelText: 'Asset path',
+                hintText: '/assets/images/profiles/employee_default.png',
+                border: OutlineInputBorder(),
+              ),
             ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(dialogContext),
+                child: const Text('Cancel'),
+              ),
+              FilledButton(
+                onPressed: () => Navigator.pop(dialogContext, picker.text.trim()),
+                child: const Text('Apply'),
+              ),
+            ],
           ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(context),
-              child: const Text('Cancel'),
-            ),
-            FilledButton(
-              onPressed: () => Navigator.pop(context, picker.text.trim()),
-              child: const Text('Apply'),
-            ),
-          ],
         ),
       );
       if (value == null) return;
@@ -229,105 +233,108 @@ class _ProfilePageState extends State<ProfilePage> with BaseApiPageMixin<Profile
     try {
       final submit = await showDialog<bool>(
         context: context,
-        builder: (context) => AlertDialog(
-          title: Row(
-            children: [
-              const Expanded(child: Text('Edit Employee Details')),
-              ClipRRect(
-                borderRadius: BorderRadius.circular(4),
-                child: Image.asset(
-                  'assets/images/logo.png',
-                  width: 48,
-                  height: 48,
-                  fit: BoxFit.cover,
+        builder: (dialogContext) => Theme(
+          data: buildCrudModalTheme(context),
+          child: AlertDialog(
+            title: Row(
+              children: [
+                const Expanded(child: Text('Edit Employee Details')),
+                ClipRRect(
+                  borderRadius: BorderRadius.circular(4),
+                  child: Image.asset(
+                    'assets/images/logo.png',
+                    width: 48,
+                    height: 48,
+                    fit: BoxFit.cover,
+                  ),
                 ),
+              ],
+            ),
+            content: SizedBox(
+              width: 520,
+              child: SingleChildScrollView(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    ValueListenableBuilder<TextEditingValue>(
+                      valueListenable: photo,
+                      builder: (context, value, _) {
+                        final path = value.text.trim().isNotEmpty
+                            ? value.text.trim()
+                            : _defaultEmployeePhotoAsset;
+                        return Stack(
+                          children: [
+                            CircleAvatar(
+                              radius: 36,
+                              backgroundColor: dark
+                                  ? const Color(0xFF3B4250)
+                                  : const Color(0xFFA8D6F7),
+                              backgroundImage: AssetImage(
+                                _assetPath(
+                                  path,
+                                  fallback: _defaultEmployeePhotoAsset,
+                                ),
+                              ),
+                            ),
+                            Positioned(
+                              right: -2,
+                              bottom: -2,
+                              child: IconButton(
+                                visualDensity: VisualDensity.compact,
+                                tooltip: 'Edit photo path',
+                                onPressed: editPhotoPath,
+                                icon: const Icon(Icons.edit, size: 18),
+                              ),
+                            ),
+                          ],
+                        );
+                      },
+                    ),
+                    const SizedBox(height: 10),
+                    Align(
+                      alignment: Alignment.centerLeft,
+                      child: Text(
+                        '* Required fields',
+                        style: TextStyle(
+                          color: dark
+                              ? const Color(0xFFFFC1CC)
+                              : const Color(0xFF442E6F),
+                          fontWeight: FontWeight.w700,
+                          fontSize: 12,
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 10),
+                    _field(name, 'Name *', enabled: true),
+                    const SizedBox(height: 10),
+                    _field(email, 'Email *', enabled: true),
+                    const SizedBox(height: 10),
+                    _field(phone, 'Phone', enabled: true),
+                    const SizedBox(height: 10),
+                    _field(address, 'Address', enabled: true),
+                    const SizedBox(height: 10),
+                    _field(city, 'City', enabled: true),
+                    const SizedBox(height: 10),
+                    _field(state, 'State', enabled: true),
+                    const SizedBox(height: 10),
+                    _field(zip, 'Zip Code', enabled: true),
+                    const SizedBox(height: 10),
+                    _field(photo, 'Photo URL', enabled: true),
+                  ],
+                ),
+              ),
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(dialogContext, false),
+                child: const Text('Cancel'),
+              ),
+              FilledButton(
+                onPressed: () => Navigator.pop(dialogContext, true),
+                child: const Text('Save'),
               ),
             ],
           ),
-          content: SizedBox(
-            width: 520,
-            child: SingleChildScrollView(
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  ValueListenableBuilder<TextEditingValue>(
-                    valueListenable: photo,
-                    builder: (context, value, _) {
-                      final path = value.text.trim().isNotEmpty
-                          ? value.text.trim()
-                          : _defaultEmployeePhotoAsset;
-                      return Stack(
-                        children: [
-                          CircleAvatar(
-                            radius: 36,
-                            backgroundColor: dark
-                                ? const Color(0xFF3B4250)
-                                : const Color(0xFFA8D6F7),
-                            backgroundImage: AssetImage(
-                              _assetPath(
-                                path,
-                                fallback: _defaultEmployeePhotoAsset,
-                              ),
-                            ),
-                          ),
-                          Positioned(
-                            right: -2,
-                            bottom: -2,
-                            child: IconButton(
-                              visualDensity: VisualDensity.compact,
-                              tooltip: 'Edit photo path',
-                              onPressed: editPhotoPath,
-                              icon: const Icon(Icons.edit, size: 18),
-                            ),
-                          ),
-                        ],
-                      );
-                    },
-                  ),
-                  const SizedBox(height: 10),
-                  Align(
-                    alignment: Alignment.centerLeft,
-                    child: Text(
-                      '* Required fields',
-                      style: TextStyle(
-                        color: dark
-                            ? const Color(0xFFFFC1CC)
-                            : const Color(0xFF442E6F),
-                        fontWeight: FontWeight.w700,
-                        fontSize: 12,
-                      ),
-                    ),
-                  ),
-                  const SizedBox(height: 10),
-                  _field(name, 'Name *', enabled: true),
-                  const SizedBox(height: 10),
-                  _field(email, 'Email *', enabled: true),
-                  const SizedBox(height: 10),
-                  _field(phone, 'Phone', enabled: true),
-                  const SizedBox(height: 10),
-                  _field(address, 'Address', enabled: true),
-                  const SizedBox(height: 10),
-                  _field(city, 'City', enabled: true),
-                  const SizedBox(height: 10),
-                  _field(state, 'State', enabled: true),
-                  const SizedBox(height: 10),
-                  _field(zip, 'Zip Code', enabled: true),
-                  const SizedBox(height: 10),
-                  _field(photo, 'Photo URL', enabled: true),
-                ],
-              ),
-            ),
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(context, false),
-              child: const Text('Cancel'),
-            ),
-            FilledButton(
-              onPressed: () => Navigator.pop(context, true),
-              child: const Text('Save'),
-            ),
-          ],
         ),
       );
 
@@ -350,15 +357,18 @@ class _ProfilePageState extends State<ProfilePage> with BaseApiPageMixin<Profile
       if (!mounted) return;
       await showDialog<void>(
         context: context,
-        builder: (context) => AlertDialog(
-          title: const Text('Profile Updated'),
-          content: const Text('Your employee profile details were saved.'),
-          actions: [
-            FilledButton(
-              onPressed: () => Navigator.pop(context),
-              child: const Text('OK'),
-            ),
-          ],
+        builder: (dialogContext) => Theme(
+          data: buildCrudModalTheme(context),
+          child: AlertDialog(
+            title: const Text('Profile Updated'),
+            content: const Text('Your employee profile details were saved.'),
+            actions: [
+              FilledButton(
+                onPressed: () => Navigator.pop(dialogContext),
+                child: const Text('OK'),
+              ),
+            ],
+          ),
         ),
       );
       _name.text = name.text;

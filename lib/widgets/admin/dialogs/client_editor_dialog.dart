@@ -125,18 +125,21 @@ class _ClientEditorDialogState extends State<ClientEditorDialog> {
       if (error != null && mounted) {
         await showDialog(
           context: context,
-          builder: (context) => AlertDialog(
-            title: const Text('Email Already Exists'),
-            content: Text(
-              'A client with email "${_email.text.trim()}" already exists.\n\n'
-              'Please use a different email address.',
-            ),
-            actions: [
-              TextButton(
-                onPressed: () => Navigator.pop(context),
-                child: const Text('OK'),
+          builder: (dialogContext) => Theme(
+            data: buildCrudModalTheme(context),
+            child: AlertDialog(
+              title: const Text('Email Already Exists'),
+              content: Text(
+                'A client with email "${_email.text.trim()}" already exists.\n\n'
+                'Please use a different email address.',
               ),
-            ],
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.pop(dialogContext),
+                  child: const Text('OK'),
+                ),
+              ],
+            ),
           ),
         );
         return false;
@@ -173,50 +176,52 @@ class _ClientEditorDialogState extends State<ClientEditorDialog> {
           // Geocoded address differs from entered - show suggestion
           final useSuggestion = await showDialog<bool>(
             context: context,
-            builder: (context) => AlertDialog(
-              title: const Text('Address Suggestion'),
-              content: Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  const Text(
-                    'We found a similar address:',
-                    style: TextStyle(fontWeight: FontWeight.bold),
-                  ),
-                  const SizedBox(height: 12),
-                  const Text('You entered:'),
-                  Text(
-                    result.enteredAddress ?? '',
-                    style: const TextStyle(
-                      fontStyle: FontStyle.italic,
-                      color: Colors.grey,
+            builder: (dialogContext) => Theme(
+              data: buildCrudModalTheme(context),
+              child: AlertDialog(
+                title: const Text('Address Suggestion'),
+                content: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text(
+                      'We found a similar address:',
+                      style: TextStyle(fontWeight: FontWeight.bold),
                     ),
-                  ),
-                  const SizedBox(height: 12),
-                  const Text('Suggested:'),
-                  Text(
-                    result.suggestedAddress ?? '',
-                    style: const TextStyle(
-                      fontWeight: FontWeight.bold,
-                      color: Colors.green,
+                    const SizedBox(height: 12),
+                    const Text('You entered:'),
+                    Text(
+                      result.enteredAddress ?? '',
+                      style: const TextStyle(
+                        fontStyle: FontStyle.italic,
+                        color: Colors.grey,
+                      ),
                     ),
+                    const SizedBox(height: 12),
+                    const Text('Suggested:'),
+                    Text(
+                      result.suggestedAddress ?? '',
+                      style: const TextStyle(
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+                    const Text(
+                      'Would you like to use the suggested address?',
+                    ),
+                  ],
+                ),
+                actions: [
+                  TextButton(
+                    onPressed: () => Navigator.pop(dialogContext, false),
+                    child: const Text('Keep Mine'),
                   ),
-                  const SizedBox(height: 16),
-                  const Text(
-                    'Would you like to use the suggested address?',
+                  FilledButton(
+                    onPressed: () => Navigator.pop(dialogContext, true),
+                    child: const Text('Use Suggested'),
                   ),
                 ],
               ),
-              actions: [
-                TextButton(
-                  onPressed: () => Navigator.pop(context, false),
-                  child: const Text('Keep Mine'),
-                ),
-                FilledButton(
-                  onPressed: () => Navigator.pop(context, true),
-                  child: const Text('Use Suggested'),
-                ),
-              ],
             ),
           );
 
@@ -246,15 +251,18 @@ class _ClientEditorDialogState extends State<ClientEditorDialog> {
           // Address could not be verified
           await showDialog(
             context: context,
-            builder: (context) => AlertDialog(
-              title: const Text('Invalid Address'),
-              content: Text(result.message ?? 'Unable to verify address'),
-              actions: [
-                TextButton(
-                  onPressed: () => Navigator.pop(context),
-                  child: const Text('OK'),
-                ),
-              ],
+            builder: (dialogContext) => Theme(
+              data: buildCrudModalTheme(context),
+              child: AlertDialog(
+                title: const Text('Invalid Address'),
+                content: Text(result.message ?? 'Unable to verify address'),
+                actions: [
+                  TextButton(
+                    onPressed: () => Navigator.pop(dialogContext),
+                    child: const Text('OK'),
+                  ),
+                ],
+              ),
             ),
           );
           return false;
@@ -263,15 +271,18 @@ class _ClientEditorDialogState extends State<ClientEditorDialog> {
           // Partial address provided
           await showDialog(
             context: context,
-            builder: (context) => AlertDialog(
-              title: const Text('Incomplete Address'),
-              content: Text(result.message ?? 'Please complete the address'),
-              actions: [
-                TextButton(
-                  onPressed: () => Navigator.pop(context),
-                  child: const Text('OK'),
-                ),
-              ],
+            builder: (dialogContext) => Theme(
+              data: buildCrudModalTheme(context),
+              child: AlertDialog(
+                title: const Text('Incomplete Address'),
+                content: Text(result.message ?? 'Please complete the address'),
+                actions: [
+                  TextButton(
+                    onPressed: () => Navigator.pop(dialogContext),
+                    child: const Text('OK'),
+                  ),
+                ],
+              ),
             ),
           );
           return false;

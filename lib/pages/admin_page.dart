@@ -18,7 +18,10 @@ import '../services/auth_session.dart';
 import '../services/backend_runtime.dart';
 import '../theme/crud_modal_theme.dart';
 import '../utils/date_format.dart';
+import '../utils/dialog_utils.dart';
+import '../utils/entity_actions.dart';
 import '../utils/error_text.dart';
+import '../utils/sort_comparators.dart';
 import '../widgets/admin/dialogs/cleaning_profile_editor_dialog.dart';
 import '../widgets/admin/dialogs/client_editor_dialog.dart';
 import '../widgets/admin/dialogs/employee_editor_dialog.dart';
@@ -41,11 +44,11 @@ import '../utils/navigation_extensions.dart';
 
 
 
-enum _EmployeeFilter { all, active, invited }
+enum _EmployeeFilter { active, all }
 
 enum _ClientFilter { all, active, inactive }
 
-enum _LocationFilter { all, active, inactive }
+enum _LocationFilter { active, inactive, all, deleted }
 
 enum _JobFilter { all, active }
 
@@ -86,7 +89,7 @@ class _AdminPageState extends State<AdminPage> {
   bool _activeOnlyFilter = true;
   final _EmployeeFilter _employeeFilter = _EmployeeFilter.active;
   final _ClientFilter _clientFilter = _ClientFilter.active;
-  final _LocationFilter _locationFilter = _LocationFilter.active;
+  _LocationFilter _locationFilter = _LocationFilter.active;
   _JobFilter _jobFilter = _JobFilter.all;
   String _jobClientSearch = '';
   String _employeeSearch = '';
@@ -96,6 +99,10 @@ class _AdminPageState extends State<AdminPage> {
   bool _jobsSortAscending = true;
   int? _clientsSortColumnIndex;
   bool _clientsSortAscending = true;
+  int? _employeesSortColumnIndex;
+  bool _employeesSortAscending = true;
+  int? _locationsSortColumnIndex;
+  bool _locationsSortAscending = true;
   DateTimeRange _jobDateRange = DateTimeRange(
     start: DateTime.now().subtract(const Duration(days: 30)),
     end: DateTime.now().add(const Duration(days: 30)),
@@ -343,12 +350,9 @@ class _AdminPageState extends State<AdminPage> {
       final created = await _api.createEmployee(payload, bearerToken: _token);
       await _loadAdminData();
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(
-            'Employee created. Invitation email requested for ${created.email ?? result.email}. ${_formatCoordinateStatus(created.latitude, created.longitude)}',
-          ),
-        ),
+      showSuccessSnackBar(
+        context,
+        'Employee created. Invitation email requested for ${created.email ?? result.email}.',
       );
     } catch (error) {
       if (!mounted) return;
@@ -397,13 +401,7 @@ class _AdminPageState extends State<AdminPage> {
       );
       await _loadAdminData();
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(
-            'Employee updated. ${_formatCoordinateStatus(updated.latitude, updated.longitude)}',
-          ),
-        ),
-      );
+      showSuccessSnackBar(context, 'Employee updated successfully.');
     } catch (error) {
       if (!mounted) return;
       ScaffoldMessenger.of(
@@ -489,59 +487,23 @@ class _AdminPageState extends State<AdminPage> {
     }
   }
 
-  Future<void> _deleteEmployee(Employee emp) async {
-    final confirm = await showDialog<bool>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('Delete Employee'),
-        content: Text('Delete ${emp.name}?'),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx, false),
-            child: const Text('Cancel'),
-          ),
-          TextButton(
-            onPressed: () => Navigator.pop(ctx, true),
-            child: const Text('Delete'),
-          ),
-        ],
-      ),
-    );
-    if (confirm == true) {
-      await _api.deleteEmployee(emp.id);
-      await _loadAdminData();
-    }
-  }
-
-  Future<void> _deleteClient(Client client) async {
-    final confirmed = await showDeleteConfirmationDialog(
-      context,
-      itemType: 'client',
-      itemName: '${client.clientNumber} - ${client.name}',
-    );
-    if (!confirmed) return;
-
-    if (AppEnv.isDemoMode) {
-      await _showDemoCreateDialog(
-        title: 'Demo Client Deleted',
-        message:
-            'Client "${client.name}" was removed in preview walkthrough mode. No database changes were made.',
+  Future<void> _deleteEmployee(Employee emp) => deleteEntityWithConfirmation(
+        context: context,
+        itemType: 'employee',
+        itemName: '${emp.employeeNumber} ${emp.name}',
+        onDelete: () => _api.deleteEmployee(emp.id, bearerToken: _token),
+        onSuccess: _loadAdminData,
+        successMessage: '${emp.employeeNumber} ${emp.name} deleted successfully.',
       );
-      return;
-    }
 
-    try {
-      final message = await _api.deleteClient(client.id, bearerToken: _token);
-      await _loadAdminData();
-      if (!mounted) return;
-      showSuccessSnackBar(context, message);
-    } catch (error) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text(userFacingError(error))));
-    }
-  }
+  Future<void> _deleteClient(Client client) => deleteEntityWithConfirmation(
+        context: context,
+        itemType: 'client',
+        itemName: '${client.clientNumber} ${client.name}',
+        onDelete: () => _api.deleteClient(client.id, bearerToken: _token),
+        onSuccess: _loadAdminData,
+        successMessage: '${client.clientNumber} ${client.name} deleted successfully.',
+      );
 
   Future<void> _showCreateLocationDialog() async {
     final result = await showDialog<LocationCreateInput>(
@@ -636,36 +598,15 @@ class _AdminPageState extends State<AdminPage> {
   }
 
   Future<void> _deleteLocation(Location location) async {
-    final confirmed = await showDeleteConfirmationDialog(
-      context,
+    final clientName = _clientNameById(location.clientId);
+    return deleteEntityWithConfirmation(
+      context: context,
       itemType: 'location',
-      itemName: '${location.locationNumber} (client ${location.clientId})',
+      itemName: '${location.locationNumber} for $clientName',
+      onDelete: () => _api.deleteLocation(location.id, bearerToken: _token),
+      onSuccess: _loadAdminData,
+      successMessage: '${location.locationNumber} for $clientName deleted successfully.',
     );
-    if (!confirmed) return;
-
-    if (AppEnv.isDemoMode) {
-      await _showDemoCreateDialog(
-        title: 'Demo Location Deleted',
-        message:
-            'Location "${location.locationNumber}" was removed in preview walkthrough mode. No database changes were made.',
-      );
-      return;
-    }
-
-    try {
-      final message = await _api.deleteLocation(
-        location.id,
-        bearerToken: _token,
-      );
-      await _loadAdminData();
-      if (!mounted) return;
-      showSuccessSnackBar(context, message);
-    } catch (error) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text(userFacingError(error))));
-    }
   }
 
   Future<void> _showCreateJobDialog() async {
@@ -890,35 +831,14 @@ class _AdminPageState extends State<AdminPage> {
     }
   }
 
-  Future<void> _deleteJob(Job job) async {
-    final confirmed = await showDeleteConfirmationDialog(
-      context,
-      itemType: 'job',
-      itemName: '${job.clientName ?? 'Unknown Client'} on ${formatDateMdy(job.scheduledDate)}',
-    );
-    if (confirmed != true) return;
-
-    if (AppEnv.isDemoMode) {
-      await _showDemoCreateDialog(
-        title: 'Demo Job Deleted',
-        message:
-            'Job "${job.jobNumber}" was removed in preview walkthrough mode. No database changes were made.',
+  Future<void> _deleteJob(Job job) => deleteEntityWithConfirmation(
+        context: context,
+        itemType: 'job',
+        itemName: '${job.jobNumber} for ${job.clientName ?? 'Unknown Client'}',
+        onDelete: () => _api.deleteJob(job.id, bearerToken: _token),
+        onSuccess: _loadAdminData,
+        successMessage: '${job.jobNumber} for ${job.clientName ?? 'Unknown Client'} deleted successfully.',
       );
-      return;
-    }
-
-    try {
-      final message = await _api.deleteJob(job.id, bearerToken: _token);
-      await _loadAdminData();
-      if (!mounted) return;
-      showSuccessSnackBar(context, message);
-    } catch (error) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text(userFacingError(error))));
-    }
-  }
 
   Future<void> _showCreateCleaningProfileDialog() async {
     if (_locations.isEmpty) {
@@ -995,49 +915,16 @@ class _AdminPageState extends State<AdminPage> {
     }
   }
 
-  Future<void> _deleteCleaningProfile(CleaningProfile profile) async {
-    if (AppEnv.isDemoMode) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Demo mode: create/edit/delete actions are disabled'),
-        ),
+  Future<void> _deleteCleaningProfile(CleaningProfile profile) =>
+      deleteEntityWithConfirmation(
+        context: context,
+        itemType: 'cleaning profile',
+        itemName: profile.name,
+        onDelete: () =>
+            _api.deleteCleaningProfile(profile.id, bearerToken: _token),
+        onSuccess: _loadAdminData,
+        successMessage: 'Cleaning profile "${profile.name}" deleted successfully.',
       );
-      return;
-    }
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Delete cleaning profile'),
-        content: Text('Delete ${profile.name}?'),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context, false),
-            child: const Text('Cancel'),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.pop(context, true),
-            child: const Text('Delete'),
-          ),
-        ],
-      ),
-    );
-    if (confirmed != true) return;
-
-    try {
-      final message = await _api.deleteCleaningProfile(
-        profile.id,
-        bearerToken: _token,
-      );
-      await _loadAdminData();
-      if (!mounted) return;
-      showSuccessSnackBar(context, message);
-    } catch (error) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text(userFacingError(error))));
-    }
-  }
 
   Future<void> _loadProfileTasks(
     String profileId, {
@@ -1166,50 +1053,30 @@ class _AdminPageState extends State<AdminPage> {
   }
 
   Future<void> _deleteProfileTask(ProfileTask profileTask) async {
-    if (AppEnv.isDemoMode) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Demo mode: create/edit/delete actions are disabled'),
-        ),
-      );
-      return;
-    }
     if (_selectedCleaningProfileId == null) return;
-
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Unlink profile task'),
-        content: const Text('Remove this task from the selected profile?'),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context, false),
-            child: const Text('Cancel'),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.pop(context, true),
-            child: const Text('Remove'),
-          ),
-        ],
+    // Get task definition name for the message
+    final taskDef = _taskDefinitions.firstWhere(
+      (t) => t.id == profileTask.taskDefinitionId.toString(),
+      orElse: () => TaskDefinition(
+        id: profileTask.taskDefinitionId.toString(),
+        code: 'TASK${profileTask.taskDefinitionId}',
+        name: 'Task ${profileTask.taskDefinitionId}',
+        category: 'general',
+        description: '',
       ),
     );
-    if (confirmed != true) return;
-
-    try {
-      final message = await _api.deleteProfileTask(
+    return deleteEntityWithConfirmation(
+      context: context,
+      itemType: 'profile task',
+      itemName: taskDef.name,
+      onDelete: () => _api.deleteProfileTask(
         _selectedCleaningProfileId!,
         profileTask.id,
         bearerToken: _token,
-      );
-      await _loadProfileTasks(_selectedCleaningProfileId!);
-      if (!mounted) return;
-      showSuccessSnackBar(context, message);
-    } catch (error) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text(userFacingError(error))));
-    }
+      ),
+      onSuccess: () => _loadProfileTasks(_selectedCleaningProfileId!),
+      successMessage: 'Task "${taskDef.name}" removed from profile successfully.',
+    );
   }
 
   Future<void> _showCreateTaskDefinitionDialog() async {
@@ -1285,9 +1152,7 @@ class _AdminPageState extends State<AdminPage> {
       final status = employee.status.trim().toLowerCase();
       switch (_employeeFilter) {
         case _EmployeeFilter.active:
-          return status == 'active';
-        case _EmployeeFilter.invited:
-          return status == 'invited';
+          return status == 'active' || status == 'invited';
         case _EmployeeFilter.all:
           return true;
       }
@@ -1302,14 +1167,38 @@ class _AdminPageState extends State<AdminPage> {
       }).toList();
     }
     
-    filtered.sort((a, b) {
-      final aDeleted = a.status.trim().toLowerCase() == 'deleted';
-      final bDeleted = b.status.trim().toLowerCase() == 'deleted';
-      if (aDeleted != bDeleted) {
-        return aDeleted ? 1 : -1;
-      }
-      return a.name.toLowerCase().compareTo(b.name.toLowerCase());
-    });
+    // Apply sorting if column selected
+    if (_employeesSortColumnIndex != null) {
+      filtered.sort((a, b) {
+        int comparison = 0;
+        switch (_employeesSortColumnIndex) {
+          case 0: // Status
+            comparison = compareByStatusPriority(a.status, b.status, StatusPriority.employee);
+            break;
+          case 1: // Photo (no sort)
+            comparison = 0;
+            break;
+          case 2: // Name
+            comparison = compareStringsCaseInsensitive(a.name, b.name);
+            break;
+          case 3: // Email
+            comparison = compareNullableStrings(a.email, b.email);
+            break;
+          case 4: // Phone
+            comparison = compareNullableStrings(a.phoneNumber, b.phoneNumber);
+            break;
+        }
+        return _employeesSortAscending ? comparison : -comparison;
+      });
+    } else {
+      // Default sort: status priority, then by name
+      filtered.sort((a, b) {
+        final statusCmp = compareByStatusPriority(a.status, b.status, StatusPriority.employee);
+        if (statusCmp != 0) return statusCmp;
+        return compareStringsCaseInsensitive(a.name, b.name);
+      });
+    }
+    
     return filtered;
   }
 
@@ -1340,55 +1229,27 @@ class _AdminPageState extends State<AdminPage> {
       filtered.sort((a, b) {
         int comparison = 0;
         switch (_clientsSortColumnIndex) {
-          case 0: // Status - invited first, then active, deleted last
-            final aStatus = a.status.trim().toLowerCase();
-            final bStatus = b.status.trim().toLowerCase();
-            if (aStatus == 'invited' && bStatus != 'invited') {
-              comparison = -1;
-            } else if (aStatus != 'invited' && bStatus == 'invited') {
-              comparison = 1;
-            } else if (aStatus == 'deleted' && bStatus != 'deleted') {
-              comparison = 1;
-            } else if (aStatus != 'deleted' && bStatus == 'deleted') {
-              comparison = -1;
-            } else {
-              comparison = aStatus.compareTo(bStatus);
-            }
+          case 0: // Status
+            comparison = compareByStatusPriority(a.status, b.status, StatusPriority.client);
             break;
           case 1: // Name
-            comparison = a.name.toLowerCase().compareTo(b.name.toLowerCase());
+            comparison = compareStringsCaseInsensitive(a.name, b.name);
             break;
           case 2: // Email
-            comparison = (a.email ?? '').toLowerCase().compareTo((b.email ?? '').toLowerCase());
+            comparison = compareNullableStrings(a.email, b.email);
             break;
           case 3: // Phone
-            comparison = (a.phoneNumber ?? '').compareTo(b.phoneNumber ?? '');
+            comparison = compareNullableStrings(a.phoneNumber, b.phoneNumber);
             break;
         }
         return _clientsSortAscending ? comparison : -comparison;
       });
     } else {
-      // Default sort: invited first, then active, then others, deleted last
+      // Default sort: status priority, then by name
       filtered.sort((a, b) {
-        final aStatus = a.status.trim().toLowerCase();
-        final bStatus = b.status.trim().toLowerCase();
-        
-        // Invited always comes first
-        if (aStatus == 'invited' && bStatus != 'invited') {
-          return -1;
-        } else if (aStatus != 'invited' && bStatus == 'invited') {
-          return 1;
-        }
-        
-        // Deleted always comes last
-        if (aStatus == 'deleted' && bStatus != 'deleted') {
-          return 1;
-        } else if (aStatus != 'deleted' && bStatus == 'deleted') {
-          return -1;
-        }
-        
-        // Otherwise sort by name
-        return a.name.toLowerCase().compareTo(b.name.toLowerCase());
+        final statusCmp = compareByStatusPriority(a.status, b.status, StatusPriority.client);
+        if (statusCmp != 0) return statusCmp;
+        return compareStringsCaseInsensitive(a.name, b.name);
       });
     }
     
@@ -1402,9 +1263,11 @@ class _AdminPageState extends State<AdminPage> {
         case _LocationFilter.active:
           return status == 'active';
         case _LocationFilter.inactive:
-          return status != 'active';
+          return status == 'inactive';
         case _LocationFilter.all:
-          return true;
+          return status != 'deleted';
+        case _LocationFilter.deleted:
+          return status == 'deleted';
       }
     }).toList();
     
@@ -1418,22 +1281,45 @@ class _AdminPageState extends State<AdminPage> {
       }).toList();
     }
     
-    filtered.sort((a, b) {
-      final aDeleted = a.status.trim().toLowerCase() == 'deleted';
-      final bDeleted = b.status.trim().toLowerCase() == 'deleted';
-      if (aDeleted != bDeleted) {
-        return aDeleted ? 1 : -1;
-      }
-      final aAddress = (a.address ?? '').toLowerCase();
-      final bAddress = (b.address ?? '').toLowerCase();
-      return aAddress.compareTo(bAddress);
-    });
+    // Apply sorting
+    if (_locationsSortColumnIndex != null) {
+      filtered.sort((a, b) {
+        int result;
+        switch (_locationsSortColumnIndex) {
+          case 0: // Status
+            result = compareByStatusPriority(a.status, b.status, StatusPriority.location);
+            break;
+          case 2: // Client Name
+            final aClientName = _clientNameById(a.clientId);
+            final bClientName = _clientNameById(b.clientId);
+            result = compareStringsCaseInsensitive(aClientName, bClientName);
+            break;
+          case 3: // Address
+            result = compareNullableStrings(a.address, b.address);
+            break;
+          default:
+            result = 0;
+        }
+        return _locationsSortAscending ? result : -result;
+      });
+    } else {
+      // Default sort: status priority, then by location number
+      filtered.sort((a, b) {
+        final statusCmp = compareByStatusPriority(a.status, b.status, StatusPriority.location);
+        if (statusCmp != 0) return statusCmp;
+        return a.locationNumber.compareTo(b.locationNumber);
+      });
+    }
+    
     return filtered;
   }
 
   List<Client> get _activeClients {
     return _clients
-        .where((client) => client.status.trim().toLowerCase() == 'active')
+        .where((client) {
+          final status = client.status.trim().toLowerCase();
+          return status == 'active' || status == 'invited';
+        })
         .toList();
   }
 
@@ -1445,7 +1331,10 @@ class _AdminPageState extends State<AdminPage> {
 
   List<Employee> get _activeCleaners {
     return _employees
-        .where((employee) => employee.status.trim().toLowerCase() == 'active')
+        .where((employee) {
+          final status = employee.status.trim().toLowerCase();
+          return status == 'active' || status == 'invited';
+        })
         .toList();
   }
 
@@ -1500,19 +1389,8 @@ class _AdminPageState extends State<AdminPage> {
       filtered.sort((a, b) {
         int comparison = 0;
         switch (_jobsSortColumnIndex) {
-          case 0: // Status - Custom order: pending first, then alphabetical
-            final statusA = a.status.trim().toLowerCase();
-            final statusB = b.status.trim().toLowerCase();
-            
-            // Pending always comes first
-            if (statusA == 'pending' && statusB != 'pending') {
-              comparison = -1;
-            } else if (statusA != 'pending' && statusB == 'pending') {
-              comparison = 1;
-            } else {
-              // Both pending or both non-pending, sort alphabetically
-              comparison = a.status.compareTo(b.status);
-            }
+          case 0: // Status
+            comparison = compareByStatusPriority(a.status, b.status, StatusPriority.job);
             break;
           case 1: // Date
             final dateA = parseFlexibleDate(a.scheduledDate);
@@ -1522,17 +1400,17 @@ class _AdminPageState extends State<AdminPage> {
             }
             break;
           case 2: // Client
-            comparison = (a.clientName ?? '').compareTo(b.clientName ?? '');
+            comparison = compareNullableStrings(a.clientName, b.clientName);
             break;
           case 3: // Location
             final locA = a.locationCity ?? a.locationAddress ?? '';
             final locB = b.locationCity ?? b.locationAddress ?? '';
-            comparison = locA.compareTo(locB);
+            comparison = compareStringsCaseInsensitive(locA, locB);
             break;
           case 4: // Cleaner
             final cleanersA = _jobAssignments[a.id]?.join(', ') ?? '';
             final cleanersB = _jobAssignments[b.id]?.join(', ') ?? '';
-            comparison = cleanersA.compareTo(cleanersB);
+            comparison = compareStringsCaseInsensitive(cleanersA, cleanersB);
             break;
           case 5: // Estimated Duration
             comparison = (a.estimatedDurationMinutes ?? 0).compareTo(b.estimatedDurationMinutes ?? 0);
@@ -1846,9 +1724,22 @@ class _AdminPageState extends State<AdminPage> {
               jobsSortAscending: _jobsSortAscending,
               clientsSortColumnIndex: _clientsSortColumnIndex,
               clientsSortAscending: _clientsSortAscending,
+              employeesSortColumnIndex: _employeesSortColumnIndex,
+              employeesSortAscending: _employeesSortAscending,
+              locationsSortColumnIndex: _locationsSortColumnIndex,
+              locationsSortAscending: _locationsSortAscending,
               activeOnlyFilter: _activeOnlyFilter,
+              locationFilter: _locationFilter.name,
               onManagementModelChanged: (model) => setState(() => _managementModel = model),
               onActiveOnlyFilterChanged: (active) => setState(() => _activeOnlyFilter = active),
+              onLocationFilterChanged: (filter) {
+                setState(() {
+                  _locationFilter = _LocationFilter.values.firstWhere(
+                    (f) => f.name == filter,
+                    orElse: () => _LocationFilter.active,
+                  );
+                });
+              },
               onJobFilterChanged: (filter) {
                 setState(() {
                   _jobFilter = _JobFilter.values.firstWhere(
@@ -1872,6 +1763,18 @@ class _AdminPageState extends State<AdminPage> {
                 setState(() {
                   _clientsSortColumnIndex = columnIndex;
                   _clientsSortAscending = ascending;
+                });
+              },
+              onEmployeesSort: (columnIndex, ascending) {
+                setState(() {
+                  _employeesSortColumnIndex = columnIndex;
+                  _employeesSortAscending = ascending;
+                });
+              },
+              onLocationsSort: (columnIndex, ascending) {
+                setState(() {
+                  _locationsSortColumnIndex = columnIndex;
+                  _locationsSortAscending = ascending;
                 });
               },
               onShowCreateDialog: _showCreateDialog,

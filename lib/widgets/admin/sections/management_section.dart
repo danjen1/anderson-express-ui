@@ -4,6 +4,7 @@ import '../../../models/client.dart';
 import '../../../models/location.dart';
 import '../../../models/job.dart';
 import '../../../utils/date_format.dart';
+import '../../common/sortable_entity_table.dart';
 
 enum ManagementModel { employees, clients, locations, jobs }
 
@@ -26,9 +27,15 @@ class ManagementSection extends StatelessWidget {
     required this.jobsSortAscending,
     required this.clientsSortColumnIndex,
     required this.clientsSortAscending,
+    required this.employeesSortColumnIndex,
+    required this.employeesSortAscending,
+    required this.locationsSortColumnIndex,
+    required this.locationsSortAscending,
     required this.activeOnlyFilter,
+    required this.locationFilter,
     required this.onManagementModelChanged,
     required this.onActiveOnlyFilterChanged,
+    required this.onLocationFilterChanged,
     required this.onJobFilterChanged,
     required this.onJobClientSearchChanged,
     required this.onEmployeeSearchChanged,
@@ -37,6 +44,8 @@ class ManagementSection extends StatelessWidget {
     required this.onJobDateRangeChanged,
     required this.onJobsSort,
     required this.onClientsSort,
+    required this.onEmployeesSort,
+    required this.onLocationsSort,
     required this.onShowCreateDialog,
     required this.onShowCreateClientDialog,
     required this.onShowCreateLocationDialog,
@@ -73,9 +82,15 @@ class ManagementSection extends StatelessWidget {
   final bool jobsSortAscending;
   final int? clientsSortColumnIndex;
   final bool clientsSortAscending;
+  final int? employeesSortColumnIndex;
+  final bool employeesSortAscending;
+  final int? locationsSortColumnIndex;
+  final bool locationsSortAscending;
   final bool activeOnlyFilter;
+  final String locationFilter;
   final Function(ManagementModel) onManagementModelChanged;
   final Function(bool) onActiveOnlyFilterChanged;
+  final Function(String) onLocationFilterChanged;
   final Function(String) onJobFilterChanged;
   final Function(String) onJobClientSearchChanged;
   final Function(String) onEmployeeSearchChanged;
@@ -84,6 +99,8 @@ class ManagementSection extends StatelessWidget {
   final Function(DateTimeRange) onJobDateRangeChanged;
   final Function(int, bool) onJobsSort;
   final Function(int, bool) onClientsSort;
+  final Function(int, bool) onEmployeesSort;
+  final Function(int, bool) onLocationsSort;
   final VoidCallback onShowCreateDialog;
   final VoidCallback onShowCreateClientDialog;
   final VoidCallback onShowCreateLocationDialog;
@@ -230,7 +247,7 @@ class ManagementSection extends StatelessWidget {
                               runSpacing: 8,
                               crossAxisAlignment: WrapCrossAlignment.center,
                               children: [
-                                // Different filter chips for Jobs vs other entities
+                                // Different filter chips for Jobs vs Locations vs other entities
                                 if (managementModel ==
                                     ManagementModel.jobs) ...[
                                   ChoiceChip(
@@ -244,6 +261,32 @@ class ManagementSection extends StatelessWidget {
                                     selected: jobFilter == 'all',
                                     onSelected: (_) =>
                                         onJobFilterChanged('all'),
+                                  ),
+                                ] else if (managementModel ==
+                                    ManagementModel.locations) ...[
+                                  ChoiceChip(
+                                    label: const Text('Active'),
+                                    selected: locationFilter == 'active',
+                                    onSelected: (_) =>
+                                        onLocationFilterChanged('active'),
+                                  ),
+                                  ChoiceChip(
+                                    label: const Text('Inactive'),
+                                    selected: locationFilter == 'inactive',
+                                    onSelected: (_) =>
+                                        onLocationFilterChanged('inactive'),
+                                  ),
+                                  ChoiceChip(
+                                    label: const Text('All'),
+                                    selected: locationFilter == 'all',
+                                    onSelected: (_) =>
+                                        onLocationFilterChanged('all'),
+                                  ),
+                                  ChoiceChip(
+                                    label: const Text('Deleted'),
+                                    selected: locationFilter == 'deleted',
+                                    onSelected: (_) =>
+                                        onLocationFilterChanged('deleted'),
                                   ),
                                 ] else ...[
                                   ChoiceChip(
@@ -380,162 +423,70 @@ class ManagementSection extends StatelessWidget {
   }
 
   Widget _buildTable(BuildContext context) {
-    // Helper function for client status badges
-    ({String label, Color bg, Color fg, Color border}) clientStatusBadge(String status) {
-      final dark = Theme.of(context).brightness == Brightness.dark;
-      final statusLower = status.trim().toLowerCase();
-      
-      return switch (statusLower) {
-        'active' => (
-          label: 'A',
-          bg: dark ? const Color(0xFF2C4A40) : const Color(0xFFDBF3E8),
-          fg: dark ? const Color(0xFFE4E4E4) : const Color(0xFF1E6A4F),
-          border: dark ? const Color(0xFF6DB598) : const Color(0xFF49A07D),
-        ),
-        'invited' => (
-          label: 'V',
-          bg: dark ? const Color(0xFF3D3550) : const Color(0xFFE8DDF7),
-          fg: dark ? const Color(0xFFE4E4E4) : const Color(0xFF442E6F),
-          border: dark ? const Color(0xFF8C74B2) : const Color(0xFF7A56A5),
-        ),
-        'inactive' => (
-          label: 'I',
-          bg: dark ? const Color(0xFF41424B) : const Color(0xFFE9EEF2),
-          fg: dark ? const Color(0xFFE4E4E4) : const Color(0xFF41588E),
-          border: dark ? const Color(0xFF7A7E8C) : const Color(0xFFBEDCE4),
-        ),
-        'deleted' => (
-          label: 'D',
-          bg: dark ? const Color(0xFF4A2D35) : const Color(0xFFFFE5EC),
-          fg: dark ? const Color(0xFFFFC1CC) : const Color(0xFFE63721),
-          border: dark ? const Color(0xFFB85B74) : const Color(0xFFE63721),
-        ),
-        _ => (
-          label: '?',
-          bg: dark ? const Color(0xFF41424B) : const Color(0xFFE9EEF2),
-          fg: dark ? const Color(0xFFE4E4E4) : const Color(0xFF41588E),
-          border: dark ? const Color(0xFF7A7E8C) : const Color(0xFFBEDCE4),
-        ),
-      };
-    }
-
     return switch (managementModel) {
-      ManagementModel.employees => DataTable(
-        headingTextStyle: const TextStyle(fontWeight: FontWeight.w700),
-        columnSpacing: 32,
-        columns: [
-          buildTableColumn(''),
-          buildTableColumn('Name'),
-          buildTableColumn('Email'),
-          buildTableColumn('Employee #'),
-          buildTableColumn(''),
+      ManagementModel.employees => SortableEntityTable(
+        items: filteredEmployees,
+        columns: const [
+          TableColumnConfig(label: '', index: 0, sortable: true),
+          TableColumnConfig(label: '', index: 1, sortable: false),
+          TableColumnConfig(label: 'Name', index: 2, sortable: true),
+          TableColumnConfig(label: 'Email', index: 3, sortable: true),
+          TableColumnConfig(label: 'Phone', index: 4, sortable: true),
+          TableColumnConfig(label: '', index: 5, sortable: false),
         ],
-        rows: filteredEmployees
-            .map(
-              (emp) => DataRow(
-                cells: [
-                  DataCell(
-                    _statusIndicator(
-                      context,
-                      emp.status.trim().toLowerCase() == 'active',
-                    ),
-                  ),
-                  DataCell(Text(emp.name)),
-                  DataCell(Text(emp.email ?? '')),
-                  DataCell(Text(emp.employeeNumber)),
-                  DataCell(
-                    IconButton(
-                      icon: const Icon(Icons.visibility_outlined, size: 20),
-                      tooltip: 'View Details',
-                      onPressed: () => onShowEditDialog(emp),
-                    ),
-                  ),
-                ],
-              ),
-            )
-            .toList(),
+        sortColumnIndex: employeesSortColumnIndex,
+        sortAscending: employeesSortAscending,
+        onSort: onEmployeesSort,
+        buildCells: (context, emp) => [
+          SortableEntityTable.buildStatusCell(emp.status, context),
+          SortableEntityTable.buildPhotoCell(
+            context: context,
+            photoUrl: emp.photoUrl,
+            initial: emp.name,
+          ),
+          DataCell(Text(emp.name)),
+          DataCell(Text(emp.email ?? '')),
+          DataCell(Text(emp.phoneNumber ?? '')),
+          SortableEntityTable.buildDetailsCell(
+            onPressed: () => onShowEditDialog(emp),
+          ),
+        ],
       ),
-      ManagementModel.clients => DataTable(
-        headingTextStyle: const TextStyle(fontWeight: FontWeight.w700),
-        columnSpacing: 32,
+      ManagementModel.clients => SortableEntityTable(
+        items: filteredClients,
+        columns: const [
+          TableColumnConfig(label: '', index: 0, sortable: true),
+          TableColumnConfig(label: 'Name', index: 1, sortable: true),
+          TableColumnConfig(label: 'Email', index: 2, sortable: true),
+          TableColumnConfig(label: 'Phone', index: 3, sortable: true),
+          TableColumnConfig(label: '', index: 4, sortable: false),
+        ],
         sortColumnIndex: clientsSortColumnIndex,
         sortAscending: clientsSortAscending,
-        columns: [
-          DataColumn(
-            label: const Text(''),
-            onSort: (columnIndex, ascending) => onClientsSort(columnIndex, ascending),
+        onSort: onClientsSort,
+        buildCells: (context, client) => [
+          SortableEntityTable.buildStatusCell(client.status, context),
+          DataCell(Text(client.name)),
+          DataCell(Text(client.email ?? '')),
+          DataCell(Text(client.phoneNumber ?? '')),
+          SortableEntityTable.buildDetailsCell(
+            onPressed: () => onShowEditClientDialog(client),
           ),
-          DataColumn(
-            label: const Text('Name'),
-            onSort: (columnIndex, ascending) => onClientsSort(columnIndex, ascending),
-          ),
-          DataColumn(
-            label: const Text('Email'),
-            onSort: (columnIndex, ascending) => onClientsSort(columnIndex, ascending),
-          ),
-          DataColumn(
-            label: const Text('Phone'),
-            onSort: (columnIndex, ascending) => onClientsSort(columnIndex, ascending),
-          ),
-          const DataColumn(label: Text('')),
         ],
-        rows: filteredClients
-            .map(
-              (client) {
-                final badge = clientStatusBadge(client.status);
-                return DataRow(
-                  cells: [
-                    DataCell(
-                      Container(
-                        padding: EdgeInsets.zero,
-                        child: Container(
-                          width: 20,
-                          height: 20,
-                          decoration: BoxDecoration(
-                            color: badge.bg,
-                            shape: BoxShape.circle,
-                            border: Border.all(color: badge.border, width: 1.5),
-                          ),
-                          child: Center(
-                            child: Text(
-                              badge.label,
-                              style: TextStyle(
-                                fontSize: 10,
-                                fontWeight: FontWeight.w700,
-                                color: badge.fg,
-                                height: 1.0,
-                              ),
-                            ),
-                          ),
-                        ),
-                      ),
-                    ),
-                    DataCell(Text(client.name)),
-                    DataCell(Text(client.email ?? '')),
-                    DataCell(Text(client.phoneNumber ?? '')),
-                    DataCell(
-                      IconButton(
-                        icon: const Icon(Icons.visibility_outlined, size: 20),
-                        tooltip: 'View Details',
-                        onPressed: () => onShowEditClientDialog(client),
-                      ),
-                    ),
-                  ],
-                );
-              },
-            )
-            .toList(),
       ),
-      ManagementModel.locations => DataTable(
-        headingTextStyle: const TextStyle(fontWeight: FontWeight.w700),
-        columnSpacing: 32,
-        columns: [
-          buildTableColumn(''),
-          buildTableColumn('Address'),
-          buildTableColumn('Client'),
-          buildTableColumn(''),
+      ManagementModel.locations => SortableEntityTable(
+        items: filteredLocations,
+        columns: const [
+          TableColumnConfig(label: '', index: 0, sortable: true),
+          TableColumnConfig(label: '', index: 1, sortable: false),
+          TableColumnConfig(label: 'Client Name', index: 2, sortable: true),
+          TableColumnConfig(label: 'Address', index: 3, sortable: true),
+          TableColumnConfig(label: '', index: 4, sortable: false),
         ],
-        rows: filteredLocations.map((loc) {
+        sortColumnIndex: locationsSortColumnIndex,
+        sortAscending: locationsSortAscending,
+        onSort: onLocationsSort,
+        buildCells: (context, loc) {
           // Build full address
           final addressParts = <String>[];
           if (loc.address != null && loc.address!.isNotEmpty) {
@@ -558,28 +509,41 @@ class ManagementSection extends StatelessWidget {
               ? 'N/A'
               : addressParts.join(', ');
 
-          return DataRow(
-            cells: [
-              DataCell(
-                _statusIndicator(
-                  context,
-                  loc.status.trim().toLowerCase() == 'active',
-                ),
-              ),
-              DataCell(
-                Text(fullAddress, overflow: TextOverflow.ellipsis, maxLines: 2),
-              ),
-              DataCell(Text(getLocationLabel(loc.clientId))),
-              DataCell(
-                IconButton(
-                  icon: const Icon(Icons.visibility_outlined, size: 20),
-                  tooltip: 'View Details',
-                  onPressed: () => onShowEditLocationDialog(loc),
-                ),
-              ),
-            ],
-          );
-        }).toList(),
+          return [
+            SortableEntityTable.buildStatusCell(loc.status, context),
+            DataCell(
+              loc.photoUrl != null && loc.photoUrl!.isNotEmpty
+                  ? ClipRRect(
+                      borderRadius: BorderRadius.circular(4),
+                      child: loc.photoUrl!.startsWith('/assets/')
+                          ? Image.asset(
+                              loc.photoUrl!.replaceFirst('/', ''),
+                              width: 32,
+                              height: 32,
+                              fit: BoxFit.cover,
+                            )
+                          : Image.network(
+                              loc.photoUrl!,
+                              width: 32,
+                              height: 32,
+                              fit: BoxFit.cover,
+                            ),
+                    )
+                  : Icon(
+                      Icons.location_on,
+                      size: 24,
+                      color: Theme.of(context).colorScheme.primaryContainer,
+                    ),
+            ),
+            DataCell(Text(getLocationLabel(loc.clientId))),
+            DataCell(
+              Text(fullAddress, overflow: TextOverflow.ellipsis, maxLines: 2),
+            ),
+            SortableEntityTable.buildDetailsCell(
+              onPressed: () => onShowEditLocationDialog(loc),
+            ),
+          ];
+        },
       ),
       ManagementModel.jobs => _buildJobsTable(context),
     };
@@ -594,96 +558,22 @@ class ManagementSection extends StatelessWidget {
       return '${hours}h ${minutes}m';
     }
 
-    ({String label, Color bg, Color fg, Color border}) statusBadge(Job job) {
-      final dark = Theme.of(context).brightness == Brightness.dark;
-      final status = job.status.trim().toLowerCase();
-      if (isOverdue(job)) {
-        return (
-          label: 'O',
-          bg: dark ? const Color(0xFF4A2D35) : const Color(0xFFFFE5EC),
-          fg: dark ? const Color(0xFFFFC1CC) : const Color(0xFFE63721),
-          border: dark ? const Color(0xFFB85B74) : const Color(0xFFE63721),
-        );
-      }
-      return switch (status) {
-        'assigned' => (
-          label: 'A',
-          bg: dark ? const Color(0xFF5A5530) : const Color(0xFFFFF7C5),
-          fg: dark ? const Color(0xFFF7EFAE) : const Color(0xFF7A6F00),
-          border: dark ? const Color(0xFFCADA56) : const Color(0xFFB3A846),
-        ),
-        'pending' => (
-          label: 'P',
-          bg: dark ? const Color(0xFF4B3D2A) : const Color(0xFFFFE3CC),
-          fg: dark ? const Color(0xFFFFD3AD) : const Color(0xFF8A4E17),
-          border: dark ? const Color(0xFFB17945) : const Color(0xFFEE7E32),
-        ),
-        'in_progress' || 'in progress' || 'in-progress' => (
-          label: 'I',
-          bg: dark ? const Color(0xFF3D3550) : const Color(0xFFE8DDF7),
-          fg: dark ? const Color(0xFFE4E4E4) : const Color(0xFF442E6F),
-          border: dark ? const Color(0xFF8C74B2) : const Color(0xFF7A56A5),
-        ),
-        'completed' => (
-          label: 'C',
-          bg: dark ? const Color(0xFF2C4A40) : const Color(0xFFDBF3E8),
-          fg: dark ? const Color(0xFFE4E4E4) : const Color(0xFF1E6A4F),
-          border: dark ? const Color(0xFF6DB598) : const Color(0xFF49A07D),
-        ),
-        _ => (
-          label: '?',
-          bg: dark ? const Color(0xFF41424B) : const Color(0xFFE9EEF2),
-          fg: dark ? const Color(0xFFE4E4E4) : const Color(0xFF41588E),
-          border: dark ? const Color(0xFF7A7E8C) : const Color(0xFFBEDCE4),
-        ),
-      };
-    }
-
-    return DataTable(
+    return SortableEntityTable(
+      items: filteredJobs,
+      columns: const [
+        TableColumnConfig(label: '', index: 0, sortable: true),
+        TableColumnConfig(label: 'Date', index: 1, sortable: true),
+        TableColumnConfig(label: 'Client', index: 2, sortable: true),
+        TableColumnConfig(label: 'Location', index: 3, sortable: true),
+        TableColumnConfig(label: 'Cleaner', index: 4, sortable: true),
+        TableColumnConfig(label: 'Estimated\nDuration', index: 5, sortable: true),
+        TableColumnConfig(label: 'Actual\nDuration', index: 6, sortable: true),
+        TableColumnConfig(label: '', index: 7, sortable: false),
+      ],
       sortColumnIndex: jobsSortColumnIndex,
       sortAscending: jobsSortAscending,
-      headingTextStyle: const TextStyle(fontWeight: FontWeight.w700),
-      columnSpacing: 12,
-      columns: [
-        DataColumn(
-          label: const Text(''),
-          onSort: (columnIndex, ascending) =>
-              onJobsSort(columnIndex, ascending),
-        ),
-        DataColumn(
-          label: const Text('Date'),
-          onSort: (columnIndex, ascending) =>
-              onJobsSort(columnIndex, ascending),
-        ),
-        DataColumn(
-          label: const Text('Client'),
-          onSort: (columnIndex, ascending) =>
-              onJobsSort(columnIndex, ascending),
-        ),
-        DataColumn(
-          label: const Text('Location'),
-          onSort: (columnIndex, ascending) =>
-              onJobsSort(columnIndex, ascending),
-        ),
-        DataColumn(
-          label: const Text('Cleaner'),
-          onSort: (columnIndex, ascending) =>
-              onJobsSort(columnIndex, ascending),
-        ),
-        DataColumn(
-          label: const Text('Estimated\nDuration'),
-          onSort: (columnIndex, ascending) =>
-              onJobsSort(columnIndex, ascending),
-        ),
-        DataColumn(
-          label: const Text('Actual\nDuration'),
-          onSort: (columnIndex, ascending) =>
-              onJobsSort(columnIndex, ascending),
-        ),
-        const DataColumn(label: Text('')),
-      ],
-      rows: filteredJobs.map((job) {
-        final badge = statusBadge(job);
+      onSort: onJobsSort,
+      buildCells: (context, job) {
         final assignedCleaners = jobAssignments[job.id] ?? [];
         final cleanerDisplay = assignedCleaners.isEmpty
             ? 'Unassigned'
@@ -705,49 +595,23 @@ class ManagementSection extends StatelessWidget {
             ? 'N/A'
             : locationParts.join(', ');
 
-        return DataRow(
-          cells: [
-            DataCell(
-              Container(
-                padding: EdgeInsets.zero,
-                child: Container(
-                  width: 20,
-                  height: 20,
-                  alignment: Alignment.center,
-                  decoration: BoxDecoration(
-                    color: badge.bg,
-                    border: Border.all(color: badge.border, width: 1.5),
-                    borderRadius: BorderRadius.circular(10),
-                  ),
-                  child: Text(
-                    badge.label,
-                    style: TextStyle(
-                      fontSize: 11,
-                      fontWeight: FontWeight.w700,
-                      color: badge.fg,
-                    ),
-                  ),
-                ),
-              ),
-            ),
-            DataCell(Text(formatDateMdy(job.scheduledDate))),
-            DataCell(Text(job.clientName ?? 'N/A')),
-            DataCell(
-              Text(fullLocation, overflow: TextOverflow.ellipsis, maxLines: 2),
-            ),
-            DataCell(Text(cleanerDisplay)),
-            DataCell(Text(minutesLabel(job.estimatedDurationMinutes))),
-            DataCell(Text(minutesLabel(job.actualDurationMinutes))),
-            DataCell(
-              IconButton(
-                icon: const Icon(Icons.visibility_outlined, size: 20),
-                tooltip: 'View Details',
-                onPressed: () => onShowEditJobDialog(job),
-              ),
-            ),
-          ],
-        );
-      }).toList(),
+        final displayStatus = isOverdue(job) ? 'overdue' : job.status;
+
+        return [
+          SortableEntityTable.buildStatusCell(displayStatus, context),
+          DataCell(Text(formatDateMdy(job.scheduledDate))),
+          DataCell(Text(job.clientName ?? 'N/A')),
+          DataCell(
+            Text(fullLocation, overflow: TextOverflow.ellipsis, maxLines: 2),
+          ),
+          DataCell(Text(cleanerDisplay)),
+          DataCell(Text(minutesLabel(job.estimatedDurationMinutes))),
+          DataCell(Text(minutesLabel(job.actualDurationMinutes))),
+          SortableEntityTable.buildDetailsCell(
+            onPressed: () => onShowEditJobDialog(job),
+          ),
+        ];
+      },
     );
   }
 
@@ -797,20 +661,6 @@ class ManagementSection extends StatelessWidget {
           ),
         ),
       ],
-    );
-  }
-
-  Widget _statusIndicator(BuildContext context, bool isActive) {
-    final dark = Theme.of(context).brightness == Brightness.dark;
-    return Container(
-      width: 12,
-      height: 12,
-      decoration: BoxDecoration(
-        color: isActive
-            ? (dark ? const Color(0xFF6DB598) : const Color(0xFF49A07D))
-            : (dark ? const Color(0xFF7A7E8C) : const Color(0xFFBEDCE4)),
-        shape: BoxShape.circle,
-      ),
     );
   }
 }

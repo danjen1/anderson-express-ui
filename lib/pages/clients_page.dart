@@ -13,6 +13,7 @@ import '../widgets/demo_mode_notice.dart';
 import '../widgets/profile_menu_button.dart';
 import '../widgets/theme_toggle_button.dart';
 import '../utils/navigation_extensions.dart';
+import '../theme/crud_modal_theme.dart';
 
 class ClientsPage extends StatefulWidget {
   const ClientsPage({super.key});
@@ -167,19 +168,26 @@ class _ClientsPageState extends State<ClientsPage> with BaseApiPageMixin<Clients
     }
     final confirmed = await showDialog<bool>(
       context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Delete client'),
-        content: Text('Delete ${client.clientNumber} - ${client.name}?'),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context, false),
-            child: const Text('Cancel'),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.pop(context, true),
-            child: const Text('Delete'),
-          ),
-        ],
+      builder: (dialogContext) => Theme(
+        data: buildCrudModalTheme(context),
+        child: AlertDialog(
+          title: const Text('Delete client'),
+          content: Text('Delete ${client.clientNumber} - ${client.name}?'),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(dialogContext, false),
+              child: const Text('Cancel'),
+            ),
+            FilledButton(
+              onPressed: () => Navigator.pop(dialogContext, true),
+              style: FilledButton.styleFrom(
+                backgroundColor: Colors.red,
+                foregroundColor: Colors.white,
+              ),
+              child: const Text('Delete'),
+            ),
+          ],
+        ),
       ),
     );
     if (confirmed != true) return;

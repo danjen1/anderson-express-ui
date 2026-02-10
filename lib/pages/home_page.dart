@@ -24,6 +24,7 @@ import '../widgets/profile_menu_button.dart';
 import '../widgets/theme_toggle_button.dart';
 import '../utils/navigation_extensions.dart';
 import '../utils/date_range_utils.dart';
+import '../utils/photo_picker_utils.dart';
 
 class HomePage extends StatefulWidget {
   const HomePage({super.key});
@@ -590,53 +591,14 @@ class _HomePageState extends State<HomePage> {
     if (location == null) return;
     final token = _session?.token ?? '';
     if (token.isEmpty) return;
-    final proceed = await showDialog<bool>(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Update Location Photo'),
-        content: const Text('Select a new photo for your location.'),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context, false),
-            child: const Text('Cancel'),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.pop(context, true),
-            child: const Text('Choose Photo'),
-          ),
-        ],
-      ),
+    
+    final dataUrl = await showPhotoPickerDialog(
+      context,
+      title: 'Update Location Photo',
+      message: 'Select a new photo for your location.',
     );
-    if (proceed != true) return;
-
-    final result = await FilePicker.platform.pickFiles(
-      type: FileType.custom,
-      allowedExtensions: const ['jpg', 'jpeg', 'png', 'webp'],
-      withData: true,
-    );
-    if (result == null || result.files.isEmpty) return;
-    final file = result.files.first;
-    final bytes = file.bytes;
-    if (bytes == null || bytes.isEmpty) return;
-    if (bytes.length > 500 * 1024) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text(
-            'Image must be under 500KB. Please choose a smaller file.',
-          ),
-        ),
-      );
-      return;
-    }
-
-    final ext = (file.extension ?? '').toLowerCase();
-    final mime = switch (ext) {
-      'png' => 'image/png',
-      'webp' => 'image/webp',
-      _ => 'image/jpeg',
-    };
-    final dataUrl = 'data:$mime;base64,${base64Encode(bytes)}';
+    
+    if (dataUrl == null) return;
 
     setState(() => _uploadingPhoto = true);
     try {
@@ -1652,34 +1614,40 @@ class _HomePageState extends State<HomePage> {
       if (!mounted) return;
       await showDialog<void>(
         context: context,
-        builder: (context) => AlertDialog(
-          title: const Text('Request Submitted'),
-          content: const Text(
-            'Your cleaning request was sent successfully. Our team will follow up shortly.',
-          ),
-          actions: [
-            FilledButton(
-              onPressed: () => Navigator.pop(context),
-              child: const Text('OK'),
+        builder: (dialogContext) => Theme(
+          data: buildCrudModalTheme(context),
+          child: AlertDialog(
+            title: const Text('Request Submitted'),
+            content: const Text(
+              'Your cleaning request was sent successfully. Our team will follow up shortly.',
             ),
-          ],
+            actions: [
+              FilledButton(
+                onPressed: () => Navigator.pop(dialogContext),
+                child: const Text('OK'),
+              ),
+            ],
+          ),
         ),
       );
     } catch (requestError) {
       if (!mounted) return;
       await showDialog<void>(
         context: context,
-        builder: (context) => AlertDialog(
-          title: const Text('Request Not Sent'),
-          content: Text(
-            'We could not submit the cleaning request right now.\n\n${requestError.toString()}',
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(context),
-              child: const Text('Close'),
+        builder: (dialogContext) => Theme(
+          data: buildCrudModalTheme(context),
+          child: AlertDialog(
+            title: const Text('Request Not Sent'),
+            content: Text(
+              'We could not submit the cleaning request right now.\n\n${requestError.toString()}',
             ),
-          ],
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(dialogContext),
+                child: const Text('Close'),
+              ),
+            ],
+          ),
         ),
       );
     }

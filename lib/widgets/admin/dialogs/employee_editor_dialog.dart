@@ -1,9 +1,11 @@
 import 'dart:convert';
-
-import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import '../../../models/employee.dart';
 import '../../../theme/crud_modal_theme.dart';
+import '../../../utils/photo_picker_utils.dart';
+import '../../../utils/phone_formatter.dart';
+import '../../../services/validation_service.dart';
 
 class EmployeeEditorDialog extends StatefulWidget {
   const EmployeeEditorDialog({
@@ -48,25 +50,43 @@ class EmployeeEditorDialogState extends State<EmployeeEditorDialog> {
   late final TextEditingController _phone;
   late final TextEditingController _address;
   late final TextEditingController _city;
-  late final TextEditingController _state;
   late final TextEditingController _zipCode;
   late final TextEditingController _photoUrl;
   late String _status;
+  String? _selectedState;
+
+  // For email validation
+  bool _isValidatingEmail = false;
+  
+  // For address validation
+  bool _isValidatingAddress = false;
+
+  static const List<String> usStates = [
+    'AL', 'AK', 'AZ', 'AR', 'CA', 'CO', 'CT', 'DE', 'FL', 'GA',
+    'HI', 'ID', 'IL', 'IN', 'IA', 'KS', 'KY', 'LA', 'ME', 'MD',
+    'MA', 'MI', 'MN', 'MS', 'MO', 'MT', 'NE', 'NV', 'NH', 'NJ',
+    'NM', 'NY', 'NC', 'ND', 'OH', 'OK', 'OR', 'PA', 'RI', 'SC',
+    'SD', 'TN', 'TX', 'UT', 'VT', 'VA', 'WA', 'WV', 'WI', 'WY',
+  ];
 
   @override
   void initState() {
     super.initState();
     _name = TextEditingController(text: widget.name);
     _email = TextEditingController(text: widget.email);
-    _phone = TextEditingController(text: widget.phoneNumber);
+    // Format phone number if it exists
+    final formattedPhone = widget.phoneNumber.isEmpty 
+        ? '' 
+        : formatPhoneNumber(widget.phoneNumber);
+    _phone = TextEditingController(text: formattedPhone);
     _address = TextEditingController(text: widget.address);
     _city = TextEditingController(text: widget.city);
-    _state = TextEditingController(text: widget.state);
     _zipCode = TextEditingController(text: widget.zipCode);
     _photoUrl = TextEditingController(text: widget.photoUrl);
     _status = widget.status.trim().isEmpty
         ? 'invited'
         : widget.status.trim().toLowerCase();
+    _selectedState = widget.state.trim().isEmpty ? null : widget.state.trim().toUpperCase();
   }
 
   @override
@@ -76,7 +96,6 @@ class EmployeeEditorDialogState extends State<EmployeeEditorDialog> {
     _phone.dispose();
     _address.dispose();
     _city.dispose();
-    _state.dispose();
     _zipCode.dispose();
     _photoUrl.dispose();
     super.dispose();
@@ -110,35 +129,228 @@ class EmployeeEditorDialogState extends State<EmployeeEditorDialog> {
   }
 
   Future<void> _pickPhotoFile() async {
-    final result = await FilePicker.platform.pickFiles(
-      type: FileType.custom,
-      allowedExtensions: const ['jpg', 'jpeg', 'png', 'webp'],
-      withData: true,
+    final dataUrl = await showPhotoPickerDialog(
+      context,
+      title: 'Update Profile Photo',
+      message: 'Select a new photo for the employee profile.',
     );
-    if (result == null || result.files.isEmpty) return;
-    final file = result.files.first;
-    final bytes = file.bytes;
-    if (bytes == null || bytes.isEmpty) return;
-    if (bytes.length > 500 * 1024) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text(
-            'Image must be under 500KB. Please choose a smaller file.',
-          ),
-        ),
+    if (dataUrl != null) {
+      setState(() => _photoUrl.text = dataUrl);
+    }
+  }
+
+  /// Validate email doesn't already exist in database
+  Future<bool> _validateEmail() async {
+    setState(() => _isValidatingEmail = true);
+    
+    try {
+      final error = await ValidationService.validateEmailUniqueness(
+        _email.text,
+        currentEmail: widget.isCreate ? null : widget.email,
+        checkEmployees: true,
+        checkClients: true,
       );
-      return;
+      
+      if (error != null) {
+        if (!mounted) return false;
+        
+        await showDialog<void>(
+          context: context,
+          builder: (dialogContext) => Theme(
+            data: buildCrudModalTheme(context),
+            child: AlertDialog(
+              title: const Text('Email Already Exists'),
+              content: Text(error),
+              actions: [
+                FilledButton(
+                  onPressed: () => Navigator.pop(dialogContext),
+                  child: const Text('OK'),
+                ),
+              ],
+            ),
+          ),
+        );
+        return false;
+      }
+      
+      return true;
+    } finally {
+      if (mounted) setState(() => _isValidatingEmail = false);
+    }
+  }
+
+  /// Validate address and geocode
+  Future<bool> _validateAddress() async {
+    // Skip if address fields are empty
+    if (_address.text.trim().isEmpty || 
+        _city.text.trim().isEmpty || 
+        _selectedState == null) {
+      return true; // Allow empty addresses
     }
 
-    final ext = (file.extension ?? '').toLowerCase();
-    final mime = switch (ext) {
-      'png' => 'image/png',
-      'webp' => 'image/webp',
-      _ => 'image/jpeg',
-    };
-    final dataUrl = 'data:$mime;base64,${base64Encode(bytes)}';
-    setState(() => _photoUrl.text = dataUrl);
+    setState(() => _isValidatingAddress = true);
+
+    try {
+      final result = await ValidationService.validateAddress(
+        address: _address.text,
+        city: _city.text,
+        state: _selectedState!,
+        zipCode: _zipCode.text,
+      );
+
+      if (!mounted) return false;
+
+      switch (result.status) {
+        case AddressValidationStatus.valid:
+          return true;
+
+        case AddressValidationStatus.suggestion:
+          final useSuggestion = await showDialog<bool>(
+            context: context,
+            builder: (dialogContext) => Theme(
+              data: buildCrudModalTheme(context),
+              child: AlertDialog(
+                title: const Text('Address Suggestion'),
+                content: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text(
+                      'We found a slightly different address:',
+                      style: TextStyle(fontWeight: FontWeight.bold),
+                    ),
+                    const SizedBox(height: 12),
+                    Text(
+                      'You entered:\n${_address.text}, ${_city.text}, ${_selectedState}, ${_zipCode.text}',
+                      style: const TextStyle(fontSize: 13),
+                    ),
+                    const SizedBox(height: 12),
+                    Text(
+                      'Found address:\n${result.suggestedStreet}, ${result.suggestedCity}, ${result.suggestedState}, ${result.suggestedZip}',
+                      style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600),
+                    ),
+                    const SizedBox(height: 12),
+                    const Text(
+                      'Would you like to use the found address?',
+                      style: TextStyle(fontSize: 13),
+                    ),
+                  ],
+                ),
+                actions: [
+                  TextButton(
+                    onPressed: () => Navigator.pop(dialogContext, false),
+                    child: const Text('Keep Mine'),
+                  ),
+                  FilledButton(
+                    onPressed: () => Navigator.pop(dialogContext, true),
+                    child: const Text('Use Found'),
+                  ),
+                ],
+              ),
+            ),
+          );
+
+          if (useSuggestion == true) {
+            setState(() {
+              _address.text = result.suggestedStreet ?? _address.text;
+              _city.text = result.suggestedCity ?? _city.text;
+              _selectedState = result.suggestedState ?? _selectedState;
+              _zipCode.text = result.suggestedZip ?? _zipCode.text;
+            });
+          }
+          return true;
+
+        case AddressValidationStatus.invalid:
+          await showDialog<void>(
+            context: context,
+            builder: (dialogContext) => Theme(
+              data: buildCrudModalTheme(context),
+              child: AlertDialog(
+                title: const Text('Invalid Address'),
+                content: const Text(
+                  'We could not verify this address. Please check the street, city, and state.',
+                ),
+                actions: [
+                  FilledButton(
+                    onPressed: () => Navigator.pop(dialogContext),
+                    child: const Text('OK'),
+                  ),
+                ],
+              ),
+            ),
+          );
+          return false;
+
+        case AddressValidationStatus.incomplete:
+          await showDialog<void>(
+            context: context,
+            builder: (dialogContext) => Theme(
+              data: buildCrudModalTheme(context),
+              child: AlertDialog(
+                title: const Text('Incomplete Address'),
+                content: const Text(
+                  'Please provide street, city, and state for address validation.',
+                ),
+                actions: [
+                  FilledButton(
+                    onPressed: () => Navigator.pop(dialogContext),
+                    child: const Text('OK'),
+                  ),
+                ],
+              ),
+            ),
+          );
+          return false;
+      }
+    } finally {
+      if (mounted) setState(() => _isValidatingAddress = false);
+    }
+  }
+
+  Future<void> _submit() async {
+    // Validate email
+    if (!await _validateEmail()) return;
+    
+    // Validate address
+    if (!await _validateAddress()) return;
+
+    // All validation passed, return the result
+    if (widget.isCreate) {
+      if (_name.text.trim().isEmpty || _email.text.trim().isEmpty) {
+        return;
+      }
+      if (!mounted) return;
+      Navigator.pop(
+        context,
+        EmployeeCreateInput(
+          name: _name.text.trim(),
+          email: _email.text.trim(),
+          phoneNumber: _nullable(_phone.text),
+          address: _nullable(_address.text),
+          city: _nullable(_city.text),
+          state: _selectedState,
+          zipCode: _nullable(_zipCode.text),
+          photoUrl: _nullable(_photoUrl.text),
+          status: _status,
+        ),
+      );
+    } else {
+      if (!mounted) return;
+      Navigator.pop(
+        context,
+        EmployeeUpdateInput(
+          name: _nullable(_name.text),
+          email: _nullable(_email.text),
+          phoneNumber: _nullable(_phone.text),
+          address: _nullable(_address.text),
+          city: _nullable(_city.text),
+          state: _selectedState,
+          zipCode: _nullable(_zipCode.text),
+          photoUrl: _nullable(_photoUrl.text),
+          status: _status,
+        ),
+      );
+    }
   }
 
   @override
@@ -183,14 +395,25 @@ class EmployeeEditorDialogState extends State<EmployeeEditorDialog> {
                         : _defaultEmployeePhotoAsset;
                     return Stack(
                       children: [
-                        CircleAvatar(
-                          radius: 56,
-                          backgroundColor: dark
-                              ? const Color(0xFF3B4250)
-                              : const Color(0xFFA8D6F7),
-                          backgroundImage: _photoProvider(
-                            path,
-                            fallback: _defaultEmployeePhotoAsset,
+                        Container(
+                          decoration: BoxDecoration(
+                            shape: BoxShape.circle,
+                            border: Border.all(
+                              color: dark
+                                  ? const Color(0xFF657184)
+                                  : const Color(0xFFBFDFF4),
+                              width: 2.5,
+                            ),
+                          ),
+                          child: CircleAvatar(
+                            radius: 56,
+                            backgroundColor: dark
+                                ? const Color(0xFF3B4250)
+                                : const Color(0xFFA8D6F7),
+                            backgroundImage: _photoProvider(
+                              path,
+                              fallback: _defaultEmployeePhotoAsset,
+                            ),
                           ),
                         ),
                         Positioned(
@@ -234,40 +457,137 @@ class EmployeeEditorDialogState extends State<EmployeeEditorDialog> {
                 const SizedBox(height: 10),
                 _field(_email, 'Email', required: true),
                 const SizedBox(height: 10),
-                _field(_phone, 'Phone'),
+                TextField(
+                  controller: _phone,
+                  decoration: const InputDecoration(
+                    labelText: 'Phone',
+                    hintText: '(555) 123-4567',
+                    border: OutlineInputBorder(),
+                  ),
+                  keyboardType: TextInputType.phone,
+                  inputFormatters: [PhoneNumberFormatter()],
+                ),
                 const SizedBox(height: 10),
                 _field(_address, 'Address'),
                 const SizedBox(height: 10),
                 _field(_city, 'City'),
                 const SizedBox(height: 10),
-                _field(_state, 'State'),
-                const SizedBox(height: 10),
-                _field(_zipCode, 'Zip Code'),
-                const SizedBox(height: 10),
-                DropdownButtonFormField<String>(
-                  initialValue: _status,
-                  decoration: const InputDecoration(
-                    labelText: 'Status',
-                    border: OutlineInputBorder(),
-                  ),
-                  items: const [
-                    DropdownMenuItem(value: 'invited', child: Text('Invited')),
-                    DropdownMenuItem(value: 'active', child: Text('Active')),
-                    DropdownMenuItem(
-                      value: 'inactive',
-                      child: Text('Inactive'),
+                // State and Zip on same row
+                Row(
+                  children: [
+                    Expanded(
+                      flex: 2,
+                      child: Autocomplete<String>(
+                        initialValue: _selectedState == null
+                            ? const TextEditingValue()
+                            : TextEditingValue(text: _selectedState!),
+                        displayStringForOption: (String state) => state,
+                        optionsBuilder: (TextEditingValue textEditingValue) {
+                          if (textEditingValue.text.isEmpty) {
+                            return usStates;
+                          }
+                          final searchText = textEditingValue.text.toUpperCase();
+                          return usStates.where((String state) {
+                            return state.startsWith(searchText);
+                          });
+                        },
+                        onSelected: (String state) {
+                          setState(() => _selectedState = state);
+                        },
+                        fieldViewBuilder: (
+                          BuildContext context,
+                          TextEditingController controller,
+                          FocusNode focusNode,
+                          VoidCallback onFieldSubmitted,
+                        ) {
+                          return Focus(
+                            onKeyEvent: (node, event) {
+                              // Handle Tab key like Enter
+                              if (event is KeyDownEvent && 
+                                  event.logicalKey == LogicalKeyboardKey.tab) {
+                                final upperValue = controller.text.toUpperCase();
+                                final matchingState = usStates.firstWhere(
+                                  (state) => state == upperValue || state.startsWith(upperValue),
+                                  orElse: () => '',
+                                );
+                                if (matchingState.isNotEmpty) {
+                                  setState(() => _selectedState = matchingState);
+                                  controller.text = matchingState;
+                                }
+                                return KeyEventResult.ignored; // Allow tab to move focus
+                              }
+                              return KeyEventResult.ignored;
+                            },
+                            child: TextFormField(
+                              controller: controller,
+                              focusNode: focusNode,
+                              decoration: const InputDecoration(
+                                labelText: 'State',
+                                hintText: 'Type to search...',
+                                border: OutlineInputBorder(),
+                              ),
+                              textCapitalization: TextCapitalization.characters,
+                              onFieldSubmitted: (value) {
+                                // When Enter is pressed, select the first matching state
+                                final upperValue = value.toUpperCase();
+                                final matchingState = usStates.firstWhere(
+                                  (state) => state == upperValue || state.startsWith(upperValue),
+                                  orElse: () => '',
+                                );
+                                if (matchingState.isNotEmpty) {
+                                  setState(() => _selectedState = matchingState);
+                                  controller.text = matchingState;
+                                }
+                                onFieldSubmitted();
+                              },
+                              onChanged: (value) {
+                                // Only update if it's a valid state code
+                                final upperValue = value.toUpperCase();
+                                if (usStates.contains(upperValue)) {
+                                  setState(() => _selectedState = upperValue);
+                                } else if (value.isEmpty) {
+                                  setState(() => _selectedState = null);
+                                }
+                              },
+                            ),
+                          );
+                        },
+                      ),
                     ),
-                    DropdownMenuItem(
-                      value: 'resigned',
-                      child: Text('Resigned'),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: _field(_zipCode, 'Zip Code'),
                     ),
-                    DropdownMenuItem(value: 'deleted', child: Text('Deleted')),
                   ],
-                  onChanged: (value) {
-                    if (value == null) return;
-                    setState(() => _status = value);
-                  },
                 ),
+                const SizedBox(height: 10),
+                // Only show status dropdown when editing
+                if (!widget.isCreate)
+                  DropdownButtonFormField<String>(
+                    initialValue: _status,
+                    decoration: const InputDecoration(
+                      labelText: 'Status',
+                      border: OutlineInputBorder(),
+                    ),
+                    items: const [
+                      DropdownMenuItem(value: 'invited', child: Text('Invited')),
+                      DropdownMenuItem(value: 'active', child: Text('Active')),
+                      DropdownMenuItem(
+                        value: 'inactive',
+                        child: Text('Inactive'),
+                      ),
+                      DropdownMenuItem(
+                        value: 'resigned',
+                        child: Text('Resigned'),
+                      ),
+                      DropdownMenuItem(value: 'deleted', child: Text('Deleted')),
+                    ],
+                    onChanged: (value) {
+                      if (value == null) return;
+                      setState(() => _status = value);
+                    },
+                  ),
+                if (!widget.isCreate) const SizedBox(height: 10),
                 // if (widget.isCreate)
                 //   Padding(
                 //     padding: const EdgeInsets.only(top: 8),
@@ -302,45 +622,15 @@ class EmployeeEditorDialogState extends State<EmployeeEditorDialog> {
             onPressed: () => Navigator.pop(context),
             child: const Text('Cancel'),
           ),
-          
           FilledButton(
-            onPressed: () {
-              if (widget.isCreate) {
-                if (_name.text.trim().isEmpty || _email.text.trim().isEmpty) {
-                  return;
-                }
-                Navigator.pop(
-                  context,
-                  EmployeeCreateInput(
-                    name: _name.text.trim(),
-                    email: _email.text.trim(),
-                    phoneNumber: _nullable(_phone.text),
-                    address: _nullable(_address.text),
-                    city: _nullable(_city.text),
-                    state: _nullable(_state.text),
-                    zipCode: _nullable(_zipCode.text),
-                    photoUrl: _nullable(_photoUrl.text),
-                    status: _status,
-                  ),
-                );
-              } else {
-                Navigator.pop(
-                  context,
-                  EmployeeUpdateInput(
-                    name: _nullable(_name.text),
-                    email: _nullable(_email.text),
-                    phoneNumber: _nullable(_phone.text),
-                    address: _nullable(_address.text),
-                    city: _nullable(_city.text),
-                    state: _nullable(_state.text),
-                    zipCode: _nullable(_zipCode.text),
-                    photoUrl: _nullable(_photoUrl.text),
-                    status: _status,
-                  ),
-                );
-              }
-            },
-            child: Text(widget.isCreate ? 'Create' : 'Save'),
+            onPressed: _isValidatingEmail || _isValidatingAddress ? null : _submit,
+            child: _isValidatingEmail || _isValidatingAddress
+                ? const SizedBox(
+                    width: 16,
+                    height: 16,
+                    child: CircularProgressIndicator(strokeWidth: 2),
+                  )
+                : Text(widget.isCreate ? 'Create' : 'Save'),
           ),
         ],
       ),

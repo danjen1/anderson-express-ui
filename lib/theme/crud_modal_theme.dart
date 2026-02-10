@@ -22,6 +22,22 @@ ThemeData buildCrudModalTheme(BuildContext context) {
         ),
       ),
     ),
+    dropdownMenuTheme: DropdownMenuThemeData(
+      menuStyle: MenuStyle(
+        backgroundColor: WidgetStateProperty.all(
+          dark ? AppColors.darkerBackground : Colors.white,
+        ),
+        surfaceTintColor: WidgetStateProperty.all(Colors.transparent),
+        shape: WidgetStateProperty.all(
+          RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(10),
+            side: BorderSide(
+              color: dark ? const Color(0xFF657184) : AppColors.paleBlue,
+            ),
+          ),
+        ),
+      ),
+    ),
     inputDecorationTheme: InputDecorationTheme(
       filled: true,
       fillColor: dark ? AppColors.darkerBackground : AppColors.veryLightBackground,

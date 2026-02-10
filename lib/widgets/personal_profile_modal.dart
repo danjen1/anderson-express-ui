@@ -150,26 +150,29 @@ class _PersonalProfileDialogState extends State<_PersonalProfileDialog> {
     final controller = TextEditingController(text: _photoUrl.text);
     final value = await showDialog<String>(
       context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Profile photo path'),
-        content: TextField(
-          controller: controller,
-          decoration: const InputDecoration(
-            labelText: 'Asset path',
-            hintText: '/assets/images/profiles/employee_default.png',
-            border: OutlineInputBorder(),
+      builder: (dialogContext) => Theme(
+        data: buildCrudModalTheme(context),
+        child: AlertDialog(
+          title: const Text('Profile photo path'),
+          content: TextField(
+            controller: controller,
+            decoration: const InputDecoration(
+              labelText: 'Asset path',
+              hintText: '/assets/images/profiles/employee_default.png',
+              border: OutlineInputBorder(),
+            ),
           ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(dialogContext),
+              child: const Text('Cancel'),
+            ),
+            FilledButton(
+              onPressed: () => Navigator.pop(dialogContext, controller.text.trim()),
+              child: const Text('Apply'),
+            ),
+          ],
         ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('Cancel'),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.pop(context, controller.text.trim()),
-            child: const Text('Apply'),
-          ),
-        ],
       ),
     );
     if (value == null) return;

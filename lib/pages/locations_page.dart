@@ -2,17 +2,22 @@ import 'package:flutter/material.dart';
 
 import '../mixins/base_api_page_mixin.dart';
 import '../models/backend_config.dart';
+import '../models/client.dart';
 import '../models/location.dart';
 import '../services/app_env.dart';
 import '../services/auth_session.dart';
 import '../services/backend_runtime.dart';
 import '../utils/error_text.dart';
+import '../utils/dialog_utils.dart';
 import '../widgets/backend_banner.dart';
 import '../widgets/brand_app_bar_title.dart';
 import '../widgets/demo_mode_notice.dart';
 import '../widgets/profile_menu_button.dart';
 import '../widgets/theme_toggle_button.dart';
 import '../utils/navigation_extensions.dart';
+import '../widgets/admin/dialogs/location_editor_dialog.dart';
+
+enum _LocationFilter { active, all, deleted }
 
 class LocationsPage extends StatefulWidget {
   const LocationsPage({super.key});
@@ -27,6 +32,11 @@ class _LocationsPageState extends State<LocationsPage> with BaseApiPageMixin<Loc
   late final TextEditingController _hostController;
 
   List<Location> _locations = const [];
+  List<Client> _clients = const [];
+  _LocationFilter _locationFilter = _LocationFilter.active;
+  int? _locationsSortColumnIndex;
+  bool _locationsSortAscending = true;
+  
   bool get _isAdmin => AuthSession.current?.user.isAdmin == true;
 
   @override
@@ -54,7 +64,10 @@ class _LocationsPageState extends State<LocationsPage> with BaseApiPageMixin<Loc
 
   @override
   Future<void> loadData() async {
-    await _loadLocations();
+    await Future.wait([
+      _loadLocations(),
+      _loadClients(),
+    ]);
   }
 
   @override
@@ -62,6 +75,20 @@ class _LocationsPageState extends State<LocationsPage> with BaseApiPageMixin<Loc
     _hostController.dispose();
     _clientFilterController.dispose();
     super.dispose();
+  }
+
+  Future<void> _loadClients() async {
+    if (token == null || token!.isEmpty) return;
+    try {
+      final clients = await api.listClients(bearerToken: token!);
+      if (!mounted) return;
+      setState(() {
+        _clients = clients;
+      });
+    } catch (error) {
+      if (!mounted) return;
+      setError(userFacingError(error));
+    }
   }
 
   Future<void> _applyBackendSelection() async {
@@ -110,7 +137,10 @@ class _LocationsPageState extends State<LocationsPage> with BaseApiPageMixin<Loc
     }
     final result = await showDialog<LocationCreateInput>(
       context: context,
-      builder: (context) => const _LocationEditorDialog(),
+      builder: (context) => LocationEditorDialog(
+        clients: _clients,
+        isCreate: true,
+      ),
     );
 
     if (result == null) return;
@@ -119,9 +149,7 @@ class _LocationsPageState extends State<LocationsPage> with BaseApiPageMixin<Loc
       await api.createLocation(result, bearerToken: token);
       await _loadLocations();
       if (!mounted) return;
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(const SnackBar(content: Text('Location created')));
+      showSuccessSnackBar(context, 'Location created successfully.');
     } catch (error) {
       if (!mounted) return;
       ScaffoldMessenger.of(
@@ -137,16 +165,18 @@ class _LocationsPageState extends State<LocationsPage> with BaseApiPageMixin<Loc
     }
     final result = await showDialog<LocationUpdateInput>(
       context: context,
-      builder: (context) => _LocationEditorDialog(
+      builder: (context) => LocationEditorDialog(
+        clients: _clients,
+        clientId: location.clientId,
+        status: location.status,
         type: location.type,
         address: location.address ?? '',
         city: location.city ?? '',
         state: location.state ?? '',
         zipCode: location.zipCode ?? '',
         photoUrl: location.photoUrl ?? '',
-        accessNotes: location.accessNotes ?? '',
-        parkingNotes: location.parkingNotes ?? '',
         isCreate: false,
+        locationToEdit: location,
       ),
     );
 
@@ -156,9 +186,7 @@ class _LocationsPageState extends State<LocationsPage> with BaseApiPageMixin<Loc
       await api.updateLocation(location.id, result, bearerToken: token);
       await _loadLocations();
       if (!mounted) return;
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(const SnackBar(content: Text('Location updated')));
+      showSuccessSnackBar(context, 'Location updated successfully.');
     } catch (error) {
       if (!mounted) return;
       ScaffoldMessenger.of(
@@ -178,48 +206,105 @@ class _LocationsPageState extends State<LocationsPage> with BaseApiPageMixin<Loc
       ).showSnackBar(const SnackBar(content: Text('Admin access required')));
       return;
     }
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Delete location'),
-        content: Text(
-          'Delete ${location.locationNumber} (client ${location.clientId})?',
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context, false),
-            child: const Text('Cancel'),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.pop(context, true),
-            child: const Text('Delete'),
-          ),
-        ],
+
+    // Get client name for delete message
+    final client = _clients.firstWhere(
+      (c) => int.tryParse(c.id) == location.clientId,
+      orElse: () => Client(
+        id: location.clientId.toString(),
+        clientNumber: 'CLT-${location.clientId}',
+        name: 'Client ${location.clientId}',
+        status: 'unknown',
       ),
+    );
+
+    final confirmed = await showDeleteConfirmationDialog(
+      context,
+      itemType: 'location',
+      itemName: '${location.locationNumber} for ${client.name}',
     );
 
     if (confirmed != true) return;
 
     try {
-      final message = await api.deleteLocation(
+      await api.deleteLocation(
         location.id,
         bearerToken: token,
       );
       await _loadLocations();
       if (!mounted) return;
-      ScaffoldMessenger.of(
+      showSuccessSnackBar(
         context,
-      ).showSnackBar(SnackBar(content: Text(message)));
+        '${location.locationNumber} for ${client.name} deleted successfully.',
+      );
     } catch (error) {
       if (!mounted) return;
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text(userFacingError(error))));
+      showErrorSnackBar(context, userFacingError(error));
     }
+  }
+
+  List<Location> get _filteredLocations {
+    var filtered = _locations.where((location) {
+      final status = location.status.trim().toLowerCase();
+      switch (_locationFilter) {
+        case _LocationFilter.active:
+          return status == 'active';
+        case _LocationFilter.deleted:
+          return status == 'deleted';
+        case _LocationFilter.all:
+          return true;
+      }
+    }).toList();
+
+    // Apply sorting
+    if (_locationsSortColumnIndex != null) {
+      filtered.sort((a, b) {
+        int comparison = 0;
+        switch (_locationsSortColumnIndex) {
+          case 0: // Status
+            final aStatus = a.status.trim().toLowerCase();
+            final bStatus = b.status.trim().toLowerCase();
+            comparison = aStatus.compareTo(bStatus);
+            break;
+          case 1: // Photo (no sort)
+            comparison = 0;
+            break;
+          case 2: // Client Name
+            final aClient = _clients.firstWhere(
+              (c) => int.tryParse(c.id) == a.clientId,
+              orElse: () => Client(
+                id: a.clientId.toString(),
+                clientNumber: '',
+                name: '',
+                status: '',
+              ),
+            );
+            final bClient = _clients.firstWhere(
+              (c) => int.tryParse(c.id) == b.clientId,
+              orElse: () => Client(
+                id: b.clientId.toString(),
+                clientNumber: '',
+                name: '',
+                status: '',
+              ),
+            );
+            comparison = aClient.name.toLowerCase().compareTo(bClient.name.toLowerCase());
+            break;
+          case 3: // Address
+            comparison = (a.address ?? '').toLowerCase().compareTo((b.address ?? '').toLowerCase());
+            break;
+        }
+        return _locationsSortAscending ? comparison : -comparison;
+      });
+    }
+
+    return filtered;
   }
 
   @override
   Widget buildContent(BuildContext context) {
+    final filteredLocations = _filteredLocations;
+
     return Column(
       children: [
         if (BackendRuntime.allowBackendOverride) ...[
@@ -270,58 +355,162 @@ class _LocationsPageState extends State<LocationsPage> with BaseApiPageMixin<Loc
           ),
           const SizedBox(height: 12),
         ],
-        const SizedBox(height: 12),
-        TextField(
-          controller: _clientFilterController,
-          keyboardType: TextInputType.number,
-          decoration: InputDecoration(
-            labelText: 'Client ID Filter (optional)',
-            border: const OutlineInputBorder(),
-            suffixIcon: IconButton(
-              onPressed: _loadLocations,
-              icon: const Icon(Icons.filter_alt),
+        // Status filter chips
+        Wrap(
+          spacing: 8,
+          children: [
+            FilterChip(
+              label: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Container(
+                    width: 8,
+                    height: 8,
+                    decoration: const BoxDecoration(
+                      color: Colors.green,
+                      shape: BoxShape.circle,
+                    ),
+                  ),
+                  const SizedBox(width: 6),
+                  const Text('Active'),
+                ],
+              ),
+              selected: _locationFilter == _LocationFilter.active,
+              onSelected: (selected) {
+                setState(() => _locationFilter = _LocationFilter.active);
+              },
             ),
-          ),
+            FilterChip(
+              label: const Text('All'),
+              selected: _locationFilter == _LocationFilter.all,
+              onSelected: (selected) {
+                setState(() => _locationFilter = _LocationFilter.all);
+              },
+            ),
+            FilterChip(
+              label: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Container(
+                    width: 8,
+                    height: 8,
+                    decoration: const BoxDecoration(
+                      color: Colors.red,
+                      shape: BoxShape.circle,
+                    ),
+                  ),
+                  const SizedBox(width: 6),
+                  const Text('Deleted'),
+                ],
+              ),
+              selected: _locationFilter == _LocationFilter.deleted,
+              onSelected: (selected) {
+                setState(() => _locationFilter = _LocationFilter.deleted);
+              },
+            ),
+          ],
         ),
         const SizedBox(height: 16),
         Expanded(
-          child: _locations.isEmpty
+          child: filteredLocations.isEmpty
               ? const Center(child: Text('No locations found'))
-              : ListView.separated(
-                  itemCount: _locations.length,
-                  separatorBuilder: (_, _) => const SizedBox(height: 8),
-                  itemBuilder: (context, index) {
-                    final location = _locations[index];
-                    return Card(
-                      child: ListTile(
-                        leading: _locationThumb(location.photoUrl),
-                        title: Text(location.locationNumber),
-                        subtitle: Text(
-                          'Client ${location.clientId} • ${location.type} • ${location.status}${location.address != null ? ' • ${location.address}' : ''}'
-                          '${location.accessNotes != null ? '\nAccess: ${location.accessNotes}' : ''}',
+              : SingleChildScrollView(
+                  scrollDirection: Axis.vertical,
+                  child: SingleChildScrollView(
+                    scrollDirection: Axis.horizontal,
+                    child: DataTable(
+                      sortColumnIndex: _locationsSortColumnIndex,
+                      sortAscending: _locationsSortAscending,
+                      columns: [
+                        DataColumn(
+                          label: const Text(''),
+                          onSort: (columnIndex, ascending) {
+                            setState(() {
+                              _locationsSortColumnIndex = columnIndex;
+                              _locationsSortAscending = ascending;
+                            });
+                          },
                         ),
-                        isThreeLine: location.accessNotes != null,
-                        trailing: Wrap(
-                          spacing: 8,
-                          children: [
-                            IconButton(
-                              onPressed: AppEnv.isDemoMode
-                                  ? null
-                                  : () => _showEditDialog(location),
-                              icon: const Icon(Icons.edit),
+                        const DataColumn(label: Text('')), // Photo
+                        DataColumn(
+                          label: const Text('Client Name'),
+                          onSort: (columnIndex, ascending) {
+                            setState(() {
+                              _locationsSortColumnIndex = columnIndex;
+                              _locationsSortAscending = ascending;
+                            });
+                          },
+                        ),
+                        DataColumn(
+                          label: const Text('Address'),
+                          onSort: (columnIndex, ascending) {
+                            setState(() {
+                              _locationsSortColumnIndex = columnIndex;
+                              _locationsSortAscending = ascending;
+                            });
+                          },
+                        ),
+                        const DataColumn(label: Text('')), // Details
+                      ],
+                      rows: filteredLocations.map((location) {
+                        final status = location.status.trim().toLowerCase();
+                        final statusColor = switch (status) {
+                          'active' => Colors.green,
+                          'inactive' => Colors.orange,
+                          'deleted' => Colors.red,
+                          _ => Colors.grey,
+                        };
+
+                        final client = _clients.firstWhere(
+                          (c) => int.tryParse(c.id) == location.clientId,
+                          orElse: () => Client(
+                            id: location.clientId.toString(),
+                            clientNumber: 'CLT-${location.clientId}',
+                            name: 'Client ${location.clientId}',
+                            status: 'unknown',
+                          ),
+                        );
+
+                        return DataRow(
+                          cells: [
+                            // Status indicator
+                            DataCell(
+                              Container(
+                                width: 10,
+                                height: 10,
+                                decoration: BoxDecoration(
+                                  color: statusColor,
+                                  shape: BoxShape.circle,
+                                ),
+                              ),
                             ),
-                            if (_isAdmin)
+                            // Photo
+                            DataCell(_locationThumb(location.photoUrl)),
+                            // Client Name
+                            DataCell(Text(client.name)),
+                            // Address
+                            DataCell(
+                              Text(
+                                location.address != null && location.city != null
+                                    ? '${location.address}, ${location.city}, ${location.state ?? ''}'
+                                    : location.address ?? location.city ?? 'No address',
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                            ),
+                            // Details button
+                            DataCell(
                               IconButton(
+                                icon: const Icon(Icons.edit),
                                 onPressed: AppEnv.isDemoMode
                                     ? null
-                                    : () => _delete(location),
-                                icon: const Icon(Icons.delete),
+                                    : () => _showEditDialog(location),
                               ),
+                            ),
                           ],
-                        ),
-                      ),
-                    );
-                  },
+                        );
+                      }).toList(),
+                    ),
+                  ),
                 ),
         ),
       ],

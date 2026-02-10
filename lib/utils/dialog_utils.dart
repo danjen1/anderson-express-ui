@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../theme/crud_modal_theme.dart';
 
 /// Shows a confirmation dialog for delete operations.
 /// 
@@ -22,25 +23,28 @@ Future<bool> showDeleteConfirmationDialog(
 }) async {
   final result = await showDialog<bool>(
     context: context,
-    builder: (context) => AlertDialog(
-      title: Text('Delete $itemType?'),
-      content: Text(
-        'Are you sure you want to delete $itemName? This action cannot be undone.',
-      ),
-      actions: [
-        TextButton(
-          onPressed: () => Navigator.pop(context, false),
-          child: const Text('Cancel'),
+    builder: (dialogContext) => Theme(
+      data: buildCrudModalTheme(context),
+      child: AlertDialog(
+        title: Text('Delete $itemType?'),
+        content: Text(
+          'Are you sure you want to delete $itemName? This action cannot be undone.',
         ),
-        FilledButton(
-          onPressed: () => Navigator.pop(context, true),
-          style: FilledButton.styleFrom(
-            backgroundColor: Colors.red,
-            foregroundColor: Colors.white,
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext, false),
+            child: const Text('Cancel'),
           ),
-          child: const Text('Delete'),
-        ),
-      ],
+          FilledButton(
+            onPressed: () => Navigator.pop(dialogContext, true),
+            style: FilledButton.styleFrom(
+              backgroundColor: Colors.red,
+              foregroundColor: Colors.white,
+            ),
+            child: const Text('Delete'),
+          ),
+        ],
+      ),
     ),
   );
   return result == true;
@@ -63,15 +67,18 @@ Future<void> showInfoDialog(
 }) async {
   await showDialog(
     context: context,
-    builder: (context) => AlertDialog(
-      title: Text(title),
-      content: Text(message),
-      actions: [
-        TextButton(
-          onPressed: () => Navigator.pop(context),
-          child: const Text('OK'),
-        ),
-      ],
+    builder: (dialogContext) => Theme(
+      data: buildCrudModalTheme(context),
+      child: AlertDialog(
+        title: Text(title),
+        content: Text(message),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext),
+            child: const Text('OK'),
+          ),
+        ],
+      ),
     ),
   );
 }
@@ -93,15 +100,18 @@ Future<void> showErrorDialog(
 }) async {
   await showDialog(
     context: context,
-    builder: (context) => AlertDialog(
-      title: Text(title),
-      content: Text(message),
-      actions: [
-        TextButton(
-          onPressed: () => Navigator.pop(context),
-          child: const Text('OK'),
-        ),
-      ],
+    builder: (dialogContext) => Theme(
+      data: buildCrudModalTheme(context),
+      child: AlertDialog(
+        title: Text(title),
+        content: Text(message),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext),
+            child: const Text('OK'),
+          ),
+        ],
+      ),
     ),
   );
 }

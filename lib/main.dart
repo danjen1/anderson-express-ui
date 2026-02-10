@@ -17,7 +17,9 @@ const Color kBrandPrimary = Color.fromRGBO(32, 116, 84, 1);
 const Color kBrandPrimaryDark = Color.fromRGBO(24, 86, 62, 1);
 const Color kBrandSoft = Color.fromRGBO(202, 227, 217, 1);
 
-void main() {
+void main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+  await ThemeController.initialize();
   runApp(const MyApp());
 }
 
