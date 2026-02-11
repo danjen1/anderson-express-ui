@@ -1,6 +1,8 @@
-# Flutter Development & Deployment Scripts
+# Flutter Development & Deployment Scripts (Legacy)
 
-Quick-start scripts for running and deploying the Anderson Express UI.
+> ⚠️ **DEPRECATED**: The Flutter UI is being replaced by React. See `ui/anderson-express-web/` for active development.
+
+Quick-start scripts for running and deploying the Anderson Express UI (Flutter - reference only).
 
 ---
 

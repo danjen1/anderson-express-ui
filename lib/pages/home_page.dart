@@ -1,7 +1,6 @@
 import 'dart:convert';
 import 'dart:math';
 
-import 'package:file_picker/file_picker.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:url_launcher/url_launcher.dart';
@@ -591,13 +590,13 @@ class _HomePageState extends State<HomePage> {
     if (location == null) return;
     final token = _session?.token ?? '';
     if (token.isEmpty) return;
-    
+
     final dataUrl = await showPhotoPickerDialog(
       context,
       title: 'Update Location Photo',
       message: 'Select a new photo for your location.',
     );
-    
+
     if (dataUrl == null) return;
 
     setState(() => _uploadingPhoto = true);
@@ -806,7 +805,8 @@ class _HomePageState extends State<HomePage> {
                     ),
                     TextButton(
                       onPressed: () => setState(
-                        () => _employeeDateRange = DateRangeUtils.currentWeekRange(),
+                        () => _employeeDateRange =
+                            DateRangeUtils.currentWeekRange(),
                       ),
                       child: const Text('Current week'),
                     ),
@@ -1242,7 +1242,8 @@ class _HomePageState extends State<HomePage> {
                               TextButton(
                                 onPressed: () {
                                   setState(() {
-                                    _clientDateRange = DateRangeUtils.last30DaysRange();
+                                    _clientDateRange =
+                                        DateRangeUtils.last30DaysRange();
                                   });
                                 },
                                 child: const Text('Default range'),
@@ -1818,7 +1819,9 @@ class _ScheduleRequestDialogState extends State<_ScheduleRequestDialog> {
               child: Text(
                 'Request Cleaning',
                 style: TextStyle(
-                  color: dark ? const Color(0xFFB39CD0) : const Color(0xFF442E6F),
+                  color: dark
+                      ? const Color(0xFFB39CD0)
+                      : const Color(0xFF442E6F),
                   fontWeight: FontWeight.w800,
                 ),
               ),

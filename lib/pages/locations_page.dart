@@ -26,7 +26,8 @@ class LocationsPage extends StatefulWidget {
   State<LocationsPage> createState() => _LocationsPageState();
 }
 
-class _LocationsPageState extends State<LocationsPage> with BaseApiPageMixin<LocationsPage> {
+class _LocationsPageState extends State<LocationsPage>
+    with BaseApiPageMixin<LocationsPage> {
   final _clientFilterController = TextEditingController();
   late BackendKind _selectedBackend;
   late final TextEditingController _hostController;
@@ -36,7 +37,7 @@ class _LocationsPageState extends State<LocationsPage> with BaseApiPageMixin<Loc
   _LocationFilter _locationFilter = _LocationFilter.active;
   int? _locationsSortColumnIndex;
   bool _locationsSortAscending = true;
-  
+
   bool get _isAdmin => AuthSession.current?.user.isAdmin == true;
 
   @override
@@ -64,10 +65,7 @@ class _LocationsPageState extends State<LocationsPage> with BaseApiPageMixin<Loc
 
   @override
   Future<void> loadData() async {
-    await Future.wait([
-      _loadLocations(),
-      _loadClients(),
-    ]);
+    await Future.wait([_loadLocations(), _loadClients()]);
   }
 
   @override
@@ -137,10 +135,8 @@ class _LocationsPageState extends State<LocationsPage> with BaseApiPageMixin<Loc
     }
     final result = await showDialog<LocationCreateInput>(
       context: context,
-      builder: (context) => LocationEditorDialog(
-        clients: _clients,
-        isCreate: true,
-      ),
+      builder: (context) =>
+          LocationEditorDialog(clients: _clients, isCreate: true),
     );
 
     if (result == null) return;
@@ -195,54 +191,6 @@ class _LocationsPageState extends State<LocationsPage> with BaseApiPageMixin<Loc
     }
   }
 
-  Future<void> _delete(Location location) async {
-    if (AppEnv.isDemoMode) {
-      setError('Demo mode: create/edit/delete actions are disabled');
-      return;
-    }
-    if (!_isAdmin) {
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(const SnackBar(content: Text('Admin access required')));
-      return;
-    }
-
-    // Get client name for delete message
-    final client = _clients.firstWhere(
-      (c) => int.tryParse(c.id) == location.clientId,
-      orElse: () => Client(
-        id: location.clientId.toString(),
-        clientNumber: 'CLT-${location.clientId}',
-        name: 'Client ${location.clientId}',
-        status: 'unknown',
-      ),
-    );
-
-    final confirmed = await showDeleteConfirmationDialog(
-      context,
-      itemType: 'location',
-      itemName: '${location.locationNumber} for ${client.name}',
-    );
-
-    if (confirmed != true) return;
-
-    try {
-      await api.deleteLocation(
-        location.id,
-        bearerToken: token,
-      );
-      await _loadLocations();
-      if (!mounted) return;
-      showSuccessSnackBar(
-        context,
-        '${location.locationNumber} for ${client.name} deleted successfully.',
-      );
-    } catch (error) {
-      if (!mounted) return;
-      showErrorSnackBar(context, userFacingError(error));
-    }
-  }
-
   List<Location> get _filteredLocations {
     var filtered = _locations.where((location) {
       final status = location.status.trim().toLowerCase();
@@ -288,10 +236,14 @@ class _LocationsPageState extends State<LocationsPage> with BaseApiPageMixin<Loc
                 status: '',
               ),
             );
-            comparison = aClient.name.toLowerCase().compareTo(bClient.name.toLowerCase());
+            comparison = aClient.name.toLowerCase().compareTo(
+              bClient.name.toLowerCase(),
+            );
             break;
           case 3: // Address
-            comparison = (a.address ?? '').toLowerCase().compareTo((b.address ?? '').toLowerCase());
+            comparison = (a.address ?? '').toLowerCase().compareTo(
+              (b.address ?? '').toLowerCase(),
+            );
             break;
         }
         return _locationsSortAscending ? comparison : -comparison;
@@ -350,8 +302,7 @@ class _LocationsPageState extends State<LocationsPage> with BaseApiPageMixin<Loc
         ],
         if (AppEnv.isDemoMode) ...[
           const DemoModeNotice(
-            message:
-                'Demo mode: location management is read-only in preview.',
+            message: 'Demo mode: location management is read-only in preview.',
           ),
           const SizedBox(height: 12),
         ],
@@ -491,9 +442,12 @@ class _LocationsPageState extends State<LocationsPage> with BaseApiPageMixin<Loc
                             // Address
                             DataCell(
                               Text(
-                                location.address != null && location.city != null
+                                location.address != null &&
+                                        location.city != null
                                     ? '${location.address}, ${location.city}, ${location.state ?? ''}'
-                                    : location.address ?? location.city ?? 'No address',
+                                    : location.address ??
+                                          location.city ??
+                                          'No address',
                                 overflow: TextOverflow.ellipsis,
                               ),
                             ),
@@ -561,27 +515,17 @@ class _LocationsPageState extends State<LocationsPage> with BaseApiPageMixin<Loc
 }
 
 class _LocationEditorDialog extends StatefulWidget {
-  const _LocationEditorDialog({
-    this.type = 'residential',
-    this.address = '',
-    this.city = '',
-    this.state = '',
-    this.zipCode = '',
-    this.photoUrl = '',
-    this.accessNotes = '',
-    this.parkingNotes = '',
-    this.isCreate = true,
-  });
+  const _LocationEditorDialog();
 
-  final String type;
-  final String address;
-  final String city;
-  final String state;
-  final String zipCode;
-  final String photoUrl;
-  final String accessNotes;
-  final String parkingNotes;
-  final bool isCreate;
+  final String type = 'residential';
+  final String address = '';
+  final String city = '';
+  final String state = '';
+  final String zipCode = '';
+  final String photoUrl = '';
+  final String accessNotes = '';
+  final String parkingNotes = '';
+  final bool isCreate = true;
 
   @override
   State<_LocationEditorDialog> createState() => _LocationEditorDialogState();

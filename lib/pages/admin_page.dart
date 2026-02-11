@@ -1,4 +1,3 @@
-
 import 'package:flutter/material.dart';
 
 import '../models/backend_config.dart';
@@ -34,15 +33,12 @@ import '../widgets/admin/admin_sidebar.dart';
 import '../widgets/admin/sections/cleaning_profiles_section.dart';
 import '../widgets/admin/sections/dashboard_section.dart';
 import '../widgets/admin/sections/management_section.dart';
-import '../utils/dialog_utils.dart';
 import '../widgets/backend_banner.dart';
 import '../widgets/brand_app_bar_title.dart';
 import '../widgets/demo_mode_notice.dart';
 import '../widgets/profile_menu_button.dart';
 import '../widgets/theme_toggle_button.dart';
 import '../utils/navigation_extensions.dart';
-
-
 
 enum _EmployeeFilter { active, all }
 
@@ -51,8 +47,6 @@ enum _ClientFilter { all, active, inactive }
 enum _LocationFilter { active, inactive, all, deleted }
 
 enum _JobFilter { all, active }
-
-
 
 class AdminPage extends StatefulWidget {
   const AdminPage({super.key});
@@ -148,7 +142,6 @@ class _AdminPageState extends State<AdminPage> {
       ),
     );
   }
-
 
   @override
   void initState() {
@@ -249,7 +242,7 @@ class _AdminPageState extends State<AdminPage> {
       final cleaningRequests = results[5] as List<CleaningRequest>;
       final taskDefinitions = results[6] as List<TaskDefinition>;
       final taskRules = results[7] as List<TaskRule>;
-      
+
       // Fetch assignments for all jobs
       final allAssignments = <JobAssignment>[];
       for (final job in jobs) {
@@ -268,13 +261,14 @@ class _AdminPageState extends State<AdminPage> {
       for (final employee in employees) {
         employeeNameById[employee.id] = employee.name;
       }
-      
+
       // Build map of jobId → list of assigned employee names
       final assignmentsByJobId = <String, List<String>>{};
       for (final assignment in allAssignments) {
         // Include all assignments (active and inactive) for display purposes
         final jobId = assignment.jobId.toString();
-        final employeeName = employeeNameById[assignment.employeeId] ?? 'Unknown';
+        final employeeName =
+            employeeNameById[assignment.employeeId] ?? 'Unknown';
         assignmentsByJobId.putIfAbsent(jobId, () => []).add(employeeName);
       }
       final previousSelected = _selectedCleaningProfileId;
@@ -394,11 +388,7 @@ class _AdminPageState extends State<AdminPage> {
     }
 
     try {
-      final updated = await _api.updateEmployee(
-        employee.id,
-        result,
-        bearerToken: _token,
-      );
+      await _api.updateEmployee(employee.id, result, bearerToken: _token);
       await _loadAdminData();
       if (!mounted) return;
       showSuccessSnackBar(context, 'Employee updated successfully.');
@@ -488,22 +478,23 @@ class _AdminPageState extends State<AdminPage> {
   }
 
   Future<void> _deleteEmployee(Employee emp) => deleteEntityWithConfirmation(
-        context: context,
-        itemType: 'employee',
-        itemName: '${emp.employeeNumber} ${emp.name}',
-        onDelete: () => _api.deleteEmployee(emp.id, bearerToken: _token),
-        onSuccess: _loadAdminData,
-        successMessage: '${emp.employeeNumber} ${emp.name} deleted successfully.',
-      );
+    context: context,
+    itemType: 'employee',
+    itemName: '${emp.employeeNumber} ${emp.name}',
+    onDelete: () => _api.deleteEmployee(emp.id, bearerToken: _token),
+    onSuccess: _loadAdminData,
+    successMessage: '${emp.employeeNumber} ${emp.name} deleted successfully.',
+  );
 
   Future<void> _deleteClient(Client client) => deleteEntityWithConfirmation(
-        context: context,
-        itemType: 'client',
-        itemName: '${client.clientNumber} ${client.name}',
-        onDelete: () => _api.deleteClient(client.id, bearerToken: _token),
-        onSuccess: _loadAdminData,
-        successMessage: '${client.clientNumber} ${client.name} deleted successfully.',
-      );
+    context: context,
+    itemType: 'client',
+    itemName: '${client.clientNumber} ${client.name}',
+    onDelete: () => _api.deleteClient(client.id, bearerToken: _token),
+    onSuccess: _loadAdminData,
+    successMessage:
+        '${client.clientNumber} ${client.name} deleted successfully.',
+  );
 
   Future<void> _showCreateLocationDialog() async {
     final result = await showDialog<LocationCreateInput>(
@@ -605,7 +596,8 @@ class _AdminPageState extends State<AdminPage> {
       itemName: '${location.locationNumber} for $clientName',
       onDelete: () => _api.deleteLocation(location.id, bearerToken: _token),
       onSuccess: _loadAdminData,
-      successMessage: '${location.locationNumber} for $clientName deleted successfully.',
+      successMessage:
+          '${location.locationNumber} for $clientName deleted successfully.',
     );
   }
 
@@ -759,16 +751,15 @@ class _AdminPageState extends State<AdminPage> {
     }
 
     // Use the status from the form, or calculate it if not provided
-    final selectedStatus = result.status ?? switch ((
-      job.status.trim().toLowerCase(),
-      result.cleanerEmployeeId,
-    )) {
-      ('completed', null) => 'completed',
-      ('canceled', _) || ('cancelled', _) => 'canceled',
-      (_, null) => 'pending',
-      ('pending', _) || ('assigned', _) => 'assigned',
-      _ => job.status,
-    };
+    final selectedStatus =
+        result.status ??
+        switch ((job.status.trim().toLowerCase(), result.cleanerEmployeeId)) {
+          ('completed', null) => 'completed',
+          ('canceled', _) || ('cancelled', _) => 'canceled',
+          (_, null) => 'pending',
+          ('pending', _) || ('assigned', _) => 'assigned',
+          _ => job.status,
+        };
 
     try {
       final assignments = await _api.listJobAssignments(
@@ -832,13 +823,14 @@ class _AdminPageState extends State<AdminPage> {
   }
 
   Future<void> _deleteJob(Job job) => deleteEntityWithConfirmation(
-        context: context,
-        itemType: 'job',
-        itemName: '${job.jobNumber} for ${job.clientName ?? 'Unknown Client'}',
-        onDelete: () => _api.deleteJob(job.id, bearerToken: _token),
-        onSuccess: _loadAdminData,
-        successMessage: '${job.jobNumber} for ${job.clientName ?? 'Unknown Client'} deleted successfully.',
-      );
+    context: context,
+    itemType: 'job',
+    itemName: '${job.jobNumber} for ${job.clientName ?? 'Unknown Client'}',
+    onDelete: () => _api.deleteJob(job.id, bearerToken: _token),
+    onSuccess: _loadAdminData,
+    successMessage:
+        '${job.jobNumber} for ${job.clientName ?? 'Unknown Client'} deleted successfully.',
+  );
 
   Future<void> _showCreateCleaningProfileDialog() async {
     if (_locations.isEmpty) {
@@ -923,7 +915,8 @@ class _AdminPageState extends State<AdminPage> {
         onDelete: () =>
             _api.deleteCleaningProfile(profile.id, bearerToken: _token),
         onSuccess: _loadAdminData,
-        successMessage: 'Cleaning profile "${profile.name}" deleted successfully.',
+        successMessage:
+            'Cleaning profile "${profile.name}" deleted successfully.',
       );
 
   Future<void> _loadProfileTasks(
@@ -1075,7 +1068,8 @@ class _AdminPageState extends State<AdminPage> {
         bearerToken: _token,
       ),
       onSuccess: () => _loadProfileTasks(_selectedCleaningProfileId!),
-      successMessage: 'Task "${taskDef.name}" removed from profile successfully.',
+      successMessage:
+          'Task "${taskDef.name}" removed from profile successfully.',
     );
   }
 
@@ -1157,7 +1151,7 @@ class _AdminPageState extends State<AdminPage> {
           return true;
       }
     }).toList();
-    
+
     // Apply search filter
     if (_employeeSearch.isNotEmpty) {
       final searchLower = _employeeSearch.toLowerCase();
@@ -1166,14 +1160,18 @@ class _AdminPageState extends State<AdminPage> {
             (employee.email?.toLowerCase().contains(searchLower) ?? false);
       }).toList();
     }
-    
+
     // Apply sorting if column selected
     if (_employeesSortColumnIndex != null) {
       filtered.sort((a, b) {
         int comparison = 0;
         switch (_employeesSortColumnIndex) {
           case 0: // Status
-            comparison = compareByStatusPriority(a.status, b.status, StatusPriority.employee);
+            comparison = compareByStatusPriority(
+              a.status,
+              b.status,
+              StatusPriority.employee,
+            );
             break;
           case 1: // Photo (no sort)
             comparison = 0;
@@ -1193,12 +1191,16 @@ class _AdminPageState extends State<AdminPage> {
     } else {
       // Default sort: status priority, then by name
       filtered.sort((a, b) {
-        final statusCmp = compareByStatusPriority(a.status, b.status, StatusPriority.employee);
+        final statusCmp = compareByStatusPriority(
+          a.status,
+          b.status,
+          StatusPriority.employee,
+        );
         if (statusCmp != 0) return statusCmp;
         return compareStringsCaseInsensitive(a.name, b.name);
       });
     }
-    
+
     return filtered;
   }
 
@@ -1214,7 +1216,7 @@ class _AdminPageState extends State<AdminPage> {
           return true;
       }
     }).toList();
-    
+
     // Apply search filter
     if (_clientSearch.isNotEmpty) {
       final searchLower = _clientSearch.toLowerCase();
@@ -1223,14 +1225,18 @@ class _AdminPageState extends State<AdminPage> {
             (client.email?.toLowerCase().contains(searchLower) ?? false);
       }).toList();
     }
-    
+
     // Apply sorting if column selected
     if (_clientsSortColumnIndex != null) {
       filtered.sort((a, b) {
         int comparison = 0;
         switch (_clientsSortColumnIndex) {
           case 0: // Status
-            comparison = compareByStatusPriority(a.status, b.status, StatusPriority.client);
+            comparison = compareByStatusPriority(
+              a.status,
+              b.status,
+              StatusPriority.client,
+            );
             break;
           case 1: // Name
             comparison = compareStringsCaseInsensitive(a.name, b.name);
@@ -1247,12 +1253,16 @@ class _AdminPageState extends State<AdminPage> {
     } else {
       // Default sort: status priority, then by name
       filtered.sort((a, b) {
-        final statusCmp = compareByStatusPriority(a.status, b.status, StatusPriority.client);
+        final statusCmp = compareByStatusPriority(
+          a.status,
+          b.status,
+          StatusPriority.client,
+        );
         if (statusCmp != 0) return statusCmp;
         return compareStringsCaseInsensitive(a.name, b.name);
       });
     }
-    
+
     return filtered;
   }
 
@@ -1270,24 +1280,29 @@ class _AdminPageState extends State<AdminPage> {
           return status == 'deleted';
       }
     }).toList();
-    
+
     // Apply search filter
     if (_locationSearch.isNotEmpty) {
       final searchLower = _locationSearch.toLowerCase();
       filtered = filtered.where((location) {
-        return (location.address?.toLowerCase().contains(searchLower) ?? false) ||
+        return (location.address?.toLowerCase().contains(searchLower) ??
+                false) ||
             (location.city?.toLowerCase().contains(searchLower) ?? false) ||
             location.locationNumber.toLowerCase().contains(searchLower);
       }).toList();
     }
-    
+
     // Apply sorting
     if (_locationsSortColumnIndex != null) {
       filtered.sort((a, b) {
         int result;
         switch (_locationsSortColumnIndex) {
           case 0: // Status
-            result = compareByStatusPriority(a.status, b.status, StatusPriority.location);
+            result = compareByStatusPriority(
+              a.status,
+              b.status,
+              StatusPriority.location,
+            );
             break;
           case 2: // Client Name
             final aClientName = _clientNameById(a.clientId);
@@ -1305,22 +1320,24 @@ class _AdminPageState extends State<AdminPage> {
     } else {
       // Default sort: status priority, then by location number
       filtered.sort((a, b) {
-        final statusCmp = compareByStatusPriority(a.status, b.status, StatusPriority.location);
+        final statusCmp = compareByStatusPriority(
+          a.status,
+          b.status,
+          StatusPriority.location,
+        );
         if (statusCmp != 0) return statusCmp;
         return a.locationNumber.compareTo(b.locationNumber);
       });
     }
-    
+
     return filtered;
   }
 
   List<Client> get _activeClients {
-    return _clients
-        .where((client) {
-          final status = client.status.trim().toLowerCase();
-          return status == 'active' || status == 'invited';
-        })
-        .toList();
+    return _clients.where((client) {
+      final status = client.status.trim().toLowerCase();
+      return status == 'active' || status == 'invited';
+    }).toList();
   }
 
   List<Location> get _activeLocations {
@@ -1330,12 +1347,10 @@ class _AdminPageState extends State<AdminPage> {
   }
 
   List<Employee> get _activeCleaners {
-    return _employees
-        .where((employee) {
-          final status = employee.status.trim().toLowerCase();
-          return status == 'active' || status == 'invited';
-        })
-        .toList();
+    return _employees.where((employee) {
+      final status = employee.status.trim().toLowerCase();
+      return status == 'active' || status == 'invited';
+    }).toList();
   }
 
   int? _profileIdForLocation(int locationId, {int? fallbackProfileId}) {
@@ -1366,12 +1381,16 @@ class _AdminPageState extends State<AdminPage> {
       // Status filter
       final status = job.status.trim().toLowerCase();
       final statusMatches = switch (_jobFilter) {
-        _JobFilter.active => status == 'pending' || status == 'assigned' || status == 'in_progress' || status == 'in-progress',
+        _JobFilter.active =>
+          status == 'pending' ||
+              status == 'assigned' ||
+              status == 'in_progress' ||
+              status == 'in-progress',
         _JobFilter.all => true,
       };
-      
+
       if (!statusMatches) return false;
-      
+
       // Client search filter
       if (_jobClientSearch.isNotEmpty) {
         final clientName = (job.clientName ?? '').toLowerCase();
@@ -1380,7 +1399,7 @@ class _AdminPageState extends State<AdminPage> {
           return false;
         }
       }
-      
+
       return true;
     }).toList();
 
@@ -1390,7 +1409,11 @@ class _AdminPageState extends State<AdminPage> {
         int comparison = 0;
         switch (_jobsSortColumnIndex) {
           case 0: // Status
-            comparison = compareByStatusPriority(a.status, b.status, StatusPriority.job);
+            comparison = compareByStatusPriority(
+              a.status,
+              b.status,
+              StatusPriority.job,
+            );
             break;
           case 1: // Date
             final dateA = parseFlexibleDate(a.scheduledDate);
@@ -1413,10 +1436,14 @@ class _AdminPageState extends State<AdminPage> {
             comparison = compareStringsCaseInsensitive(cleanersA, cleanersB);
             break;
           case 5: // Estimated Duration
-            comparison = (a.estimatedDurationMinutes ?? 0).compareTo(b.estimatedDurationMinutes ?? 0);
+            comparison = (a.estimatedDurationMinutes ?? 0).compareTo(
+              b.estimatedDurationMinutes ?? 0,
+            );
             break;
           case 6: // Actual Duration
-            comparison = (a.actualDurationMinutes ?? 0).compareTo(b.actualDurationMinutes ?? 0);
+            comparison = (a.actualDurationMinutes ?? 0).compareTo(
+              b.actualDurationMinutes ?? 0,
+            );
             break;
         }
         return _jobsSortAscending ? comparison : -comparison;
@@ -1638,10 +1665,6 @@ class _AdminPageState extends State<AdminPage> {
     );
   }
 
-
-
-
-
   Widget _buildCrudScaffoldSection({
     required String title,
     required String subtitle,
@@ -1667,135 +1690,143 @@ class _AdminPageState extends State<AdminPage> {
     switch (_selectedSection) {
       case AdminSection.dashboard:
         return DashboardSection(
-              jobs: _jobs,
-              employees: _employees,
-              cleaningRequests: _cleaningRequests,
-              cleaningRequestFilter: _cleaningRequestFilter,
-              totalPendingJobs: _totalPendingJobs,
-              totalAssignedJobs: _totalAssignedJobs,
-              totalInProgressJobs: _totalInProgressJobs,
-              totalCompletedJobs: _totalCompletedJobs,
-              totalOverdueJobs: _totalOverdueJobs,
-              onCleaningRequestFilterChanged: (filter) => setState(() => _cleaningRequestFilter = filter),
-              onUpdateCleaningRequestStatus: _updateCleaningRequestStatus,
-              onOpenJobsOverdue: _openJobsOverdue,
-              getClientNameById: _clientNameById,
-              buildSectionHeader: _buildSectionHeader,
-              buildMetricTile: _metricTile,
-            );
+          jobs: _jobs,
+          employees: _employees,
+          cleaningRequests: _cleaningRequests,
+          cleaningRequestFilter: _cleaningRequestFilter,
+          totalPendingJobs: _totalPendingJobs,
+          totalAssignedJobs: _totalAssignedJobs,
+          totalInProgressJobs: _totalInProgressJobs,
+          totalCompletedJobs: _totalCompletedJobs,
+          totalOverdueJobs: _totalOverdueJobs,
+          onCleaningRequestFilterChanged: (filter) =>
+              setState(() => _cleaningRequestFilter = filter),
+          onUpdateCleaningRequestStatus: _updateCleaningRequestStatus,
+          onOpenJobsOverdue: _openJobsOverdue,
+          getClientNameById: _clientNameById,
+          buildSectionHeader: _buildSectionHeader,
+          buildMetricTile: _metricTile,
+        );
       case AdminSection.cleaningProfiles:
         return CleaningProfilesSection(
-              cleaningProfiles: _cleaningProfiles,
-              selectedProfileTasks: _selectedProfileTasks,
-              taskDefinitions: _taskDefinitions,
-              taskRules: _taskRules,
-              selectedProfileId: _selectedCleaningProfileId,
-              loadingProfileTasks: _loadingProfileTasks,
-              onCreateProfile: _showCreateCleaningProfileDialog,
-              onCreateTaskDefinition: _showCreateTaskDefinitionDialog,
-              onCreateTaskRule: _showCreateTaskRuleDialog,
-              onAddProfileTask: _showAddProfileTaskDialog,
-              onSelectProfile: _selectCleaningProfile,
-              onEditProfile: _showEditCleaningProfileDialog,
-              onDeleteProfile: _deleteCleaningProfile,
-              onEditProfileTask: _showEditProfileTaskDialog,
-              onDeleteProfileTask: _deleteProfileTask,
-              getLocationLabel: _locationLabel,
-              getTaskDefinitionLabel: _taskDefinitionLabel,
-              buildSectionHeader: _buildSectionHeader,
-              buildCenteredSection: _centeredSectionBody,
-              buildTableColumn: _tableColumn,
-            );
+          cleaningProfiles: _cleaningProfiles,
+          selectedProfileTasks: _selectedProfileTasks,
+          taskDefinitions: _taskDefinitions,
+          taskRules: _taskRules,
+          selectedProfileId: _selectedCleaningProfileId,
+          loadingProfileTasks: _loadingProfileTasks,
+          onCreateProfile: _showCreateCleaningProfileDialog,
+          onCreateTaskDefinition: _showCreateTaskDefinitionDialog,
+          onCreateTaskRule: _showCreateTaskRuleDialog,
+          onAddProfileTask: _showAddProfileTaskDialog,
+          onSelectProfile: _selectCleaningProfile,
+          onEditProfile: _showEditCleaningProfileDialog,
+          onDeleteProfile: _deleteCleaningProfile,
+          onEditProfileTask: _showEditProfileTaskDialog,
+          onDeleteProfileTask: _deleteProfileTask,
+          getLocationLabel: _locationLabel,
+          getTaskDefinitionLabel: _taskDefinitionLabel,
+          buildSectionHeader: _buildSectionHeader,
+          buildCenteredSection: _centeredSectionBody,
+          buildTableColumn: _tableColumn,
+        );
       case AdminSection.management:
         return ManagementSection(
-              managementModel: _managementModel,
-              filteredEmployees: _filteredEmployees,
-              filteredClients: _filteredClients,
-              filteredLocations: _filteredLocations,
-              filteredJobs: _filteredJobs,
-              jobAssignments: _jobAssignments,
-              jobDateRange: _jobDateRange,
-              jobFilter: _jobFilter.name,
-              jobClientSearch: _jobClientSearch,
-              employeeSearch: _employeeSearch,
-              clientSearch: _clientSearch,
-              locationSearch: _locationSearch,
-              jobsSortColumnIndex: _jobsSortColumnIndex,
-              jobsSortAscending: _jobsSortAscending,
-              clientsSortColumnIndex: _clientsSortColumnIndex,
-              clientsSortAscending: _clientsSortAscending,
-              employeesSortColumnIndex: _employeesSortColumnIndex,
-              employeesSortAscending: _employeesSortAscending,
-              locationsSortColumnIndex: _locationsSortColumnIndex,
-              locationsSortAscending: _locationsSortAscending,
-              activeOnlyFilter: _activeOnlyFilter,
-              locationFilter: _locationFilter.name,
-              onManagementModelChanged: (model) => setState(() => _managementModel = model),
-              onActiveOnlyFilterChanged: (active) => setState(() => _activeOnlyFilter = active),
-              onLocationFilterChanged: (filter) {
-                setState(() {
-                  _locationFilter = _LocationFilter.values.firstWhere(
-                    (f) => f.name == filter,
-                    orElse: () => _LocationFilter.active,
-                  );
-                });
-              },
-              onJobFilterChanged: (filter) {
-                setState(() {
-                  _jobFilter = _JobFilter.values.firstWhere(
-                    (f) => f.name == filter,
-                    orElse: () => _JobFilter.all,
-                  );
-                });
-              },
-              onJobClientSearchChanged: (search) => setState(() => _jobClientSearch = search),
-              onEmployeeSearchChanged: (search) => setState(() => _employeeSearch = search),
-              onClientSearchChanged: (search) => setState(() => _clientSearch = search),
-              onLocationSearchChanged: (search) => setState(() => _locationSearch = search),
-              onJobDateRangeChanged: (range) => setState(() => _jobDateRange = range),
-              onJobsSort: (columnIndex, ascending) {
-                setState(() {
-                  _jobsSortColumnIndex = columnIndex;
-                  _jobsSortAscending = ascending;
-                });
-              },
-              onClientsSort: (columnIndex, ascending) {
-                setState(() {
-                  _clientsSortColumnIndex = columnIndex;
-                  _clientsSortAscending = ascending;
-                });
-              },
-              onEmployeesSort: (columnIndex, ascending) {
-                setState(() {
-                  _employeesSortColumnIndex = columnIndex;
-                  _employeesSortAscending = ascending;
-                });
-              },
-              onLocationsSort: (columnIndex, ascending) {
-                setState(() {
-                  _locationsSortColumnIndex = columnIndex;
-                  _locationsSortAscending = ascending;
-                });
-              },
-              onShowCreateDialog: _showCreateDialog,
-              onShowCreateClientDialog: _showCreateClientDialog,
-              onShowCreateLocationDialog: _showCreateLocationDialog,
-              onShowCreateJobDialog: _showCreateJobDialog,
-              onShowEditDialog: _showEditDialog,
-              onShowEditClientDialog: _showEditClientDialog,
-              onShowEditLocationDialog: _showEditLocationDialog,
-              onShowEditJobDialog: _showEditJobDialog,
-              onDeleteEmployee: _deleteEmployee,
-              onDeleteClient: _deleteClient,
-              onDeleteLocation: _deleteLocation,
-              onDeleteJob: _deleteJob,
-              buildSectionHeader: _buildSectionHeader,
-              buildCenteredSection: _centeredSectionBody,
-              buildTableColumn: _tableColumn,
-              buildRowActionButton: _rowActionButton,
-              getLocationLabel: _locationLabel,
-              isOverdue: _isOverdue,
-            );
+          managementModel: _managementModel,
+          filteredEmployees: _filteredEmployees,
+          filteredClients: _filteredClients,
+          filteredLocations: _filteredLocations,
+          filteredJobs: _filteredJobs,
+          jobAssignments: _jobAssignments,
+          jobDateRange: _jobDateRange,
+          jobFilter: _jobFilter.name,
+          jobClientSearch: _jobClientSearch,
+          employeeSearch: _employeeSearch,
+          clientSearch: _clientSearch,
+          locationSearch: _locationSearch,
+          jobsSortColumnIndex: _jobsSortColumnIndex,
+          jobsSortAscending: _jobsSortAscending,
+          clientsSortColumnIndex: _clientsSortColumnIndex,
+          clientsSortAscending: _clientsSortAscending,
+          employeesSortColumnIndex: _employeesSortColumnIndex,
+          employeesSortAscending: _employeesSortAscending,
+          locationsSortColumnIndex: _locationsSortColumnIndex,
+          locationsSortAscending: _locationsSortAscending,
+          activeOnlyFilter: _activeOnlyFilter,
+          locationFilter: _locationFilter.name,
+          onManagementModelChanged: (model) =>
+              setState(() => _managementModel = model),
+          onActiveOnlyFilterChanged: (active) =>
+              setState(() => _activeOnlyFilter = active),
+          onLocationFilterChanged: (filter) {
+            setState(() {
+              _locationFilter = _LocationFilter.values.firstWhere(
+                (f) => f.name == filter,
+                orElse: () => _LocationFilter.active,
+              );
+            });
+          },
+          onJobFilterChanged: (filter) {
+            setState(() {
+              _jobFilter = _JobFilter.values.firstWhere(
+                (f) => f.name == filter,
+                orElse: () => _JobFilter.all,
+              );
+            });
+          },
+          onJobClientSearchChanged: (search) =>
+              setState(() => _jobClientSearch = search),
+          onEmployeeSearchChanged: (search) =>
+              setState(() => _employeeSearch = search),
+          onClientSearchChanged: (search) =>
+              setState(() => _clientSearch = search),
+          onLocationSearchChanged: (search) =>
+              setState(() => _locationSearch = search),
+          onJobDateRangeChanged: (range) =>
+              setState(() => _jobDateRange = range),
+          onJobsSort: (columnIndex, ascending) {
+            setState(() {
+              _jobsSortColumnIndex = columnIndex;
+              _jobsSortAscending = ascending;
+            });
+          },
+          onClientsSort: (columnIndex, ascending) {
+            setState(() {
+              _clientsSortColumnIndex = columnIndex;
+              _clientsSortAscending = ascending;
+            });
+          },
+          onEmployeesSort: (columnIndex, ascending) {
+            setState(() {
+              _employeesSortColumnIndex = columnIndex;
+              _employeesSortAscending = ascending;
+            });
+          },
+          onLocationsSort: (columnIndex, ascending) {
+            setState(() {
+              _locationsSortColumnIndex = columnIndex;
+              _locationsSortAscending = ascending;
+            });
+          },
+          onShowCreateDialog: _showCreateDialog,
+          onShowCreateClientDialog: _showCreateClientDialog,
+          onShowCreateLocationDialog: _showCreateLocationDialog,
+          onShowCreateJobDialog: _showCreateJobDialog,
+          onShowEditDialog: _showEditDialog,
+          onShowEditClientDialog: _showEditClientDialog,
+          onShowEditLocationDialog: _showEditLocationDialog,
+          onShowEditJobDialog: _showEditJobDialog,
+          onDeleteEmployee: _deleteEmployee,
+          onDeleteClient: _deleteClient,
+          onDeleteLocation: _deleteLocation,
+          onDeleteJob: _deleteJob,
+          buildSectionHeader: _buildSectionHeader,
+          buildCenteredSection: _centeredSectionBody,
+          buildTableColumn: _tableColumn,
+          buildRowActionButton: _rowActionButton,
+          getLocationLabel: _locationLabel,
+          isOverdue: _isOverdue,
+        );
       case AdminSection.reports:
         return _buildCrudScaffoldSection(
           title: 'Reports',
@@ -1997,7 +2028,12 @@ class _AdminPageState extends State<AdminPage> {
               child: Row(
                 children: [
                   if (!isCompactLayout)
-                    AdminSidebar(collapsed: _sidebarCollapsed, selectedSection: _selectedSection, onSectionChanged: (section) => setState(() => _selectedSection = section)),
+                    AdminSidebar(
+                      collapsed: _sidebarCollapsed,
+                      selectedSection: _selectedSection,
+                      onSectionChanged: (section) =>
+                          setState(() => _selectedSection = section),
+                    ),
                   Expanded(
                     child: Padding(
                       padding: const EdgeInsets.all(16),
@@ -2297,4 +2333,3 @@ class TaskDefinitionEditorDialogState
     );
   }
 }
-

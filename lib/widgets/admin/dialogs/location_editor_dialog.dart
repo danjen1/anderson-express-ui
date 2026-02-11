@@ -45,13 +45,58 @@ class LocationEditorDialogState extends State<LocationEditorDialog> {
   static const String _defaultLocationPhotoAsset =
       '/assets/images/locations/location_default.png';
   static const List<String> usStates = [
-    'AL', 'AK', 'AZ', 'AR', 'CA', 'CO', 'CT', 'DE', 'FL', 'GA',
-    'HI', 'ID', 'IL', 'IN', 'IA', 'KS', 'KY', 'LA', 'ME', 'MD',
-    'MA', 'MI', 'MN', 'MS', 'MO', 'MT', 'NE', 'NV', 'NH', 'NJ',
-    'NM', 'NY', 'NC', 'ND', 'OH', 'OK', 'OR', 'PA', 'RI', 'SC',
-    'SD', 'TN', 'TX', 'UT', 'VT', 'VA', 'WA', 'WV', 'WI', 'WY',
+    'AL',
+    'AK',
+    'AZ',
+    'AR',
+    'CA',
+    'CO',
+    'CT',
+    'DE',
+    'FL',
+    'GA',
+    'HI',
+    'ID',
+    'IL',
+    'IN',
+    'IA',
+    'KS',
+    'KY',
+    'LA',
+    'ME',
+    'MD',
+    'MA',
+    'MI',
+    'MN',
+    'MS',
+    'MO',
+    'MT',
+    'NE',
+    'NV',
+    'NH',
+    'NJ',
+    'NM',
+    'NY',
+    'NC',
+    'ND',
+    'OH',
+    'OK',
+    'OR',
+    'PA',
+    'RI',
+    'SC',
+    'SD',
+    'TN',
+    'TX',
+    'UT',
+    'VT',
+    'VA',
+    'WA',
+    'WV',
+    'WI',
+    'WY',
   ];
-  
+
   late final TextEditingController _phone;
   late final TextEditingController _address;
   late final TextEditingController _city;
@@ -61,7 +106,7 @@ class LocationEditorDialogState extends State<LocationEditorDialog> {
   late String _status;
   int? _selectedClientId;
   String? _selectedState;
-  
+
   // For address validation
   bool _isValidatingAddress = false;
 
@@ -82,7 +127,9 @@ class LocationEditorDialogState extends State<LocationEditorDialog> {
         (widget.clients.isNotEmpty
             ? int.tryParse(widget.clients.first.id)
             : null);
-    _selectedState = widget.state.trim().isEmpty ? null : widget.state.trim().toUpperCase();
+    _selectedState = widget.state.trim().isEmpty
+        ? null
+        : widget.state.trim().toUpperCase();
   }
 
   @override
@@ -181,7 +228,10 @@ class LocationEditorDialogState extends State<LocationEditorDialog> {
                     const SizedBox(height: 12),
                     Text(
                       'Found address:\n${result.suggestedStreet}, ${result.suggestedCity}, ${result.suggestedState}, ${result.suggestedZip}',
-                      style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600),
+                      style: const TextStyle(
+                        fontSize: 13,
+                        fontWeight: FontWeight.w600,
+                      ),
                     ),
                     const SizedBox(height: 12),
                     const Text(
@@ -306,7 +356,6 @@ class LocationEditorDialogState extends State<LocationEditorDialog> {
       );
     }
   }
-
 
   @override
   Widget build(BuildContext context) {
@@ -485,11 +534,10 @@ class LocationEditorDialogState extends State<LocationEditorDialog> {
                         onKeyEvent: (node, event) {
                           if (event is KeyDownEvent &&
                               event.logicalKey == LogicalKeyboardKey.tab) {
-                            final controller = TextEditingController();
                             final options = usStates.where((state) {
-                              return state
-                                  .toLowerCase()
-                                  .contains((_selectedState ?? '').toLowerCase());
+                              return state.toLowerCase().contains(
+                                (_selectedState ?? '').toLowerCase(),
+                              );
                             }).toList();
                             if (options.isNotEmpty) {
                               setState(() => _selectedState = options.first);
@@ -507,38 +555,46 @@ class LocationEditorDialogState extends State<LocationEditorDialog> {
                               return usStates;
                             }
                             return usStates.where((state) {
-                              return state
-                                  .toLowerCase()
-                                  .contains(textEditingValue.text.toLowerCase());
+                              return state.toLowerCase().contains(
+                                textEditingValue.text.toLowerCase(),
+                              );
                             });
                           },
                           onSelected: (String selection) {
                             setState(() => _selectedState = selection);
                           },
-                          fieldViewBuilder: (context, textEditingController,
-                              focusNode, onFieldSubmitted) {
-                            textEditingController.text = _selectedState ?? '';
-                            textEditingController.selection =
-                                TextSelection.fromPosition(
-                              TextPosition(
-                                  offset: textEditingController.text.length),
-                            );
-                            return TextField(
-                              controller: textEditingController,
-                              focusNode: focusNode,
-                              decoration: const InputDecoration(
-                                labelText: 'State *',
-                                border: OutlineInputBorder(),
-                              ),
-                              textCapitalization: TextCapitalization.characters,
-                              onChanged: (value) {
-                                final upper = value.toUpperCase();
-                                if (usStates.contains(upper)) {
-                                  setState(() => _selectedState = upper);
-                                }
+                          fieldViewBuilder:
+                              (
+                                context,
+                                textEditingController,
+                                focusNode,
+                                onFieldSubmitted,
+                              ) {
+                                textEditingController.text =
+                                    _selectedState ?? '';
+                                textEditingController
+                                    .selection = TextSelection.fromPosition(
+                                  TextPosition(
+                                    offset: textEditingController.text.length,
+                                  ),
+                                );
+                                return TextField(
+                                  controller: textEditingController,
+                                  focusNode: focusNode,
+                                  decoration: const InputDecoration(
+                                    labelText: 'State *',
+                                    border: OutlineInputBorder(),
+                                  ),
+                                  textCapitalization:
+                                      TextCapitalization.characters,
+                                  onChanged: (value) {
+                                    final upper = value.toUpperCase();
+                                    if (usStates.contains(upper)) {
+                                      setState(() => _selectedState = upper);
+                                    }
+                                  },
+                                );
                               },
-                            );
-                          },
                         ),
                       ),
                     ),
@@ -601,4 +657,3 @@ class LocationEditorDialogState extends State<LocationEditorDialog> {
     return trimmed.isEmpty ? null : trimmed;
   }
 }
-

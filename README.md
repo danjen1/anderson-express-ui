@@ -1,4 +1,12 @@
-# Anderson Express UI
+# Anderson Express UI (Flutter - Legacy)
+
+> ⚠️ **DEPRECATED**: This Flutter UI is being replaced by the React UI at `ui/anderson-express-web/`
+> 
+> **Active Development**: See `ui/anderson-express-web/` for the current React/TypeScript implementation
+> 
+> This Flutter UI is kept for reference during migration but is no longer actively maintained.
+
+---
 
 Flutter web interface for the Anderson Express cleaning management system.
 
